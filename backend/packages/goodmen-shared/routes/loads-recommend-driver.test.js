@@ -1,12 +1,14 @@
 'use strict';
 
-// FN-1438 — POST /api/loads/:id/recommend-driver
+// FN-1438 / FN-1607 — POST /api/loads/:id/recommend-driver
 //
 // Verifies tenant scoping (load lookup is bound to req.context.tenantId), the
 // pre-AI HOS filter (drivers with zero/negative HOS remaining are dropped),
-// and the graceful AI-service-failure fallback (200 with empty candidates +
-// "AI service unavailable" reasoning, so the dispatcher UI can fall through
-// to manual assignment instead of erroring out).
+// the pre-flight short-circuits for missing equipmentClass / missing origin
+// geocode, and the per-failure-mode reasoning the catch block returns (4xx
+// AI_BAD_REQUEST, 5xx upstream failure, AbortError timeout, plain network
+// error) so the dispatcher UI can fall through to manual assignment with an
+// actionable message instead of a single misleading "AI service unavailable".
 
 const path = require('path');
 const express = require('express');
@@ -353,7 +355,7 @@ describe('POST /api/loads/:id/recommend-driver (FN-1438)', () => {
     }
   });
 
-  it('returns 200 + empty candidates with "AI service unavailable" when AI fetch throws', async () => {
+  it('returns the network-error reasoning when AI fetch throws a non-abort error', async () => {
     const tenantState = tenantStateWithDefaultEntity();
     const candidateRows = [
       { driver_id: 'd2', name: 'Fresh Fay', lat: '32.6', lng: '-96.7',
@@ -378,14 +380,17 @@ describe('POST /api/loads/:id/recommend-driver (FN-1438)', () => {
         assert.strictEqual(res.status, 200);
         assert.strictEqual(res.body.success, true);
         assert.deepStrictEqual(res.body.candidates, []);
-        assert.strictEqual(res.body.reasoning, 'AI service unavailable');
+        assert.strictEqual(
+          res.body.reasoning,
+          'AI service is unreachable from logistics-service. Check AI_SERVICE_URL configuration.'
+        );
       });
     } finally {
       loaded.restore();
     }
   });
 
-  it('returns 200 + empty candidates when AI service replies with non-2xx', async () => {
+  it('returns the 5xx-specific reasoning when AI service replies with non-2xx', async () => {
     const tenantState = tenantStateWithDefaultEntity();
     const candidateRows = [
       { driver_id: 'd2', name: 'Fresh Fay', lat: '32.6', lng: '-96.7',
@@ -415,7 +420,10 @@ describe('POST /api/loads/:id/recommend-driver (FN-1438)', () => {
         assert.strictEqual(res.status, 200);
         assert.strictEqual(res.body.success, true);
         assert.deepStrictEqual(res.body.candidates, []);
-        assert.strictEqual(res.body.reasoning, 'AI service unavailable');
+        assert.strictEqual(
+          res.body.reasoning,
+          'AI service is currently failing (status 503). Try again in a moment.'
+        );
       });
     } finally {
       loaded.restore();
@@ -469,6 +477,208 @@ describe('POST /api/loads/:id/recommend-driver (FN-1438)', () => {
         // Pool must be the 25 closest — d0..d24, in ascending-distance order.
         const ids = aiBodySeen.candidateDrivers.map((c) => c.driverId);
         for (let i = 0; i < 25; i += 1) assert.strictEqual(ids[i], `d${i}`);
+      });
+    } finally {
+      loaded.restore();
+    }
+  });
+
+  // ───────────────────────────────────────────────────────────────────────
+  // FN-1607 — pre-flight short-circuits + per-failure-mode reasoning.
+  // ───────────────────────────────────────────────────────────────────────
+
+  it('FN-1607: pre-flights when ai_metadata has no equipmentClass — skips DB pool and AI call', async () => {
+    const tenantState = tenantStateWithDefaultEntity();
+    const { dbModule, calls } = createRecommendDriverDb({
+      loadRow: loadRowFixture({ ai_metadata: {} }),
+      candidateRows: []
+    });
+    const loaded = loadModuleWithMocks('routes/loads.js', {
+      'internal/db.js': dbModule,
+      'utils/logger.js': noopLogger(),
+      'middleware/auth-middleware.js': authModuleMock,
+      'services/load-ai-extractor.js': { extractLoadFromPdf: async () => ({}) },
+      'storage/r2-storage.js': { uploadBuffer: async () => ({ key: 'u' }), getSignedDownloadUrl: async () => null, deleteObject: async () => {} }
+    });
+
+    let aiCalled = false;
+    global.fetch = async () => { aiCalled = true; return { ok: true, async json() { return {}; }, async text() { return ''; } }; };
+
+    try {
+      const app = mountLoadsRouter(loaded.module, tenantState);
+      await withServer(app, async (server) => {
+        const res = await requestJson(server, 'POST', `/${LOAD_ID}/recommend-driver`, { headers: { 'x-role': 'dispatch' } });
+        assert.strictEqual(res.status, 200);
+        assert.strictEqual(res.body.success, true);
+        assert.deepStrictEqual(res.body.candidates, []);
+        assert.strictEqual(
+          res.body.reasoning,
+          'Load has no equipment class set. Set the equipment class on the load to enable driver suggestions.'
+        );
+        assert.strictEqual(aiCalled, false, 'AI service must not be called on pre-flight skip');
+        const poolCall = calls.find((c) => c.sql.includes('latest_hos AS'));
+        assert.strictEqual(poolCall, undefined, 'candidate-pool query must not run on pre-flight skip');
+      });
+    } finally {
+      loaded.restore();
+    }
+  });
+
+  it('FN-1607: pre-flights when origin lat/lng are null — skips DB pool and AI call', async () => {
+    const tenantState = tenantStateWithDefaultEntity();
+    const { dbModule, calls } = createRecommendDriverDb({
+      loadRow: loadRowFixture({ origin_lat: null, origin_lng: null }),
+      candidateRows: []
+    });
+    const loaded = loadModuleWithMocks('routes/loads.js', {
+      'internal/db.js': dbModule,
+      'utils/logger.js': noopLogger(),
+      'middleware/auth-middleware.js': authModuleMock,
+      'services/load-ai-extractor.js': { extractLoadFromPdf: async () => ({}) },
+      'storage/r2-storage.js': { uploadBuffer: async () => ({ key: 'u' }), getSignedDownloadUrl: async () => null, deleteObject: async () => {} }
+    });
+
+    let aiCalled = false;
+    global.fetch = async () => { aiCalled = true; return { ok: true, async json() { return {}; }, async text() { return ''; } }; };
+
+    try {
+      const app = mountLoadsRouter(loaded.module, tenantState);
+      await withServer(app, async (server) => {
+        const res = await requestJson(server, 'POST', `/${LOAD_ID}/recommend-driver`, { headers: { 'x-role': 'dispatch' } });
+        assert.strictEqual(res.status, 200);
+        assert.strictEqual(res.body.success, true);
+        assert.deepStrictEqual(res.body.candidates, []);
+        assert.strictEqual(
+          res.body.reasoning,
+          'Pickup location is not yet geocoded. Add a PICKUP stop with a US zip code to enable driver suggestions.'
+        );
+        assert.strictEqual(aiCalled, false, 'AI service must not be called on pre-flight skip');
+        const poolCall = calls.find((c) => c.sql.includes('latest_hos AS'));
+        assert.strictEqual(poolCall, undefined, 'candidate-pool query must not run on pre-flight skip');
+      });
+    } finally {
+      loaded.restore();
+    }
+  });
+
+  it('FN-1607: surfaces AI handler validation error on 4xx with AI_BAD_REQUEST code', async () => {
+    const tenantState = tenantStateWithDefaultEntity();
+    const candidateRows = [
+      { driver_id: 'd2', name: 'Fresh Fay', lat: '32.6', lng: '-96.7',
+        driving_hours: '4.00', on_duty_hours: '5.00', equipment_class: 'truck',
+        last_with_broker_date: null }
+    ];
+    const { dbModule } = createRecommendDriverDb({ loadRow: loadRowFixture(), candidateRows });
+    const loaded = loadModuleWithMocks('routes/loads.js', {
+      'internal/db.js': dbModule,
+      'utils/logger.js': noopLogger(),
+      'middleware/auth-middleware.js': authModuleMock,
+      'services/load-ai-extractor.js': { extractLoadFromPdf: async () => ({}) },
+      'storage/r2-storage.js': { uploadBuffer: async () => ({ key: 'u' }), getSignedDownloadUrl: async () => null, deleteObject: async () => {} }
+    });
+
+    const aiBody = JSON.stringify({
+      success: false,
+      error: 'load.originLat and load.originLng must be numbers',
+      code: 'AI_BAD_REQUEST_INVALID_PAYLOAD'
+    });
+    global.fetch = async () => ({
+      ok: false,
+      status: 400,
+      async json() { return JSON.parse(aiBody); },
+      async text() { return aiBody; }
+    });
+
+    try {
+      const app = mountLoadsRouter(loaded.module, tenantState);
+      await withServer(app, async (server) => {
+        const res = await requestJson(server, 'POST', `/${LOAD_ID}/recommend-driver`, { headers: { 'x-role': 'dispatch' } });
+        assert.strictEqual(res.status, 200);
+        assert.strictEqual(res.body.success, true);
+        assert.deepStrictEqual(res.body.candidates, []);
+        assert.strictEqual(
+          res.body.reasoning,
+          'Suggestion request was malformed: load.originLat and load.originLng must be numbers'
+        );
+      });
+    } finally {
+      loaded.restore();
+    }
+  });
+
+  it('FN-1607: returns 5xx-specific reasoning with the upstream status code', async () => {
+    const tenantState = tenantStateWithDefaultEntity();
+    const candidateRows = [
+      { driver_id: 'd2', name: 'Fresh Fay', lat: '32.6', lng: '-96.7',
+        driving_hours: '4.00', on_duty_hours: '5.00', equipment_class: 'truck',
+        last_with_broker_date: null }
+    ];
+    const { dbModule } = createRecommendDriverDb({ loadRow: loadRowFixture(), candidateRows });
+    const loaded = loadModuleWithMocks('routes/loads.js', {
+      'internal/db.js': dbModule,
+      'utils/logger.js': noopLogger(),
+      'middleware/auth-middleware.js': authModuleMock,
+      'services/load-ai-extractor.js': { extractLoadFromPdf: async () => ({}) },
+      'storage/r2-storage.js': { uploadBuffer: async () => ({ key: 'u' }), getSignedDownloadUrl: async () => null, deleteObject: async () => {} }
+    });
+
+    global.fetch = async () => ({
+      ok: false,
+      status: 502,
+      async json() { return {}; },
+      async text() { return '<html>bad gateway</html>'; }
+    });
+
+    try {
+      const app = mountLoadsRouter(loaded.module, tenantState);
+      await withServer(app, async (server) => {
+        const res = await requestJson(server, 'POST', `/${LOAD_ID}/recommend-driver`, { headers: { 'x-role': 'dispatch' } });
+        assert.strictEqual(res.status, 200);
+        assert.strictEqual(res.body.success, true);
+        assert.deepStrictEqual(res.body.candidates, []);
+        assert.strictEqual(
+          res.body.reasoning,
+          'AI service is currently failing (status 502). Try again in a moment.'
+        );
+      });
+    } finally {
+      loaded.restore();
+    }
+  });
+
+  it('FN-1607: returns timeout-specific reasoning when fetch throws AbortError', async () => {
+    const tenantState = tenantStateWithDefaultEntity();
+    const candidateRows = [
+      { driver_id: 'd2', name: 'Fresh Fay', lat: '32.6', lng: '-96.7',
+        driving_hours: '4.00', on_duty_hours: '5.00', equipment_class: 'truck',
+        last_with_broker_date: null }
+    ];
+    const { dbModule } = createRecommendDriverDb({ loadRow: loadRowFixture(), candidateRows });
+    const loaded = loadModuleWithMocks('routes/loads.js', {
+      'internal/db.js': dbModule,
+      'utils/logger.js': noopLogger(),
+      'middleware/auth-middleware.js': authModuleMock,
+      'services/load-ai-extractor.js': { extractLoadFromPdf: async () => ({}) },
+      'storage/r2-storage.js': { uploadBuffer: async () => ({ key: 'u' }), getSignedDownloadUrl: async () => null, deleteObject: async () => {} }
+    });
+
+    global.fetch = async () => {
+      const err = new Error('The operation was aborted');
+      err.name = 'AbortError';
+      throw err;
+    };
+
+    try {
+      const app = mountLoadsRouter(loaded.module, tenantState);
+      await withServer(app, async (server) => {
+        const res = await requestJson(server, 'POST', `/${LOAD_ID}/recommend-driver`, { headers: { 'x-role': 'dispatch' } });
+        assert.strictEqual(res.status, 200);
+        assert.strictEqual(res.body.success, true);
+        assert.deepStrictEqual(res.body.candidates, []);
+        assert.strictEqual(
+          res.body.reasoning,
+          'AI service is taking too long to respond. Try again in a moment.'
+        );
       });
     } finally {
       loaded.restore();
