@@ -62,6 +62,13 @@ function sha256Hex(buffer) {
  * hash. Returns the cached AI result or null on miss / TTL expiry. The cache
  * column is named `pdf_hash` for legacy reasons (FN-741) but stores any
  * SHA-256 hex.
+ *
+ * Shape-guard (FN-1597): older entries written before the envelope-unwrap fix
+ * stored the AI handler's full envelope (`{ success, fallback, data, ... }`)
+ * instead of the validated data payload. Those entries lack `columnMapping`
+ * at the top level, so callers see all-null mappings on a "cache hit". Treat
+ * any cached row missing `columnMapping` as a miss so a fresh AI call repairs
+ * the entry on next preview.
  */
 async function lookupAiCache(tenantId, fileHash) {
   const result = await query(
@@ -73,7 +80,10 @@ async function lookupAiCache(tenantId, fileHash) {
       LIMIT 1`,
     [tenantId, fileHash]
   );
-  return result.rows.length ? result.rows[0].extracted_data : null;
+  if (!result.rows.length) return null;
+  const cached = result.rows[0].extracted_data;
+  if (!cached || typeof cached !== 'object' || !cached.columnMapping) return null;
+  return cached;
 }
 
 async function writeAiCache(tenantId, fileHash, extractedData) {
@@ -90,8 +100,17 @@ async function writeAiCache(tenantId, fileHash, extractedData) {
 }
 
 /**
- * Call the AI service for column-mapping inference. Returns the AI body on
- * success or null on any failure (timeout, unreachable, non-2xx, parse error).
+ * Call the AI service for column-mapping inference. Returns the unwrapped
+ * data payload (`columnMapping`, `statusEnumMapping`, ...) on success, or
+ * null on any failure (timeout, unreachable, non-2xx, parse error,
+ * `success !== true`, or fallback response).
+ *
+ * The handler at ai-service `/api/ai/loads/spreadsheet-import` returns an
+ * envelope: `{ success, fallback, cacheHit, data, meta }`. Earlier versions
+ * of this consumer returned the whole envelope, which left every downstream
+ * `aiResult.columnMapping` lookup undefined and silently dropped every AI
+ * call (FN-1597). Unwrap to `body.data` here so the rest of the service can
+ * read fields directly.
  *
  * Failure is non-fatal: the wizard can fall back to manual mapping.
  */
@@ -110,7 +129,15 @@ async function callAiColumnMapping({ tenantId, headers, sampleRows, fileName }) 
       dtLogger.warn('loads_import_ai_non_2xx', { status: response.status });
       return null;
     }
-    return await response.json();
+    const body = await response.json();
+    if (!body || body.success !== true || body.fallback === true) {
+      dtLogger.warn('loads_import_ai_fallback_or_failed', {
+        success: body?.success === true,
+        fallback: body?.fallback === true
+      });
+      return null;
+    }
+    return body.data || null;
   } catch (err) {
     dtLogger.warn('loads_import_ai_unreachable', {
       error: err.message,
@@ -165,15 +192,18 @@ async function previewImport({
   }
 
   // AI cache: hit returns immediately, miss calls the AI service.
+  // `aiResult` from either path is the unwrapped data payload (columnMapping,
+  // statusEnumMapping, ...) — never the AI handler envelope. callAiColumnMapping
+  // returns null on fallback / failure, so any non-null value is safe to cache.
   let aiResult = await lookupAiCache(tenantId, fileHash);
   const cacheHit = !!aiResult;
   let aiUnavailable = false;
   if (!cacheHit) {
     aiResult = await callAiColumnMapping({ tenantId, headers, sampleRows, fileName });
-    if (aiResult && !aiResult.fallback) {
+    if (aiResult) {
       try { await writeAiCache(tenantId, fileHash, aiResult); }
       catch (err) { dtLogger.warn('loads_import_ai_cache_write_failed', { error: err.message }); }
-    } else if (!aiResult) {
+    } else {
       aiUnavailable = true;
     }
   }
@@ -699,5 +729,8 @@ module.exports = {
   getBatchDetail,
   // exposed for tests
   applyColumnMapping,
-  buildStopsFromRow
+  buildStopsFromRow,
+  callAiColumnMapping,
+  lookupAiCache,
+  writeAiCache
 };
