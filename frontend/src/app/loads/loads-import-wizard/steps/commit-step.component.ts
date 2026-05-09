@@ -25,6 +25,6 @@ export class LoadsImportCommitStepComponent {
 
   get totalCommittable(): number {
     if (!this.stageResult) return 0;
-    return this.stageResult.okCount + (this.importNeedsReview ? this.stageResult.needsReviewCount : 0);
+    return this.stageResult.ok + (this.importNeedsReview ? this.stageResult.needsReview : 0);
   }
 }

@@ -16,17 +16,22 @@
     <div class="li-validation-summary">
       <div class="li-vsummary-chip green">
         <span class="material-symbols-outlined">check_circle</span>
-        <strong>{{ result.okCount }}</strong> OK
+        <strong>{{ result.ok }}</strong> OK
       </div>
       <div class="li-vsummary-chip yellow">
         <span class="material-symbols-outlined">flag</span>
-        <strong>{{ result.needsReviewCount }}</strong> Needs review
+        <strong>{{ result.needsReview }}</strong> Needs review
       </div>
       <div class="li-vsummary-chip red">
         <span class="material-symbols-outlined">error</span>
-        <strong>{{ result.errorCount }}</strong> Error
+        <strong>{{ result.errors }}</strong> Error
       </div>
     </div>
+
+    <p class="li-row-list-hint" *ngIf="!result.rows?.length && result.totalRows > 0">
+      Row-level details aren't available in this validation summary.
+      You can continue to commit; per-row outcomes will surface in the result step.
+    </p>
 
     <div class="li-row-list" *ngIf="result.rows?.length">
       <div class="li-row-list-header">

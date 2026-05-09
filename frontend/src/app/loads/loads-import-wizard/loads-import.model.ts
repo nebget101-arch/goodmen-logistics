@@ -85,22 +85,24 @@ export interface StageRow {
 export interface StageResponse {
   batchId: string;
   totalRows: number;
-  okCount: number;
-  needsReviewCount: number;
-  errorCount: number;
-  rows: StageRow[];
+  ok: number;
+  needsReview: number;
+  errors: number;
+  /** Per-row outcomes — BE doesn't return this from /stage today (FN-1598).
+   *  Surface row-level data via a follow-up endpoint (FN-1583 open item). */
+  rows?: StageRow[];
 }
 
 export interface CommitDuplicate {
-  rowNumber: number;
-  attemptedLoadNumber: string;
+  rowIndex: number;
+  loadNumber: string;
   existingLoadId?: string | null;
-  rate?: number | string | null;
-  brokerName?: string | null;
-  pickupCity?: string | null;
-  deliveryCity?: string | null;
+  /** Human-readable load number of the existing FN load — used as deep-link label. */
+  existingLoadKey?: string | null;
 }
 
+/** FE-flattened shape produced by `LoadsImportService.commit` (adapter at service
+ *  boundary). The BE returns `{ batchId, created: { auto, needsReview }, duplicates, errors }`. */
 export interface CommitResponse {
   batchId: string;
   autoCreatedCount: number;
@@ -108,9 +110,7 @@ export interface CommitResponse {
   duplicatesSkippedCount: number;
   errorCount: number;
   duplicates: CommitDuplicate[];
-  errors?: Array<{ rowNumber: number; message: string }>;
-  /** Optional progress hint for very large batches. */
-  totalProcessed?: number;
+  errors?: Array<{ rowIndex: number; message: string }>;
 }
 
 export interface ImportBatchSummary {

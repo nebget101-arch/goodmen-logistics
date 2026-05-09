@@ -29,6 +29,6 @@ export class LoadsImportValidateStepComponent {
   /** Allow proceeding if at least one row is committable (ok or needs_review). */
   get canProceed(): boolean {
     if (!this.result) return false;
-    return (this.result.okCount + this.result.needsReviewCount) > 0;
+    return (this.result.ok + this.result.needsReview) > 0;
   }
 }
