@@ -14,13 +14,65 @@ function trimOrNull(value) {
   return trimmed === '' ? null : trimmed;
 }
 
+// US 2-letter state abbreviations + DC (Phase 1 — international addresses out of scope).
+const US_STATE_CODES = new Set([
+  'AL', 'AK', 'AZ', 'AR', 'CA', 'CO', 'CT', 'DE', 'DC', 'FL',
+  'GA', 'HI', 'ID', 'IL', 'IN', 'IA', 'KS', 'KY', 'LA', 'ME',
+  'MD', 'MA', 'MI', 'MN', 'MS', 'MO', 'MT', 'NE', 'NV', 'NH',
+  'NJ', 'NM', 'NY', 'NC', 'ND', 'OH', 'OK', 'OR', 'PA', 'RI',
+  'SC', 'SD', 'TN', 'TX', 'UT', 'VT', 'VA', 'WA', 'WV', 'WI', 'WY'
+]);
+
+/**
+ * Parse a combined "City, ST" cell — including multi-word cities and an
+ * optional trailing 5-digit zip — into discrete sub-fields. Splits on the
+ * **last** comma so "Johnson City, TN" yields city="Johnson City", state="TN".
+ *
+ * Returns `{city: null, state: null, zip: null}` when input is empty, has no
+ * comma, or the trailing token is not a valid US 2-letter state abbreviation.
+ * The caller (FN-1603) falls back to leaving the raw value in `*_address1`.
+ */
+function parseCombinedCityState(raw) {
+  const empty = { city: null, state: null, zip: null };
+  if (raw === null || raw === undefined) return empty;
+  const text = String(raw).trim();
+  if (!text) return empty;
+
+  const lastComma = text.lastIndexOf(',');
+  if (lastComma === -1) return empty;
+
+  const cityPart = text.slice(0, lastComma).trim();
+  const remainder = text.slice(lastComma + 1).trim();
+  if (!cityPart || !remainder) return empty;
+
+  const m = /^([A-Za-z]{2})(?:\s+(\d{5}))?$/.exec(remainder);
+  if (!m) return empty;
+
+  const state = m[1].toUpperCase();
+  if (!US_STATE_CODES.has(state)) return empty;
+
+  // Collapse internal whitespace runs in the city (e.g. "  Denton " stays "Denton").
+  const city = cityPart.replace(/\s+/g, ' ');
+  return { city, state, zip: m[2] || null };
+}
+
 /**
  * Apply a column mapping to a raw row, producing FleetNeuron-shape values.
  * `columnMapping` is the AI-supplied (or hand-edited) shape:
  *   { load_number: { sourceHeader, confidence }, ... }
  * We only consult `sourceHeader`. Confidence flows through to commit.
+ *
+ * `options.warnings` (optional): batch-level AI warnings array. When it
+ * contains a `CITY_STATE_COMBINED` entry, this function additionally parses
+ * `pickup_address1`/`delivery_address1` into `*_city`/`*_state`/`*_zip`
+ * sub-fields (FN-1603) so `buildStopsFromRow()` can create stops. Direct
+ * column-mapped city/state values are not overwritten.
+ *
+ * `options.rowWarnings` (optional, mutable array): when the combined-cell
+ * parser fails on a populated address1, a `CITY_STATE_PARSE_FAILED:*`
+ * marker is appended so the caller can flag the row for review.
  */
-function applyColumnMapping(rawRow, columnMapping) {
+function applyColumnMapping(rawRow, columnMapping, options = {}) {
   const out = {};
   if (!columnMapping || typeof columnMapping !== 'object') return out;
   for (const [field, def] of Object.entries(columnMapping)) {
@@ -32,6 +84,35 @@ function applyColumnMapping(rawRow, columnMapping) {
       out[field] = String(raw).trim();
     }
   }
+
+  const batchWarnings = Array.isArray(options.warnings) ? options.warnings : [];
+  const hasCombinedWarning = batchWarnings.some((w) => {
+    const code = typeof w === 'string' ? w : (w && w.code);
+    return code === 'CITY_STATE_COMBINED';
+  });
+
+  if (hasCombinedWarning) {
+    const rowWarnings = Array.isArray(options.rowWarnings) ? options.rowWarnings : null;
+    for (const prefix of ['pickup', 'delivery']) {
+      const cityField = `${prefix}_city`;
+      const stateField = `${prefix}_state`;
+      // Direct mapping already populated city/state — leave it alone.
+      if (out[cityField] || out[stateField]) continue;
+
+      const addr = out[`${prefix}_address1`];
+      if (!addr) continue;
+
+      const parsed = parseCombinedCityState(addr);
+      if (parsed.state) {
+        out[cityField] = parsed.city;
+        out[stateField] = parsed.state;
+        if (parsed.zip) out[`${prefix}_zip`] = parsed.zip;
+      } else if (rowWarnings) {
+        rowWarnings.push(`CITY_STATE_PARSE_FAILED:${prefix}: "${addr}"`);
+      }
+    }
+  }
+
   return out;
 }
 
@@ -142,5 +223,7 @@ module.exports = {
   applyColumnMapping,
   buildStopsFromRow,
   coerceRate,
-  parseImportDate
+  parseImportDate,
+  parseCombinedCityState,
+  US_STATE_CODES
 };

@@ -8,6 +8,7 @@ const {
 	buildStopsFromRow,
 	coerceRate,
 	trimOrNull,
+	parseCombinedCityState,
 } = require('./loads-import-mapper');
 
 describe('loads-import-service / applyColumnMapping', () => {
@@ -101,6 +102,151 @@ describe('loads-import-mapper / coerceRate', () => {
 	it('passes plain numerics through', () => {
 		assert.equal(coerceRate('2500'), 2500);
 		assert.equal(coerceRate('3200.5'), 3200.5);
+	});
+});
+
+describe('loads-import-mapper / parseCombinedCityState (FN-1603)', () => {
+	it('parses simple "City, ST"', () => {
+		assert.deepEqual(parseCombinedCityState('Denton, TX'), {
+			city: 'Denton', state: 'TX', zip: null,
+		});
+	});
+
+	it('splits multi-word city on the LAST comma', () => {
+		assert.deepEqual(parseCombinedCityState('Johnson City, TN'), {
+			city: 'Johnson City', state: 'TN', zip: null,
+		});
+		assert.deepEqual(parseCombinedCityState('Kansas City, MO'), {
+			city: 'Kansas City', state: 'MO', zip: null,
+		});
+	});
+
+	it('captures optional trailing 5-digit zip', () => {
+		assert.deepEqual(parseCombinedCityState('Denton, TX 76201'), {
+			city: 'Denton', state: 'TX', zip: '76201',
+		});
+	});
+
+	it('returns nulls when there is no comma', () => {
+		assert.deepEqual(parseCombinedCityState('Denton'), {
+			city: null, state: null, zip: null,
+		});
+	});
+
+	it('rejects an invalid 2-letter state', () => {
+		assert.deepEqual(parseCombinedCityState('Denton, ZZ'), {
+			city: null, state: null, zip: null,
+		});
+	});
+
+	it('returns nulls for empty / whitespace / nullish input', () => {
+		assert.deepEqual(parseCombinedCityState(''), { city: null, state: null, zip: null });
+		assert.deepEqual(parseCombinedCityState('   '), { city: null, state: null, zip: null });
+		assert.deepEqual(parseCombinedCityState(null), { city: null, state: null, zip: null });
+		assert.deepEqual(parseCombinedCityState(undefined), { city: null, state: null, zip: null });
+	});
+
+	it('tolerates leading/trailing whitespace and lowercase state', () => {
+		assert.deepEqual(parseCombinedCityState('  Denton ,  TX  '), {
+			city: 'Denton', state: 'TX', zip: null,
+		});
+		assert.deepEqual(parseCombinedCityState('denton, tx'), {
+			city: 'denton', state: 'TX', zip: null,
+		});
+	});
+
+	it('rejects three- or four-letter trailing tokens', () => {
+		assert.deepEqual(parseCombinedCityState('Washington, USA'), {
+			city: null, state: null, zip: null,
+		});
+	});
+
+	it('is idempotent — same input produces identical output', () => {
+		const a = parseCombinedCityState('Johnson City, TN');
+		const b = parseCombinedCityState('Johnson City, TN');
+		assert.deepEqual(a, b);
+	});
+});
+
+describe('loads-import-mapper / applyColumnMapping with CITY_STATE_COMBINED warning (FN-1603)', () => {
+	const mapping = {
+		load_number: { sourceHeader: 'Load #', confidence: 0.99 },
+		pickup_address1: { sourceHeader: 'Pickup', confidence: 0.75 },
+		delivery_address1: { sourceHeader: 'Delivery', confidence: 0.75 },
+	};
+
+	it('extracts pickup_city/state/zip from pickup_address1 when warning fires', () => {
+		const raw = { 'Load #': 'L-100', Pickup: 'Denton, TX 76201', Delivery: 'Atlanta, GA' };
+		const out = applyColumnMapping(raw, mapping, {
+			warnings: [{ code: 'CITY_STATE_COMBINED' }],
+		});
+		assert.equal(out.pickup_city, 'Denton');
+		assert.equal(out.pickup_state, 'TX');
+		assert.equal(out.pickup_zip, '76201');
+		assert.equal(out.delivery_city, 'Atlanta');
+		assert.equal(out.delivery_state, 'GA');
+		// address1 is preserved for trail / display.
+		assert.equal(out.pickup_address1, 'Denton, TX 76201');
+	});
+
+	it('accepts plain string warning codes', () => {
+		const raw = { 'Load #': 'L-100', Pickup: 'Johnson City, TN' };
+		const out = applyColumnMapping(raw, mapping, { warnings: ['CITY_STATE_COMBINED'] });
+		assert.equal(out.pickup_city, 'Johnson City');
+		assert.equal(out.pickup_state, 'TN');
+	});
+
+	it('does not parse when warning is absent', () => {
+		const raw = { 'Load #': 'L-100', Pickup: 'Denton, TX' };
+		const out = applyColumnMapping(raw, mapping);
+		assert.equal(out.pickup_city, undefined);
+		assert.equal(out.pickup_state, undefined);
+	});
+
+	it('does not overwrite city/state already populated by direct mapping', () => {
+		const explicitMapping = {
+			...mapping,
+			pickup_city: { sourceHeader: 'PU City', confidence: 0.9 },
+			pickup_state: { sourceHeader: 'PU State', confidence: 0.9 },
+		};
+		const raw = {
+			'Load #': 'L-1', Pickup: 'WRONG, ZZ',
+			'PU City': 'Dallas', 'PU State': 'TX',
+		};
+		const out = applyColumnMapping(raw, explicitMapping, {
+			warnings: [{ code: 'CITY_STATE_COMBINED' }],
+		});
+		assert.equal(out.pickup_city, 'Dallas');
+		assert.equal(out.pickup_state, 'TX');
+	});
+
+	it('appends a per-row warning when address1 fails to parse', () => {
+		const raw = { 'Load #': 'L-1', Pickup: 'Denton, ZZ' };
+		const rowWarnings = [];
+		const out = applyColumnMapping(raw, mapping, {
+			warnings: [{ code: 'CITY_STATE_COMBINED' }],
+			rowWarnings,
+		});
+		assert.equal(out.pickup_city, undefined);
+		assert.equal(out.pickup_address1, 'Denton, ZZ');
+		assert.equal(rowWarnings.length, 1);
+		assert.match(rowWarnings[0], /CITY_STATE_PARSE_FAILED:pickup/);
+	});
+
+	it('builds stops after extraction (full bug-1600 path)', () => {
+		const raw = { 'Load #': 'L-100', Pickup: 'Denton, TX', Delivery: 'Atlanta, GA' };
+		const mapped = applyColumnMapping(raw, mapping, {
+			warnings: [{ code: 'CITY_STATE_COMBINED' }],
+		});
+		const normalized = { ...mapped, _stops_hint: { pattern: 'single' } };
+		const stops = buildStopsFromRow(normalized);
+		assert.equal(stops.length, 2);
+		assert.equal(stops[0].stopType, 'PICKUP');
+		assert.equal(stops[0].city, 'Denton');
+		assert.equal(stops[0].state, 'TX');
+		assert.equal(stops[1].stopType, 'DELIVERY');
+		assert.equal(stops[1].city, 'Atlanta');
+		assert.equal(stops[1].state, 'GA');
 	});
 });
 

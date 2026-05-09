@@ -313,6 +313,12 @@ async function stageBatch({
   // Wipe any prior staging output (idempotent re-stage).
   await query(`DELETE FROM load_import_rows WHERE batch_id = $1`, [batchId]);
 
+  // FN-1603: surface AI-emitted batch warnings so applyColumnMapping can
+  // split combined "City, ST" cells into discrete sub-fields.
+  const batchWarnings = Array.isArray(batch.ai_metadata?.warnings)
+    ? batch.ai_metadata.warnings
+    : [];
+
   const summary = { ok: 0, needsReview: 0, errors: 0 };
   const insertSql = `
     INSERT INTO load_import_rows (
@@ -326,13 +332,21 @@ async function stageBatch({
   // recorded in normalized_values so commit can assemble multi-stop loads.
   for (let i = 0; i < rows.length; i += 1) {
     const raw = rows[i];
-    const mapped = applyColumnMapping(raw, columnMapping);
+    const rowWarnings = [];
+    const mapped = applyColumnMapping(raw, columnMapping, {
+      warnings: batchWarnings,
+      rowWarnings
+    });
     const errors = [];
 
     // Required fields per spec: at minimum a load_number OR a po_number.
     if (!mapped.load_number && !mapped.po_number) {
       errors.push('Missing load_number / po_number');
     }
+
+    // FN-1603: combined-cell parser failures degrade the row to needs_review
+    // so the user can fix city/state in the wizard before commit.
+    if (rowWarnings.length) errors.push(...rowWarnings);
 
     // Status enum normalization.
     let mappedStatus = null;
