@@ -7,15 +7,21 @@
   <div class="li-pattern-toggle">
     <div class="li-pattern-label">
       <strong>Multi-stop pattern</strong>
-      Choose <em>Multi</em> when each stop (pickup or delivery) appears on its own row.
+      Choose <em>Multi-row</em> when each stop appears on its own row, or <em>Extra columns</em> when extra stops are encoded as additional columns.
     </div>
     <div class="li-pattern-pills">
       <button type="button"
               [class.active]="localPattern === 'single'"
               (click)="setPattern('single')">Single</button>
       <button type="button"
-              [class.active]="localPattern === 'multi'"
-              (click)="setPattern('multi')">Multi</button>
+              [class.active]="localPattern === 'multi_row'"
+              (click)="setPattern('multi_row')">Multi-row</button>
+      <button type="button"
+              [class.active]="localPattern === 'extra_columns'"
+              (click)="setPattern('extra_columns')">Extra columns</button>
+      <button type="button"
+              [class.active]="localPattern === 'free_text'"
+              (click)="setPattern('free_text')">Free-text</button>
     </div>
   </div>
 
@@ -28,7 +34,7 @@
           <span class="li-req-badge" *ngIf="f.required">req</span>
           <span class="li-opt-badge" *ngIf="!f.required">opt</span>
           <span class="li-confidence-badge"
-                *ngIf="aiMapping && aiMapping[f.key]"
+                *ngIf="columnMapping && columnMapping[f.key]"
                 [ngClass]="confidenceClass(f.key)"
                 [title]="'AI confidence'">
             {{ confidenceLabel(f.key) }}

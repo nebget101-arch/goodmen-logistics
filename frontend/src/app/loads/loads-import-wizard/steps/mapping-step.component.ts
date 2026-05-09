@@ -1,4 +1,4 @@
-// FN-1594 — Step 3: editable column mapping + multi-stop pattern toggle.
+// Step 3: editable column mapping + multi-stop pattern toggle.
 // Mutates a local copy of columnMap so back/forward navigation preserves the
 // user's overrides. Emits the final mapping to the parent on Next.
 
@@ -19,7 +19,7 @@ export class LoadsImportMappingStepComponent implements OnChanges {
   @Input() headerOptions: AiSelectOption[] = [];
   @Input() columnMap: Record<string, string | null> = {};
   @Input() multiStopPattern: MultiStopPattern = 'single';
-  @Input() aiMapping: Record<string, AiColumnSuggestion> | null = null;
+  @Input() columnMapping: Record<string, AiColumnSuggestion> | null = null;
 
   @Output() mappingChange = new EventEmitter<{
     columnMap: Record<string, string | null>;
@@ -96,7 +96,7 @@ export class LoadsImportMappingStepComponent implements OnChanges {
   }
 
   confidenceClass(key: string): string {
-    const c = this.aiMapping?.[key]?.confidence ?? 0;
+    const c = this.columnMapping?.[key]?.confidence ?? 0;
     if (c <= 0) return 'confidence-none';
     if (c >= 0.8) return 'confidence-high';
     if (c >= 0.5) return 'confidence-medium';
@@ -104,7 +104,7 @@ export class LoadsImportMappingStepComponent implements OnChanges {
   }
 
   confidenceLabel(key: string): string {
-    const c = this.aiMapping?.[key]?.confidence ?? 0;
+    const c = this.columnMapping?.[key]?.confidence ?? 0;
     if (c <= 0) return '—';
     return `${Math.round(c * 100)}%`;
   }
