@@ -7,15 +7,15 @@
   <div class="li-commit-summary" *ngIf="stageResult">
     <div class="li-commit-row">
       <span class="li-commit-label">OK rows</span>
-      <span class="li-commit-value">{{ stageResult.okCount }}</span>
+      <span class="li-commit-value">{{ stageResult.ok }}</span>
     </div>
     <div class="li-commit-row">
       <span class="li-commit-label">Needs-review rows</span>
-      <span class="li-commit-value">{{ stageResult.needsReviewCount }}</span>
+      <span class="li-commit-value">{{ stageResult.needsReview }}</span>
     </div>
-    <div class="li-commit-row" *ngIf="stageResult.errorCount > 0">
+    <div class="li-commit-row" *ngIf="stageResult.errors > 0">
       <span class="li-commit-label">Error rows (skipped)</span>
-      <span class="li-commit-value warn">{{ stageResult.errorCount }}</span>
+      <span class="li-commit-value warn">{{ stageResult.errors }}</span>
     </div>
     <div class="li-commit-row">
       <span class="li-commit-label">Will be committed</span>

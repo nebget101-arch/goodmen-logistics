@@ -20,24 +20,19 @@
           <tr>
             <th>Row</th>
             <th>Attempted Load #</th>
-            <th>Broker</th>
-            <th>Pickup → Delivery</th>
-            <th>Rate</th>
             <th>Existing Load</th>
           </tr>
         </thead>
         <tbody>
           <tr *ngFor="let d of duplicates">
-            <td>{{ d.rowNumber }}</td>
-            <td><strong>{{ d.attemptedLoadNumber }}</strong></td>
-            <td>{{ d.brokerName || '—' }}</td>
-            <td>{{ d.pickupCity || '—' }} → {{ d.deliveryCity || '—' }}</td>
-            <td>{{ d.rate || '—' }}</td>
+            <td>{{ d.rowIndex }}</td>
+            <td><strong>{{ d.loadNumber }}</strong></td>
             <td>
               <a *ngIf="loadHref(d) as href" [href]="href" target="_blank" rel="noopener">
-                Open <span class="material-symbols-outlined" style="font-size:14px; vertical-align:middle;">open_in_new</span>
+                {{ d.existingLoadKey || 'Open' }}
+                <span class="material-symbols-outlined" style="font-size:14px; vertical-align:middle;">open_in_new</span>
               </a>
-              <span *ngIf="!loadHref(d)">—</span>
+              <span *ngIf="!loadHref(d)">{{ d.existingLoadKey || '—' }}</span>
             </td>
           </tr>
         </tbody>

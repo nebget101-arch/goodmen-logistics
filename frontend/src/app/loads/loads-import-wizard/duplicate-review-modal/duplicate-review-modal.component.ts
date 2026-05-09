@@ -19,20 +19,17 @@ export class LoadsImportDuplicateReviewModalComponent {
   }
 
   exportCsv(): void {
-    const headers = ['row_number', 'attempted_load_number', 'rate', 'broker', 'pickup_city', 'delivery_city', 'existing_load_id'];
+    const headers = ['row_index', 'load_number', 'existing_load_id', 'existing_load_key'];
     const escape = (v: unknown): string => {
       if (v === null || v === undefined) return '';
       const s = String(v);
       return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
     };
     const rows = this.duplicates.map((d) => [
-      d.rowNumber,
-      d.attemptedLoadNumber,
-      d.rate ?? '',
-      d.brokerName ?? '',
-      d.pickupCity ?? '',
-      d.deliveryCity ?? '',
+      d.rowIndex,
+      d.loadNumber,
       d.existingLoadId ?? '',
+      d.existingLoadKey ?? '',
     ].map(escape).join(','));
     const csv = [headers.join(','), ...rows].join('\n');
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
