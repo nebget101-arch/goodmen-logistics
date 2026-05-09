@@ -4,6 +4,7 @@ const express = require('express');
 const jwt = require('jsonwebtoken');
 
 const SUPPORTED_RANGES = new Set(['7d']);
+const LOCAL_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 
 function authenticate(req, jwtSecret) {
   const authHeader = req.headers.authorization || '';
@@ -45,11 +46,21 @@ function buildInsightsRouter(deps) {
 
     const refresh = String(req.query.refresh || '').toLowerCase() === 'true';
 
+    let localDate = null;
+    if (req.query.localDate !== undefined) {
+      const raw = req.query.localDate;
+      if (typeof raw !== 'string' || !LOCAL_DATE_PATTERN.test(raw)) {
+        return res.status(400).json({ error: 'Invalid localDate' });
+      }
+      localDate = raw;
+    }
+
     try {
       const result = await aggregator.getTrends({
         tenantId: auth.tenantId,
         range,
-        refresh
+        refresh,
+        localDate
       });
       return res.json(result);
     } catch (err) {

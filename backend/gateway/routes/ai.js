@@ -5,6 +5,7 @@ const jwt = require('jsonwebtoken');
 
 const ASK_PROMPT_MAX = 1000;
 const EXPLAIN_TOKEN_PATTERN = /^[A-Za-z0-9_-]{16,128}$/;
+const LOCAL_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 
 function authenticate(req, jwtSecret) {
   const authHeader = req.headers.authorization || '';
@@ -41,11 +42,21 @@ function buildAiRouter(deps) {
 
     const refresh = String(req.query.refresh || '').toLowerCase() === 'true';
 
+    let localDate = null;
+    if (req.query.localDate !== undefined) {
+      const raw = req.query.localDate;
+      if (typeof raw !== 'string' || !LOCAL_DATE_PATTERN.test(raw)) {
+        return res.status(400).json({ error: 'Invalid localDate' });
+      }
+      localDate = raw;
+    }
+
     try {
       const result = await aggregator.generate({
         tenantId: auth.tenantId,
         authHeader: auth.authHeader,
-        refresh
+        refresh,
+        localDate
       });
       return res.json(result);
     } catch (err) {

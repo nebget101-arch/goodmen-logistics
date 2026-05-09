@@ -261,12 +261,161 @@ async function testPartialUpstreamFailure() {
   }
 }
 
+async function testLocalDateHonored() {
+  // FN-1611: when localDate is supplied, the gateway must use it as the
+  // briefing date (passed to the AI service and echoed in the payload),
+  // regardless of the server clock's UTC date.
+  const fetcher = makeFakeFetcher([
+    ['http://logistics.test/api/loads/throughput', () =>
+      makeUpstreamResponse({ totalLoads: 0 })],
+    ['http://logistics.test/api/loads/exceptions', () =>
+      makeUpstreamResponse({ count: 0 })],
+    ['http://drivers.test/api/drivers/risk/top', () => makeUpstreamResponse([])],
+    ['http://vehicles.test/api/vehicles/risk/top', () => makeUpstreamResponse([])],
+    ['http://ai.test/api/ai/briefing/generate', () =>
+      makeUpstreamResponse({ narrative: 'ok' })]
+  ]);
+  const aggregator = buildAggregatorForTest(fetcher);
+  const server = await startGatewayUnderTest(aggregator);
+  try {
+    const token = tokenFor({ sub: 'user-1', tenant_id: TENANT_ID });
+    const { status, body } = await getJson(
+      `${server.baseUrl}/api/ai/briefing?localDate=2026-05-08`,
+      { Authorization: `Bearer ${token}` }
+    );
+    assert.equal(status, 200, 'localDate honored: 200');
+    assert.equal(body.date, '2026-05-08', 'payload date echoes supplied localDate');
+
+    const aiCall = fetcher.calls.find((c) => c.url.includes('/briefing/generate'));
+    const aiBody = JSON.parse(aiCall.opts.body);
+    assert.equal(aiBody.date, '2026-05-08', 'localDate forwarded to ai-service');
+
+    // Fan-out to logistics endpoints uses the supplied date too
+    const throughputCall = fetcher.calls.find((c) => c.url.includes('/throughput'));
+    assert.match(
+      throughputCall.url,
+      /date=2026-05-08/,
+      'throughput call uses supplied localDate'
+    );
+  } finally {
+    await server.close();
+  }
+}
+
+async function testLocalDateMalformed() {
+  // FN-1611: malformed localDate → 400 (no fan-out).
+  const fetcher = makeFakeFetcher([]);
+  const aggregator = buildAggregatorForTest(fetcher);
+  const server = await startGatewayUnderTest(aggregator);
+  try {
+    const token = tokenFor({ sub: 'user-1', tenant_id: TENANT_ID });
+    const headers = { Authorization: `Bearer ${token}` };
+    for (const bad of ['2026/05/08', 'tomorrow', '2026-5-8']) {
+      const { status, body } = await getJson(
+        `${server.baseUrl}/api/ai/briefing?localDate=${encodeURIComponent(bad)}`,
+        headers
+      );
+      assert.equal(status, 400, `malformed '${bad}' → 400`);
+      assert.match(body.error, /localDate/i, 'error mentions localDate');
+    }
+    assert.equal(fetcher.callCount, 0, 'malformed localDate never fans out');
+  } finally {
+    await server.close();
+  }
+}
+
+async function testLocalDateCacheIsolation() {
+  // FN-1611: distinct localDate values must populate distinct cache slots
+  // for the same tenant — verified by counting AI-service invocations.
+  let aiCalls = 0;
+  const fetcher = makeFakeFetcher([
+    ['http://logistics.test/api/loads/throughput', () => makeUpstreamResponse({})],
+    ['http://logistics.test/api/loads/exceptions', () => makeUpstreamResponse({})],
+    ['http://drivers.test/api/drivers/risk/top', () => makeUpstreamResponse([])],
+    ['http://vehicles.test/api/vehicles/risk/top', () => makeUpstreamResponse([])],
+    ['http://ai.test/api/ai/briefing/generate', () => {
+      aiCalls += 1;
+      return makeUpstreamResponse({ narrative: `call-${aiCalls}` });
+    }]
+  ]);
+  const aggregator = buildAggregatorForTest(fetcher);
+  const server = await startGatewayUnderTest(aggregator);
+  try {
+    const token = tokenFor({ sub: 'user-1', tenant_id: TENANT_ID });
+    const headers = { Authorization: `Bearer ${token}` };
+
+    const d1 = await getJson(
+      `${server.baseUrl}/api/ai/briefing?localDate=2026-05-08`,
+      headers
+    );
+    const d2 = await getJson(
+      `${server.baseUrl}/api/ai/briefing?localDate=2026-05-09`,
+      headers
+    );
+    assert.equal(d1.body.cached, false, '05-08: cold');
+    assert.equal(d2.body.cached, false, '05-09: cold (separate slot)');
+    assert.equal(aiCalls, 2, 'two distinct dates → two AI invocations');
+
+    // Re-fetch each — both should hit cache independently
+    const d1Hit = await getJson(
+      `${server.baseUrl}/api/ai/briefing?localDate=2026-05-08`,
+      headers
+    );
+    const d2Hit = await getJson(
+      `${server.baseUrl}/api/ai/briefing?localDate=2026-05-09`,
+      headers
+    );
+    assert.equal(d1Hit.body.cached, true, '05-08: warm');
+    assert.equal(d2Hit.body.cached, true, '05-09: warm (own slot)');
+    assert.equal(aiCalls, 2, 'cache isolation: no extra AI calls on warm hits');
+  } finally {
+    await server.close();
+  }
+}
+
+async function testMissingLocalDateFallsBackToUtc() {
+  // FN-1611: no localDate query → server falls back to today-UTC (preserves
+  // cron / server-internal callers).
+  const fetcher = makeFakeFetcher([
+    ['http://logistics.test/api/loads/throughput', () => makeUpstreamResponse({})],
+    ['http://logistics.test/api/loads/exceptions', () => makeUpstreamResponse({})],
+    ['http://drivers.test/api/drivers/risk/top', () => makeUpstreamResponse([])],
+    ['http://vehicles.test/api/vehicles/risk/top', () => makeUpstreamResponse([])],
+    ['http://ai.test/api/ai/briefing/generate', () => makeUpstreamResponse({})]
+  ]);
+  // Pin the aggregator's clock so the fallback is deterministic
+  const aggregator = buildBriefingAggregator({
+    fetcher,
+    logisticsUrl: 'http://logistics.test',
+    driversUrl: 'http://drivers.test',
+    vehiclesUrl: 'http://vehicles.test',
+    aiUrl: 'http://ai.test',
+    cacheTtlMs: 60_000,
+    upstreamTimeoutMs: 1000,
+    now: () => new Date('2026-05-07T18:00:00Z')
+  });
+  const server = await startGatewayUnderTest(aggregator);
+  try {
+    const token = tokenFor({ sub: 'user-1', tenant_id: TENANT_ID });
+    const { body } = await getJson(`${server.baseUrl}/api/ai/briefing`, {
+      Authorization: `Bearer ${token}`
+    });
+    assert.equal(body.date, '2026-05-07', 'fallback to UTC date when localDate absent');
+  } finally {
+    await server.close();
+  }
+}
+
 (async () => {
   const cases = [
     ['unauthorized', testUnauthorized],
     ['happy path', testHappyPath],
     ['refresh invalidates cache', testRefreshInvalidatesCache],
-    ['partial upstream failure', testPartialUpstreamFailure]
+    ['partial upstream failure', testPartialUpstreamFailure],
+    ['localDate honored: payload + AI body + fan-out', testLocalDateHonored],
+    ['malformed localDate → 400', testLocalDateMalformed],
+    ['cache isolation across localDates', testLocalDateCacheIsolation],
+    ['no localDate falls back to today-UTC', testMissingLocalDateFallsBackToUtc]
   ];
   let failed = 0;
   for (const [name, fn] of cases) {
