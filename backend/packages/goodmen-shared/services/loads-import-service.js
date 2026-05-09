@@ -29,7 +29,8 @@ const {
   trimOrNull,
   applyColumnMapping,
   buildStopsFromRow,
-  coerceRate
+  coerceRate,
+  parseImportDate
 } = require('./loads-import-mapper');
 
 const PHASE_1_ROW_CAP = 500;
@@ -463,6 +464,19 @@ async function commitBatch({
     [batchId]
   );
 
+  // Pull stage-time AI artifacts so commit can apply confidences and the
+  // statusEnumMapping defensively (FN-1601). `ai_metadata` may be missing
+  // for legacy batches; treat missing fields as empty.
+  const batchAi = batch.ai_metadata || {};
+  const stagedStatusEnumMapping = batchAi.statusEnumMapping || {};
+  const finalColumnMapping = batchAi.finalColumnMapping || {};
+  const fieldConfidence = (field) => {
+    const def = finalColumnMapping[field];
+    if (!def || typeof def !== 'object') return null;
+    const c = def.confidence;
+    return typeof c === 'number' ? c : null;
+  };
+
   const created = { auto: 0, needsReview: 0 };
   const duplicates = [];
   const errors = [];
@@ -544,29 +558,69 @@ async function commitBatch({
         });
       }
 
-      // Threshold gating: max(broker, driver) decides auto vs DRAFT routing.
+      // Threshold gating: max(broker, driver) decides auto vs needs-review.
+      // FN-1601: this no longer overrides the AI-mapped status — status and
+      // FK matching are independent decisions. Low FK confidence still flags
+      // the row for review, but a high-confidence "DELIVERED" stays
+      // "DELIVERED" rather than being force-DRAFTed.
       const maxScore = Math.max(
         brokerMatch?.score || 0,
         driverMatch?.score || 0
       );
       const aboveThreshold = maxScore >= threshold;
 
+      const rowWarnings = [];
+
       let finalStatus;
-      let needsReview = false;
       if (normalized._status) {
+        // Stage already mapped + validated against LOAD_STATUSES.
         finalStatus = normalized._status;
-        if (!aboveThreshold) { finalStatus = 'DRAFT'; needsReview = true; }
+      } else if (trimOrNull(normalized.status)) {
+        // Stage couldn't map (or row was needs_review). Apply the stashed
+        // statusEnumMapping defensively at commit time so we don't lose a
+        // perfectly good mapping just because some other field flagged the
+        // row at stage. Fall back to DRAFT when the mapped value isn't in
+        // the FN load status enum.
+        const raw = String(normalized.status).trim();
+        const candidate =
+          stagedStatusEnumMapping[raw] ||
+          stagedStatusEnumMapping[raw.toUpperCase()] ||
+          raw.toUpperCase();
+        if (LOAD_STATUSES.has(candidate)) {
+          finalStatus = candidate;
+        } else {
+          rowWarnings.push(
+            `status "${raw}" → "${candidate}" not in FN load status enum; defaulted to DRAFT`
+          );
+          finalStatus = 'DRAFT';
+        }
       } else if (aboveThreshold) {
         finalStatus = 'NEW';
       } else {
         finalStatus = 'DRAFT';
-        needsReview = true;
       }
 
       const finalBilling = normalized._billing_status || 'PENDING';
       const stops = buildStopsFromRow(normalized);
+
+      let needsReview = !aboveThreshold;
       if (stops.length === 0) needsReview = true;
       if (normalized._stops_hint?.pattern === 'free_text') needsReview = true;
+
+      // Date persistence — the parser handles ISO, MM/DD/YYYY, and JS
+      // toString() form; returns null for unparseable values so the DATE
+      // column stays valid.
+      const pickupDate = parseImportDate(normalized.pickup_date);
+      const deliveryDate = parseImportDate(normalized.delivery_date);
+      const completedDate = parseImportDate(normalized.completed_date);
+
+      // Driver name fallback — only when no FK match. With a match the SELECT
+      // projection's `concat_ws(d.first_name, d.last_name)` populates the
+      // displayed name; without one we want the raw mapped string visible
+      // instead of the empty string concat_ws returns.
+      const driverNameText = driverMatch?.id
+        ? null
+        : trimOrNull(normalized.driver_name);
 
       const aiMetadata = {
         source: 'spreadsheet-import',
@@ -576,7 +630,12 @@ async function commitBatch({
           broker: brokerMatch?.score || null,
           driver: driverMatch?.score || null,
           truck: truckMatch?.score || null,
-          trailer: trailerMatch?.score || null
+          trailer: trailerMatch?.score || null,
+          pickup_date: fieldConfidence('pickup_date'),
+          delivery_date: fieldConfidence('delivery_date'),
+          completed_date: fieldConfidence('completed_date'),
+          driver_name: fieldConfidence('driver_name'),
+          status: fieldConfidence('status')
         },
         matchedOn: {
           broker: brokerMatch?.matchedOn || null,
@@ -584,7 +643,8 @@ async function commitBatch({
           truck: truckMatch?.matchedOn || null,
           trailer: trailerMatch?.matchedOn || null
         },
-        thresholdApplied: threshold
+        thresholdApplied: threshold,
+        warnings: rowWarnings.length ? rowWarnings : []
       };
 
       let insertResult;
@@ -594,8 +654,9 @@ async function commitBatch({
              tenant_id, operating_entity_id,
              load_number, status, billing_status, dispatcher_user_id,
              driver_id, truck_id, trailer_id, broker_id, broker_name,
+             driver_name, pickup_date, delivery_date, completed_date,
              po_number, rate, notes, needs_review, ai_metadata
-           ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
+           ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20)
            RETURNING id`,
           [
             tenantId,
@@ -609,6 +670,10 @@ async function commitBatch({
             trailerMatch?.id || null,
             brokerMatch?.id || null,
             trimOrNull(normalized.broker_name),
+            driverNameText,
+            pickupDate,
+            deliveryDate,
+            completedDate,
             trimOrNull(normalized.po_number),
             coerceRate(normalized.rate),
             trimOrNull(normalized.notes),
@@ -732,5 +797,6 @@ module.exports = {
   buildStopsFromRow,
   callAiColumnMapping,
   lookupAiCache,
-  writeAiCache
+  writeAiCache,
+  parseImportDate
 };

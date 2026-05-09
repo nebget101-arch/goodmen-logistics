@@ -608,7 +608,7 @@ async function executeLoadsListQuery(listSpec) {
         delivery.city as delivery_city,
         delivery.state as delivery_state,
         delivery.zip as delivery_zip,
-        concat_ws(' ', d.first_name, d.last_name) as driver_name,
+        COALESCE(NULLIF(concat_ws(' ', d.first_name, d.last_name), ''), l.driver_name) as driver_name,
         COALESCE(b.legal_name, b.name, l.broker_name) as broker_name,
         COALESCE(NULLIF(concat_ws(' ', u.first_name, u.last_name), ''), u.username) as dispatcher_name,
         l.po_number,
@@ -659,7 +659,7 @@ async function getLoadDetail(clientOrQuery, loadId, context = null) {
 
   const loadResult = await exec(
     `SELECT l.*,
-            concat_ws(' ', d.first_name, d.last_name) as driver_name,
+            COALESCE(NULLIF(concat_ws(' ', d.first_name, d.last_name), ''), l.driver_name) as driver_name,
             COALESCE(b.legal_name, b.name, l.broker_name) as broker_display_name,
             COALESCE(NULLIF(concat_ws(' ', u.first_name, u.last_name), ''), u.username) as dispatcher_name
      FROM loads l
