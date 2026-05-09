@@ -207,8 +207,7 @@ function buildTrendAggregator(deps) {
   if (!knex) throw new Error('trend-aggregator: knex is required');
   if (!cache) throw new Error('trend-aggregator: cache is required');
 
-  async function compute(tenantId, range) {
-    const today = now();
+  async function compute(tenantId, range, today) {
     const actualDays = buildPastWindow(today, 7);
     const futureDays = buildFutureWindow(today, FUTURE_WINDOW_DAYS);
     const startDay = actualDays[0];
@@ -260,20 +259,31 @@ function buildTrendAggregator(deps) {
     };
   }
 
-  async function getTrends({ tenantId, range = '7d', refresh = false } = {}) {
+  async function getTrends({ tenantId, range = '7d', refresh = false, localDate = null } = {}) {
     if (!tenantId) throw new Error('trend-aggregator: tenantId is required');
     if (range !== '7d') {
       const err = new Error(`Unsupported range '${range}'; only '7d' is supported`);
       err.statusCode = 400;
       throw err;
     }
-    if (refresh) cache.invalidate(tenantId, range);
+
+    let today;
+    let dateKey;
+    if (localDate) {
+      today = new Date(`${localDate}T00:00:00Z`);
+      dateKey = localDate;
+    } else {
+      today = now();
+      dateKey = today.toISOString().slice(0, 10);
+    }
+
+    if (refresh) cache.invalidate(tenantId, range, dateKey);
     else {
-      const hit = cache.get(tenantId, range);
+      const hit = cache.get(tenantId, range, dateKey);
       if (hit) return { ...hit, cached: true };
     }
-    const data = await compute(tenantId, range);
-    cache.set(tenantId, range, data);
+    const data = await compute(tenantId, range, today);
+    cache.set(tenantId, range, dateKey, data);
     return { ...data, cached: false };
   }
 

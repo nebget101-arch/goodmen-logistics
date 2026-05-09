@@ -149,24 +149,31 @@ async function testLinearForecast() {
 async function testCacheTtl() {
   let t = 1000;
   const cache = buildTrendCache({ ttlMs: 100, now: () => t });
-  cache.set('tenant-a', '7d', { hello: 'world' });
-  assert.deepEqual(cache.get('tenant-a', '7d'), { hello: 'world' }, 'cache: hit');
+  const D = '2026-05-07';
+  cache.set('tenant-a', '7d', D, { hello: 'world' });
+  assert.deepEqual(cache.get('tenant-a', '7d', D), { hello: 'world' }, 'cache: hit');
 
   t = 1099;
-  assert.deepEqual(cache.get('tenant-a', '7d'), { hello: 'world' }, 'cache: still fresh');
+  assert.deepEqual(cache.get('tenant-a', '7d', D), { hello: 'world' }, 'cache: still fresh');
 
   t = 1101;
-  assert.equal(cache.get('tenant-a', '7d'), null, 'cache: expired beyond ttl');
+  assert.equal(cache.get('tenant-a', '7d', D), null, 'cache: expired beyond ttl');
 
-  cache.set('tenant-a', '7d', { x: 1 });
-  cache.invalidate('tenant-a', '7d');
-  assert.equal(cache.get('tenant-a', '7d'), null, 'cache: invalidate clears entry');
+  cache.set('tenant-a', '7d', D, { x: 1 });
+  cache.invalidate('tenant-a', '7d', D);
+  assert.equal(cache.get('tenant-a', '7d', D), null, 'cache: invalidate clears entry');
 
   // Tenant isolation
-  cache.set('tenant-a', '7d', { which: 'a' });
-  cache.set('tenant-b', '7d', { which: 'b' });
-  assert.equal(cache.get('tenant-a', '7d').which, 'a', 'cache: tenant-a isolated');
-  assert.equal(cache.get('tenant-b', '7d').which, 'b', 'cache: tenant-b isolated');
+  cache.set('tenant-a', '7d', D, { which: 'a' });
+  cache.set('tenant-b', '7d', D, { which: 'b' });
+  assert.equal(cache.get('tenant-a', '7d', D).which, 'a', 'cache: tenant-a isolated');
+  assert.equal(cache.get('tenant-b', '7d', D).which, 'b', 'cache: tenant-b isolated');
+
+  // Date isolation: same tenant + range, different localDate => separate slots
+  cache.set('tenant-a', '7d', '2026-05-07', { d: 7 });
+  cache.set('tenant-a', '7d', '2026-05-08', { d: 8 });
+  assert.equal(cache.get('tenant-a', '7d', '2026-05-07').d, 7, 'cache: date-7 isolated');
+  assert.equal(cache.get('tenant-a', '7d', '2026-05-08').d, 8, 'cache: date-8 isolated');
 }
 
 // ── HTTP integration tests ───────────────────────────────────────────────────
@@ -447,6 +454,151 @@ async function testSeriesQueryFailureIsolated() {
   }
 }
 
+async function testLocalDateHonored() {
+  // FN-1611: when localDate is supplied the trend window must end on it,
+  // not on the server-clock UTC date. fixedNow → 2026-05-07; we ask for
+  // 2026-05-04 and expect the actualDays to end on 2026-05-04.
+  const cache = buildTrendCache({ now: () => Date.now() });
+  const knex = makeFakeKnex([{ match: /.*/i, respond: () => [] }]);
+  const aggregator = buildTrendAggregator({ knex, cache, now: fixedNow });
+  const server = await startServiceUnderTest(aggregator);
+  try {
+    const token = tokenFor({ sub: 'u1', tenant_id: TENANT_ID });
+    const { status, body } = await getJson(
+      `${server.baseUrl}/api/insights/trends?localDate=2026-05-04`,
+      { Authorization: `Bearer ${token}` }
+    );
+    assert.equal(status, 200, 'localDate honored: 200');
+    assert.equal(
+      body.window.actualDays[6],
+      '2026-05-04',
+      'actualDays ends on supplied localDate, not server-clock today'
+    );
+    assert.equal(
+      body.window.futureDays[0],
+      '2026-05-05',
+      'futureDays starts the day after localDate'
+    );
+  } finally {
+    await server.close();
+  }
+}
+
+async function testLocalDateMalformed() {
+  // FN-1611: malformed localDate → 400 (no DB call).
+  const cache = buildTrendCache({ now: () => Date.now() });
+  const knex = fullFixtureKnex();
+  const aggregator = buildTrendAggregator({ knex, cache, now: fixedNow });
+  const server = await startServiceUnderTest(aggregator);
+  try {
+    const token = tokenFor({ sub: 'u1', tenant_id: TENANT_ID });
+    const headers = { Authorization: `Bearer ${token}` };
+
+    for (const bad of ['2026/05/04', 'tomorrow', '2026-5-4', '2026-13-01-x']) {
+      const r = await getJson(
+        `${server.baseUrl}/api/insights/trends?localDate=${encodeURIComponent(bad)}`,
+        headers
+      );
+      assert.equal(r.status, 400, `malformed localDate '${bad}' → 400`);
+      assert.match(r.body.error, /localDate/i, 'error mentions localDate');
+    }
+    assert.equal(knex.calls.length, 0, 'malformed localDate never reaches DB');
+  } finally {
+    await server.close();
+  }
+}
+
+async function testLocalDateCacheIsolation() {
+  // FN-1611: two callers in the same tenant with different localDates must
+  // populate distinct cache entries (cross-tz isolation).
+  const cache = buildTrendCache({ now: () => Date.now() });
+  const knex = makeFakeKnex([{ match: /.*/i, respond: () => [] }]);
+  const aggregator = buildTrendAggregator({ knex, cache, now: fixedNow });
+  const server = await startServiceUnderTest(aggregator);
+  try {
+    const token = tokenFor({ sub: 'u1', tenant_id: TENANT_ID });
+    const headers = { Authorization: `Bearer ${token}` };
+
+    const a = await getJson(
+      `${server.baseUrl}/api/insights/trends?localDate=2026-05-07`,
+      headers
+    );
+    const b = await getJson(
+      `${server.baseUrl}/api/insights/trends?localDate=2026-05-08`,
+      headers
+    );
+    assert.equal(a.body.cached, false, 'localDate=05-07: cold');
+    assert.equal(b.body.cached, false, 'localDate=05-08: cold (different cache slot)');
+
+    // Re-fetch each: both should hit cache independently
+    const aHit = await getJson(
+      `${server.baseUrl}/api/insights/trends?localDate=2026-05-07`,
+      headers
+    );
+    const bHit = await getJson(
+      `${server.baseUrl}/api/insights/trends?localDate=2026-05-08`,
+      headers
+    );
+    assert.equal(aHit.body.cached, true, 'localDate=05-07: warm');
+    assert.equal(bHit.body.cached, true, 'localDate=05-08: warm (own slot)');
+  } finally {
+    await server.close();
+  }
+}
+
+async function testLocalDateRefreshScopedToDate() {
+  // FN-1611: refresh=true must only invalidate the resolved-date entry,
+  // not other dates' entries for the same tenant.
+  const cache = buildTrendCache({ now: () => Date.now() });
+  const knex = makeFakeKnex([{ match: /.*/i, respond: () => [] }]);
+  const aggregator = buildTrendAggregator({ knex, cache, now: fixedNow });
+  const server = await startServiceUnderTest(aggregator);
+  try {
+    const token = tokenFor({ sub: 'u1', tenant_id: TENANT_ID });
+    const headers = { Authorization: `Bearer ${token}` };
+
+    await getJson(`${server.baseUrl}/api/insights/trends?localDate=2026-05-07`, headers);
+    await getJson(`${server.baseUrl}/api/insights/trends?localDate=2026-05-08`, headers);
+
+    // Refresh only 05-07 — 05-08 should still be cached
+    const refreshed = await getJson(
+      `${server.baseUrl}/api/insights/trends?localDate=2026-05-07&refresh=true`,
+      headers
+    );
+    assert.equal(refreshed.body.cached, false, 'refresh=true bypasses 05-07 entry');
+
+    const stillCached = await getJson(
+      `${server.baseUrl}/api/insights/trends?localDate=2026-05-08`,
+      headers
+    );
+    assert.equal(stillCached.body.cached, true, 'refresh on 05-07 did not evict 05-08');
+  } finally {
+    await server.close();
+  }
+}
+
+async function testMissingLocalDateFallsBackToUtc() {
+  // FN-1611: no localDate query → server falls back to today-UTC (existing
+  // behavior preserved for cron / server-internal callers).
+  const cache = buildTrendCache({ now: () => Date.now() });
+  const knex = makeFakeKnex([{ match: /.*/i, respond: () => [] }]);
+  const aggregator = buildTrendAggregator({ knex, cache, now: fixedNow });
+  const server = await startServiceUnderTest(aggregator);
+  try {
+    const token = tokenFor({ sub: 'u1', tenant_id: TENANT_ID });
+    const { body } = await getJson(`${server.baseUrl}/api/insights/trends`, {
+      Authorization: `Bearer ${token}`
+    });
+    assert.equal(
+      body.window.actualDays[6],
+      '2026-05-07',
+      'no localDate → window ends on UTC today (fixedNow)'
+    );
+  } finally {
+    await server.close();
+  }
+}
+
 async function testUnsupportedRange() {
   const cache = buildTrendCache({ now: () => Date.now() });
   const knex = fullFixtureKnex();
@@ -478,6 +630,11 @@ async function testUnsupportedRange() {
     ['tenant isolation', testTenantIsolation],
     ['sparse tenant returns nulls, not errors', testSparseTenantNoErrors],
     ['per-series failure isolated to one series', testSeriesQueryFailureIsolated],
+    ['localDate honored: window ends on supplied date', testLocalDateHonored],
+    ['malformed localDate → 400', testLocalDateMalformed],
+    ['cache isolation across localDates', testLocalDateCacheIsolation],
+    ['refresh=true scoped to resolved date', testLocalDateRefreshScopedToDate],
+    ['no localDate falls back to today-UTC', testMissingLocalDateFallsBackToUtc],
     ['unsupported range rejected', testUnsupportedRange]
   ];
   let failed = 0;

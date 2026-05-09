@@ -110,10 +110,10 @@ function buildBriefingAggregator(deps) {
     );
   }
 
-  async function generate({ tenantId, authHeader, refresh }) {
+  async function generate({ tenantId, authHeader, refresh, localDate }) {
     if (!tenantId) throw new Error('briefing-aggregator: tenantId is required');
 
-    const date = todayUtcDate(now());
+    const date = localDate || todayUtcDate(now());
     const key = cacheKey(tenantId, date);
 
     if (refresh) invalidate(key);

@@ -7,12 +7,12 @@ function buildTrendCache(deps = {}) {
   const now = deps.now ?? (() => Date.now());
   const store = new Map();
 
-  function key(tenantId, range) {
-    return `${tenantId}:${range}`;
+  function key(tenantId, range, date) {
+    return `${tenantId}:${range}:${date}`;
   }
 
-  function get(tenantId, range) {
-    const k = key(tenantId, range);
+  function get(tenantId, range, date) {
+    const k = key(tenantId, range, date);
     const entry = store.get(k);
     if (!entry) return null;
     if (entry.expiresAt <= now()) {
@@ -22,15 +22,15 @@ function buildTrendCache(deps = {}) {
     return entry.value;
   }
 
-  function set(tenantId, range, value) {
-    store.set(key(tenantId, range), {
+  function set(tenantId, range, date, value) {
+    store.set(key(tenantId, range, date), {
       value,
       expiresAt: now() + ttlMs
     });
   }
 
-  function invalidate(tenantId, range) {
-    store.delete(key(tenantId, range));
+  function invalidate(tenantId, range, date) {
+    store.delete(key(tenantId, range, date));
   }
 
   function clear() {
