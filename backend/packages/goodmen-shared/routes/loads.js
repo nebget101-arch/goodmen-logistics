@@ -4368,7 +4368,12 @@ router.post('/:id/return-load', requireRole(['admin', 'dispatch']), async (req, 
 // on AI failure so the dispatcher UI can fall back to manual assignment
 // rather than blocking.
 const RECOMMEND_DRIVER_CAP = 25;
-const RECOMMEND_DRIVER_AI_TIMEOUT_MS = 15000;
+// Render starter-plan cold starts can push the AI service past 15 s on the
+// first request after spin-down; default to 30 s and let ops override per-env.
+const RECOMMEND_DRIVER_AI_TIMEOUT_MS = (() => {
+  const raw = Number(process.env.RECOMMEND_DRIVER_AI_TIMEOUT_MS);
+  return Number.isFinite(raw) && raw > 0 ? raw : 30000;
+})();
 const HOS_DRIVE_CAP_HOURS_FOR_RECO = 11;
 const HOS_DUTY_CAP_HOURS_FOR_RECO = 14;
 
@@ -4442,6 +4447,36 @@ router.post('/:id/recommend-driver', requireRole(['admin', 'dispatch']), async (
       : {};
     const loadEquipmentClass = aiMeta.equipmentClass || aiMeta.equipment_class || null;
     const customerId = loadRow.broker_id || null;
+
+    // Pre-flight: short-circuit cases where the AI handler will deterministically
+    // return a 400 (per FN-1606 audit). Surface specific reasoning to the user
+    // and skip both the candidate-pool query and the AI roundtrip.
+    if (!loadEquipmentClass) {
+      const duration = Date.now() - startTime;
+      dtLogger.info('loads_recommend_driver_skipped', { loadId, reason: 'no_equipment_class' });
+      dtLogger.trackRequest('POST', `/api/loads/${loadId}/recommend-driver`, 200, duration, {
+        candidates: 0,
+        reason: 'no_equipment_class'
+      });
+      return res.json({
+        success: true,
+        candidates: [],
+        reasoning: 'Load has no equipment class set. Set the equipment class on the load to enable driver suggestions.'
+      });
+    }
+    if (originLat == null || originLng == null) {
+      const duration = Date.now() - startTime;
+      dtLogger.info('loads_recommend_driver_skipped', { loadId, reason: 'no_origin_geocode' });
+      dtLogger.trackRequest('POST', `/api/loads/${loadId}/recommend-driver`, 200, duration, {
+        candidates: 0,
+        reason: 'no_origin_geocode'
+      });
+      return res.json({
+        success: true,
+        candidates: [],
+        reasoning: 'Pickup location is not yet geocoded. Add a PICKUP stop with a US zip code to enable driver suggestions.'
+      });
+    }
 
     // Pull the candidate-driver pool. Tenant + OE scoped, status=active, plus
     // each driver's latest HOS, last delivery zip (for current location), the
@@ -4588,28 +4623,62 @@ router.post('/:id/recommend-driver', requireRole(['admin', 'dispatch']), async (
       const aiDuration = Date.now() - aiCallStart;
       if (!aiRes.ok) {
         const snippet = await aiRes.text().catch(() => '');
-        dtLogger.error('loads_recommend_driver_ai_http', {
+        let parsedError = null;
+        let aiErrorCode = null;
+        try {
+          const parsed = JSON.parse(snippet);
+          if (parsed && typeof parsed === 'object') {
+            parsedError = typeof parsed.error === 'string' ? parsed.error : null;
+            aiErrorCode = typeof parsed.code === 'string' ? parsed.code : null;
+          }
+        } catch (_parseErr) { /* snippet may not be JSON */ }
+
+        const is5xx = aiRes.status >= 500;
+        // 4xx with AI_BAD_REQUEST* code means the route sent a payload the AI
+        // rejected. Pre-flight should make this unreachable — log it loudly
+        // (bug: prefix on the route key) so we can find the regression fast.
+        const isBadRequest = !is5xx && typeof aiErrorCode === 'string' && aiErrorCode.startsWith('AI_BAD_REQUEST');
+        const logKey = isBadRequest
+          ? 'bug:loads_recommend_driver_ai_http'
+          : 'loads_recommend_driver_ai_http';
+        dtLogger.error(logKey, {
           status: aiRes.status,
-          snippet: snippet.slice(0, 200),
+          aiPayloadSnippet: snippet.slice(0, 500),
+          aiErrorCode,
           aiDurationMs: aiDuration
         });
+        let reasoning;
+        if (is5xx) {
+          reasoning = `AI service is currently failing (status ${aiRes.status}). Try again in a moment.`;
+        } else if (isBadRequest) {
+          reasoning = `Suggestion request was malformed: ${parsedError || 'unknown validation error'}`;
+        } else {
+          // Non-5xx, non-AI_BAD_REQUEST 4xx — auth / rate-limit / unknown.
+          reasoning = `AI service rejected the request (status ${aiRes.status}). Try again in a moment.`;
+        }
         return res.json({
           success: true,
           candidates: [],
-          reasoning: 'AI service unavailable'
+          reasoning
         });
       }
       aiPayload = await aiRes.json();
     } catch (fetchErr) {
       const aiDuration = Date.now() - aiCallStart;
+      const errorName = fetchErr?.name || null;
       dtLogger.error('loads_recommend_driver_ai_fetch_failed', {
         err: fetchErr?.message || String(fetchErr),
+        errorName,
         aiDurationMs: aiDuration
       });
+      const isTimeout = errorName === 'AbortError' || errorName === 'TimeoutError';
+      const reasoning = isTimeout
+        ? 'AI service is taking too long to respond. Try again in a moment.'
+        : 'AI service is unreachable from logistics-service. Check AI_SERVICE_URL configuration.';
       return res.json({
         success: true,
         candidates: [],
-        reasoning: 'AI service unavailable'
+        reasoning
       });
     }
 
