@@ -144,12 +144,77 @@
 
 .settlement-wizard .create-period-block {
   margin-top: 20px;
-  padding-top: 16px;
-  border-top: 1px solid rgba(148, 163, 184, 0.2);
+  padding: 16px;
+  border-radius: 12px;
+  background: rgba(30, 41, 59, 0.5);
+  border: 1px solid rgba(148, 163, 184, 0.25);
+}
+
+.settlement-wizard .create-period-block .create-period-title {
+  margin: 0 0 12px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-light);
 }
 
 .settlement-wizard .create-period-block .form-row {
   align-items: flex-end;
+}
+
+.settlement-wizard .create-period-block .field {
+  flex: 1 1 200px;
+}
+
+.settlement-wizard .btn-create-period {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  flex: 0 0 auto;
+  height: 38px;
+  padding: 0 16px;
+  border-radius: 12px;
+  border: 1px solid rgba(148, 163, 184, 0.6);
+  background: rgba(30, 41, 59, 0.8);
+  color: var(--text-dark);
+  font-weight: 500;
+  font-size: 14px;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, box-shadow 0.15s;
+}
+
+.settlement-wizard .btn-create-period .material-symbols-outlined {
+  font-size: 18px;
+  color: rgba(59, 130, 246, 0.95);
+}
+
+.settlement-wizard .btn-create-period:hover:not(:disabled) {
+  border-color: rgba(59, 130, 246, 0.6);
+  background: rgba(59, 130, 246, 0.15);
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.2);
+}
+
+.settlement-wizard .btn-create-period:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.settlement-wizard .create-period-block .inline-error {
+  margin: 10px 0 0;
+  font-size: 0.8rem;
+  color: #fca5a5;
+}
+
+@media (max-width: 768px) {
+  .settlement-wizard .create-period-block .field {
+    flex: 1 1 100%;
+  }
+
+  .settlement-wizard .btn-create-period {
+    flex: 1 1 100%;
+  }
 }
 
 .settlement-wizard .field {
