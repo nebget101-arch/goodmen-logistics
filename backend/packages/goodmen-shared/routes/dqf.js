@@ -1898,13 +1898,19 @@ router.get('/driver/:driverId/mvr-data', async (req, res) => {
   }
 });
 
-// FN-1627: POST /api/dqf/cdl-extract
+// FN-1627 / FN-1634: POST /api/dqf/cdl-extract
 //
-// Multipart upload of a CDL image/PDF → forwarded to the AI service for
-// vision-based field extraction → returns a camelCase `newDriver`-shaped
-// payload the FE drops into the Add New Driver modal. The file buffer is
-// never persisted (no R2, no disk, no DB) and field values never reach
-// the log buffer.
+// Multipart upload of one or more CDL images/PDFs → forwarded per-file to
+// the AI service for vision-based field extraction → returns a camelCase
+// `newDriver`-shaped payload the FE drops into the Add New Driver modal.
+// File buffers are never persisted (no R2, no disk, no DB) and field
+// values never reach the log buffer.
+//
+// Wire shapes (FN-1634):
+//   - `files` field (1..10 entries) → returns `{ results: [...] }`. New FE.
+//   - legacy `file` field (1 entry)  → returns the single result object,
+//     unchanged from FN-1627. Preserved for any caller still on the
+//     pre-batch contract.
 //
 // Auth is the router-level `auth(['admin', 'safety'])` gate at the top
 // of this file — no extra RBAC check needed here.
@@ -1912,13 +1918,20 @@ router.get('/driver/:driverId/mvr-data', async (req, res) => {
  * @openapi
  * /api/dqf/cdl-extract:
  *   post:
- *     summary: Extract identity + license fields from an uploaded CDL
+ *     summary: Extract identity + license fields from one or more uploaded CDLs
  *     description: >
- *       Accepts a single CDL image (JPEG/PNG) or PDF up to 10 MB. Forwards
- *       the bytes to the AI service for OCR + structured field extraction,
- *       applies a per-field confidence floor (default 0.6), and returns a
- *       camelCase payload shaped for the Add New Driver modal. The file is
- *       NOT persisted; logs contain metadata only (no field values, no PII).
+ *       Accepts up to 10 CDL images (JPEG/PNG) or PDFs (each ≤ 10 MB) in one
+ *       multipart upload. Each file is forwarded independently to the AI
+ *       service for OCR + structured field extraction, the per-field
+ *       confidence floor (default 0.6) is applied per file, and a camelCase
+ *       payload shaped for the Add New Driver modal is returned per file.
+ *       Files are NOT persisted; logs contain counts and timing only (no
+ *       field values, no filenames, no PII).
+ *
+ *       Use the `files` field (array, max 10) for new callers — response is
+ *       `{ results: CdlExtractionResponse[] }` in upload order. The legacy
+ *       single-file `file` field remains supported and returns the
+ *       single-result shape unchanged from FN-1627.
  *     tags:
  *       - DQF
  *     security:
@@ -1929,24 +1942,36 @@ router.get('/driver/:driverId/mvr-data', async (req, res) => {
  *         multipart/form-data:
  *           schema:
  *             type: object
- *             required: [file]
  *             properties:
+ *               files:
+ *                 type: array
+ *                 maxItems: 10
+ *                 items:
+ *                   type: string
+ *                   format: binary
  *               file:
  *                 type: string
  *                 format: binary
+ *                 description: Legacy single-file field. Returns single-result shape.
  *     responses:
  *       200:
- *         description: Extraction success or graceful failure (FE shows fallback toast on failure).
+ *         description: Extraction success or graceful per-file failure (FE shows fallback toast on failed rows).
  *       400:
- *         description: Missing file or unsupported mimetype
+ *         description: Missing file(s) or any file has unsupported mimetype
  *       413:
- *         description: File exceeds 10 MB limit
+ *         description: A file exceeds 10 MB or more than 10 files were uploaded
  */
 function cdlUploadMiddleware(req, res, next) {
-  upload.single('file')(req, res, (err) => {
+  upload.fields([
+    { name: 'files', maxCount: 10 },
+    { name: 'file', maxCount: 1 }
+  ])(req, res, (err) => {
     if (err) {
       if (err.code === 'LIMIT_FILE_SIZE') {
         return res.status(413).json({ message: 'File exceeds 10 MB limit' });
+      }
+      if (err.code === 'LIMIT_FILE_COUNT' || err.code === 'LIMIT_UNEXPECTED_FILE') {
+        return res.status(413).json({ message: 'Too many files (max 10)' });
       }
       return res.status(400).json({ message: err.message || 'File upload failed' });
     }
@@ -1956,27 +1981,41 @@ function cdlUploadMiddleware(req, res, next) {
 
 router.post('/cdl-extract', cdlUploadMiddleware, async (req, res) => {
   const start = Date.now();
+  const batchFiles = (req.files && req.files.files) || [];
+  const legacyFile = (req.files && req.files.file && req.files.file[0]) || null;
+  const isLegacy = batchFiles.length === 0 && !!legacyFile;
+  const files = batchFiles.length > 0 ? batchFiles : (legacyFile ? [legacyFile] : []);
+
   try {
-    if (!req.file) {
+    if (files.length === 0) {
       return res.status(400).json({ message: 'file is required' });
     }
-    if (!CDL_ALLOWED_MIMETYPES.has(req.file.mimetype)) {
-      return res.status(400).json({ message: 'Only JPEG, PNG, or PDF files are accepted' });
+    for (const f of files) {
+      if (!CDL_ALLOWED_MIMETYPES.has(f.mimetype)) {
+        return res.status(400).json({ message: 'Only JPEG, PNG, or PDF files are accepted' });
+      }
     }
 
-    const result = await extractCdl({
-      fileBuffer: req.file.buffer,
-      mimeType: req.file.mimetype
-    });
+    const results = await Promise.all(
+      files.map((f) => extractCdl({ fileBuffer: f.buffer, mimeType: f.mimetype }))
+    );
 
     const duration = Date.now() - start;
+    const successCount = results.reduce((n, r) => n + (r && r.success ? 1 : 0), 0);
+    const totalBytes = files.reduce((n, f) => n + (f.size || (f.buffer ? f.buffer.length : 0)), 0);
+    dtLogger.info('cdl_extract_batch_complete', {
+      fileCount: files.length,
+      successCount,
+      failureCount: files.length - successCount,
+      totalBytes,
+      processingMs: duration
+    });
     dtLogger.trackRequest('POST', '/api/dqf/cdl-extract', 200, duration);
-    return res.json(result);
+    return res.json(isLegacy ? results[0] : { results });
   } catch (error) {
     const duration = Date.now() - start;
     dtLogger.error('cdl_extract_unhandled', error, {
-      mimeType: req.file && req.file.mimetype,
-      fileSizeBytes: req.file && req.file.size
+      fileCount: files.length
     });
     dtLogger.trackRequest('POST', '/api/dqf/cdl-extract', 500, duration);
     return res.status(500).json({ message: 'Failed to extract CDL data' });
