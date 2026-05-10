@@ -16,18 +16,19 @@
         type="button"
         (click)="openCdlPicker()"
         [disabled]="extractingCdl"
-        aria-label="Upload CDL image or PDF to pre-fill new driver"
+        aria-label="Upload one or more CDL images or PDFs to pre-fill new drivers"
       >
         <span class="material-symbols-outlined" *ngIf="!extractingCdl">auto_awesome</span>
         <span class="spinner spinner-inline" *ngIf="extractingCdl" aria-hidden="true"></span>
-        {{ extractingCdl ? 'Reading CDL…' : 'Upload CDL' }}
+        {{ extractingCdl ? 'Reading CDLs…' : 'Upload CDLs' }}
       </button>
       <input
         #cdlFileInput
         type="file"
         accept="image/jpeg,image/png,application/pdf"
+        multiple
         (change)="onCdlFileSelected($event)"
-        aria-label="CDL file (JPG, PNG, or PDF)"
+        aria-label="CDL files (JPG, PNG, or PDF)"
         hidden
       />
       <button *ngIf="canManageDrivers" class="btn btn-primary" (click)="toggleAddForm()">
@@ -44,6 +45,54 @@
   >
     <span class="material-symbols-outlined" aria-hidden="true">error</span>
     {{ cdlExtractionMessage.text }}
+  </div>
+
+  <!-- FN-1633 — Multi-CDL extraction queue. Visible only after at least one
+       file has been selected; each row tracks one upload. -->
+  <div
+    *ngIf="cdlBatchQueue.length > 0 && !showAddForm"
+    class="cdl-queue-card"
+    role="region"
+    aria-label="CDL extraction queue"
+  >
+    <div class="cdl-queue-header">
+      <div>
+        <span class="material-symbols-outlined" aria-hidden="true">description</span>
+        <span class="cdl-queue-title">CDL extraction queue</span>
+        <span class="cdl-queue-count">({{ cdlBatchQueue.length }})</span>
+      </div>
+      <button
+        type="button"
+        class="cdl-queue-dismiss"
+        (click)="dismissCdlQueue()"
+        aria-label="Clear the CDL extraction queue"
+      >
+        Clear
+      </button>
+    </div>
+    <ul class="cdl-queue-list">
+      <li *ngFor="let row of cdlBatchQueue" class="cdl-queue-row" [attr.data-status]="row.status">
+        <span class="cdl-queue-filename" [title]="row.filename">{{ row.filename }}</span>
+        <span
+          class="cdl-queue-pill"
+          [class.cdl-queue-pill--ready]="row.status === 'ready'"
+          [class.cdl-queue-pill--failed]="row.status === 'failed'"
+          [class.cdl-queue-pill--done]="row.status === 'done'"
+        >
+          {{ cdlQueueStatusLabel(row) }}
+        </span>
+        <span *ngIf="row.reason" class="cdl-queue-reason">{{ row.reason }}</span>
+        <button
+          *ngIf="row.status === 'ready'"
+          type="button"
+          class="cdl-queue-review"
+          [disabled]="extractingCdl"
+          (click)="reviewQueueRow(row)"
+        >
+          Review
+        </button>
+      </li>
+    </ul>
   </div>
 
   <div class="drivers-card table-card">
