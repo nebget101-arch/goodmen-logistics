@@ -41,18 +41,20 @@
         <app-ai-select inputId="wizardPeriod" [options]="payrollPeriodOptions" [(ngModel)]="payrollPeriodId" (ngModelChange)="onPeriodSelect()" placeholder="Select period" [allowEmpty]="true" emptyLabel="Select period"></app-ai-select>
       </div>
       <div class="create-period-block">
-        <p class="step-hint">Or create a new period:</p>
-        <div class="form-row">
+        <p class="create-period-title">Or create a new period</p>
+        <div class="form-row create-period-row">
           <div class="field">
             <app-ai-date-picker inputId="newPeriodStart" [(ngModel)]="newPeriodStart" name="newPeriodStart" label="Start" placeholder="MM/DD/YYYY"></app-ai-date-picker>
           </div>
           <div class="field">
             <app-ai-date-picker inputId="newPeriodEnd" [(ngModel)]="newPeriodEnd" name="newPeriodEnd" label="End" placeholder="MM/DD/YYYY"></app-ai-date-picker>
           </div>
-          <button type="button" class="btn-secondary" (click)="createNewPeriod()" [disabled]="creatingPeriod">
+          <button type="button" class="btn-create-period" (click)="createNewPeriod()" [disabled]="!canCreatePeriod">
+            <span class="material-symbols-outlined" *ngIf="!creatingPeriod">event_available</span>
             {{ creatingPeriod ? 'Creating…' : 'Create period' }}
           </button>
         </div>
+        <p class="inline-error" *ngIf="dateRangeInvalid">End date must be on or after the start date.</p>
       </div>
     </div>
 

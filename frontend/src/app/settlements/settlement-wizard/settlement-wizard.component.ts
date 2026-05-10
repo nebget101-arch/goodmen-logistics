@@ -152,11 +152,21 @@ export class SettlementWizardComponent implements OnInit, OnDestroy {
     }
   }
 
+  get dateRangeInvalid(): boolean {
+    return !!this.newPeriodStart && !!this.newPeriodEnd && this.newPeriodEnd < this.newPeriodStart;
+  }
+
+  get canCreatePeriod(): boolean {
+    return (
+      !!this.newPeriodStart &&
+      !!this.newPeriodEnd &&
+      this.newPeriodEnd >= this.newPeriodStart &&
+      !this.creatingPeriod
+    );
+  }
+
   createNewPeriod(): void {
-    if (!this.newPeriodStart || !this.newPeriodEnd) {
-      this.error = 'Enter period start and end dates';
-      return;
-    }
+    if (!this.canCreatePeriod) return;
     this.error = '';
     this.creatingPeriod = true;
     this.apiService.createPayrollPeriod({
@@ -170,6 +180,8 @@ export class SettlementWizardComponent implements OnInit, OnDestroy {
         this.payrollPeriodId = row.id;
         this.periodStart = row.period_start;
         this.periodEnd = row.period_end;
+        this.newPeriodStart = '';
+        this.newPeriodEnd = '';
         this.creatingPeriod = false;
       },
       error: (err) => {
