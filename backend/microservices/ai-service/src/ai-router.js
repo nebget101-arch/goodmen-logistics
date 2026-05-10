@@ -11,6 +11,7 @@ const { handleTollInvoiceVision } = require('./handlers/toll-invoice-vision-hand
 const { handleMvrVision } = require('./handlers/mvr-vision-handler');
 const { handleFmcsaDriverMatch } = require('./handlers/fmcsa-driver-match-handler');
 const { handlePspReportVision } = require('./handlers/psp-report-vision-handler');
+const { handleCdlVision } = require('./handlers/cdl-vision-handler');
 const { handleSettlementInsights } = require('./handlers/settlement-insights-handler');
 const { handleLoadsNlq } = require('./handlers/loads-nlq-handler');
 const { handleLoadsSpreadsheetImport } = require('./handlers/loads-spreadsheet-handler');
@@ -968,6 +969,94 @@ function buildAiRouter(deps) {
    */
   router.post('/drivers/psp-vision', (req, res) =>
     handlePspReportVision(req, res, deps)
+  );
+
+  /**
+   * @openapi
+   * /api/ai/drivers/cdl-vision:
+   *   post:
+   *     summary: AI CDL (Commercial Driver's License) vision extraction
+   *     description: |
+   *       Extracts driver identity + license fields from a CDL image (JPEG/PNG)
+   *       or PDF using Anthropic Claude vision. Each returned field carries a
+   *       value and a confidence score in [0, 1]. Server re-validates every
+   *       field (state codes, ZIP, dates, CDL class) and coerces invalid model
+   *       output to {value: null, confidence: 0} to guard against hallucination.
+   *     tags:
+   *       - AI
+   *     security:
+   *       - bearerAuth: []
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             required:
+   *               - imageBase64
+   *               - mimeType
+   *             properties:
+   *               imageBase64:
+   *                 type: string
+   *                 description: Base64-encoded CDL image or PDF (decoded payload must be <= 10 MB).
+   *               mimeType:
+   *                 type: string
+   *                 enum: [image/jpeg, image/png, application/pdf]
+   *                 description: MIME type. PDFs are sent to Claude as a `document` block; images as an `image` block.
+   *     responses:
+   *       200:
+   *         description: Extracted CDL fields with per-field confidence and meta.
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: object
+   *               properties:
+   *                 success:
+   *                   type: boolean
+   *                 fields:
+   *                   type: object
+   *                   description: All 12 fields are always present. Invalid or missing fields are returned as { value: null, confidence: 0 }.
+   *                   properties:
+   *                     firstName:     { type: object, properties: { value: { type: string, nullable: true }, confidence: { type: number } } }
+   *                     middleName:    { type: object, properties: { value: { type: string, nullable: true }, confidence: { type: number } } }
+   *                     lastName:      { type: object, properties: { value: { type: string, nullable: true }, confidence: { type: number } } }
+   *                     dateOfBirth:   { type: object, properties: { value: { type: string, nullable: true, format: date }, confidence: { type: number } } }
+   *                     streetAddress: { type: object, properties: { value: { type: string, nullable: true }, confidence: { type: number } } }
+   *                     city:          { type: object, properties: { value: { type: string, nullable: true }, confidence: { type: number } } }
+   *                     state:         { type: object, properties: { value: { type: string, nullable: true }, confidence: { type: number } } }
+   *                     zipCode:       { type: object, properties: { value: { type: string, nullable: true }, confidence: { type: number } } }
+   *                     cdlNumber:     { type: object, properties: { value: { type: string, nullable: true }, confidence: { type: number } } }
+   *                     cdlState:      { type: object, properties: { value: { type: string, nullable: true }, confidence: { type: number } } }
+   *                     cdlClass:      { type: object, properties: { value: { type: string, nullable: true, enum: [A, B, C, null] }, confidence: { type: number } } }
+   *                     cdlExpiry:     { type: object, properties: { value: { type: string, nullable: true, format: date }, confidence: { type: number } } }
+   *                 meta:
+   *                   type: object
+   *                   properties:
+   *                     model:         { type: string }
+   *                     processingMs:  { type: integer }
+   *       400:
+   *         description: Missing imageBase64, invalid mimeType, or image exceeds 10 MB
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: object
+   *               properties:
+   *                 success: { type: boolean }
+   *                 error:   { type: string }
+   *                 code:    { type: string, enum: [AI_BAD_REQUEST] }
+   *       502:
+   *         description: Anthropic upstream failure or unparseable model output
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: object
+   *               properties:
+   *                 success: { type: boolean }
+   *                 error:   { type: string }
+   *                 code:    { type: string, enum: [AI_UPSTREAM_ERROR] }
+   */
+  router.post('/drivers/cdl-vision', (req, res) =>
+    handleCdlVision(req, res, deps)
   );
 
   /**
