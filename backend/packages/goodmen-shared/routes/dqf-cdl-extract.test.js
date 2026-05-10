@@ -92,16 +92,37 @@ function startApp(router, basePath = '/api/dqf') {
   });
 }
 
-function multipartBody({ filename, mimeType, bytes }) {
+function multipartBody({ filename, mimeType, bytes, fieldName = 'file' }) {
   const boundary = '----testboundary' + Math.random().toString(16).slice(2);
   const head = Buffer.from(
     `--${boundary}\r\n` +
-      `Content-Disposition: form-data; name="file"; filename="${filename}"\r\n` +
+      `Content-Disposition: form-data; name="${fieldName}"; filename="${filename}"\r\n` +
       `Content-Type: ${mimeType}\r\n\r\n`
   );
   const tail = Buffer.from(`\r\n--${boundary}--\r\n`);
   const body = Buffer.concat([head, bytes, tail]);
   return { boundary, body };
+}
+
+/**
+ * Build a multipart body with an arbitrary number of file parts. Used for
+ * the FN-1634 multi-CDL upload: one or more files under field `files` (or
+ * any caller-chosen name).
+ */
+function multipartBodyMulti({ files, fieldName = 'files' }) {
+  const boundary = '----testboundary' + Math.random().toString(16).slice(2);
+  const parts = [];
+  for (const f of files) {
+    parts.push(Buffer.from(
+      `--${boundary}\r\n` +
+        `Content-Disposition: form-data; name="${f.fieldName || fieldName}"; filename="${f.filename}"\r\n` +
+        `Content-Type: ${f.mimeType}\r\n\r\n`
+    ));
+    parts.push(f.bytes);
+    parts.push(Buffer.from('\r\n'));
+  }
+  parts.push(Buffer.from(`--${boundary}--\r\n`));
+  return { boundary, body: Buffer.concat(parts) };
 }
 
 function postFile(baseUrl, urlPath, headers = {}, file) {
@@ -117,6 +138,17 @@ function postFile(baseUrl, urlPath, headers = {}, file) {
     });
   }
   return fetch(`${baseUrl}${urlPath}`, { method: 'POST', headers });
+}
+
+function postMultipart(baseUrl, urlPath, headers, body, boundary) {
+  return fetch(`${baseUrl}${urlPath}`, {
+    method: 'POST',
+    headers: {
+      ...headers,
+      'Content-Type': `multipart/form-data; boundary=${boundary}`
+    },
+    body
+  });
 }
 
 function loadDqfRouterWithStubs({ extractCdlImpl, allowedRoles, logger }) {
@@ -291,6 +323,191 @@ describe('POST /api/dqf/cdl-extract', () => {
       bytes: Buffer.from([0xff, 0xd8, 0xff])
     });
     assert.equal(res.status, 403);
+  });
+
+  // ---------- FN-1634: multi-file batch upload ----------
+
+  it('FN-1634: multi-file happy path → returns {results:[]} in upload order', async () => {
+    let calls = 0;
+    loaded = loadDqfRouterWithStubs({
+      extractCdlImpl: async () => {
+        calls += 1;
+        return HAPPY_AI_RESULT;
+      }
+    });
+    serverHandle = await startApp(loaded.module);
+
+    const { boundary, body } = multipartBodyMulti({
+      files: [
+        { filename: 'a.jpg', mimeType: 'image/jpeg', bytes: Buffer.from([0xff, 0xd8, 0xff, 1]) },
+        { filename: 'b.png', mimeType: 'image/png', bytes: Buffer.from([0x89, 0x50, 0x4e, 0x47]) },
+        { filename: 'c.pdf', mimeType: 'application/pdf', bytes: Buffer.from([0x25, 0x50, 0x44, 0x46]) }
+      ]
+    });
+    const res = await postMultipart(serverHandle.baseUrl, '/api/dqf/cdl-extract', ADMIN_HEADERS, body, boundary);
+    assert.equal(res.status, 200);
+    const json = await res.json();
+    assert.ok(Array.isArray(json.results), 'response shape is { results: [] }');
+    assert.equal(json.results.length, 3);
+    assert.equal(calls, 3, 'extractCdl invoked once per file');
+    for (const r of json.results) {
+      assert.equal(r.success, true);
+      assert.equal(r.extracted.firstName, 'John');
+      assert.ok(Array.isArray(r.extractedFields));
+    }
+  });
+
+  it('FN-1634: mixed mime (PNG + PNG + .docx) → 400, whole batch rejected', async () => {
+    loaded = loadDqfRouterWithStubs({
+      extractCdlImpl: async () => {
+        throw new Error('extractCdl must not be invoked when batch is rejected');
+      }
+    });
+    serverHandle = await startApp(loaded.module);
+
+    const { boundary, body } = multipartBodyMulti({
+      files: [
+        { filename: 'a.png', mimeType: 'image/png', bytes: Buffer.from([0x89, 0x50, 0x4e, 0x47]) },
+        { filename: 'b.png', mimeType: 'image/png', bytes: Buffer.from([0x89, 0x50, 0x4e, 0x47]) },
+        {
+          filename: 'rogue.docx',
+          mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+          bytes: Buffer.from([0x50, 0x4b, 0x03, 0x04])
+        }
+      ]
+    });
+    const res = await postMultipart(serverHandle.baseUrl, '/api/dqf/cdl-extract', ADMIN_HEADERS, body, boundary);
+    // Note: shared `upload` filter rejects .docx at the multer layer (not in
+    // CDL_ALLOWED_MIMETYPES OR the broader shared allowlist), so the request
+    // surfaces as a 400 from the multer fileFilter — not the per-file
+    // CDL_ALLOWED_MIMETYPES check. Either path satisfies the AC: the whole
+    // request must be rejected without any extraction running.
+    assert.equal(res.status, 400);
+  });
+
+  it('FN-1634: mixed mime that passes shared multer filter but fails CDL allowlist (TIFF) → 400, whole batch rejected', async () => {
+    let extractCalls = 0;
+    loaded = loadDqfRouterWithStubs({
+      extractCdlImpl: async () => {
+        extractCalls += 1;
+        return HAPPY_AI_RESULT;
+      }
+    });
+    serverHandle = await startApp(loaded.module);
+
+    // image/tiff is allowed by the shared multer fileFilter but excluded by
+    // CDL_ALLOWED_MIMETYPES — exercises the route-handler-side mime gate
+    // for batches.
+    const { boundary, body } = multipartBodyMulti({
+      files: [
+        { filename: 'a.png', mimeType: 'image/png', bytes: Buffer.from([0x89, 0x50, 0x4e, 0x47]) },
+        { filename: 'b.png', mimeType: 'image/png', bytes: Buffer.from([0x89, 0x50, 0x4e, 0x47]) },
+        { filename: 'rogue.tif', mimeType: 'image/tiff', bytes: Buffer.from([0x49, 0x49, 0x2a, 0x00]) }
+      ]
+    });
+    const res = await postMultipart(serverHandle.baseUrl, '/api/dqf/cdl-extract', ADMIN_HEADERS, body, boundary);
+    assert.equal(res.status, 400);
+    const json = await res.json();
+    assert.match(json.message, /JPEG, PNG, or PDF/);
+    assert.equal(extractCalls, 0, 'no extraction should run when batch is rejected');
+  });
+
+  it('FN-1634: 11 files → 413 with "Too many files (max 10)"', async () => {
+    loaded = loadDqfRouterWithStubs({ extractCdlImpl: async () => HAPPY_AI_RESULT });
+    serverHandle = await startApp(loaded.module);
+
+    const files = Array.from({ length: 11 }, (_, i) => ({
+      filename: `cdl-${i}.png`,
+      mimeType: 'image/png',
+      bytes: Buffer.from([0x89, 0x50, 0x4e, 0x47, i])
+    }));
+    const { boundary, body } = multipartBodyMulti({ files });
+    const res = await postMultipart(serverHandle.baseUrl, '/api/dqf/cdl-extract', ADMIN_HEADERS, body, boundary);
+    assert.equal(res.status, 413);
+    const json = await res.json();
+    assert.match(json.message, /Too many files \(max 10\)/);
+  });
+
+  it('FN-1634: legacy single-file POST under `file` field still returns the legacy shape (regression)', async () => {
+    loaded = loadDqfRouterWithStubs({ extractCdlImpl: async () => HAPPY_AI_RESULT });
+    serverHandle = await startApp(loaded.module);
+
+    const res = await postFile(serverHandle.baseUrl, '/api/dqf/cdl-extract', ADMIN_HEADERS, {
+      filename: 'cdl.jpg',
+      mimeType: 'image/jpeg',
+      bytes: Buffer.from([0xff, 0xd8, 0xff, 0xe0])
+    });
+    assert.equal(res.status, 200);
+    const body = await res.json();
+    // Legacy shape: a single result object, NOT { results: [...] }
+    assert.equal(body.success, true);
+    assert.equal(body.extracted.firstName, 'John');
+    assert.ok(!('results' in body), 'legacy single-file POST must not return the new {results:[]} envelope');
+  });
+
+  it('FN-1634: per-file failure isolation — middle file fails, results.length === 3', async () => {
+    let i = 0;
+    loaded = loadDqfRouterWithStubs({
+      extractCdlImpl: async () => {
+        const idx = i++;
+        if (idx === 1) {
+          return { success: false, extracted: null, reason: 'low_confidence' };
+        }
+        return HAPPY_AI_RESULT;
+      }
+    });
+    serverHandle = await startApp(loaded.module);
+
+    const { boundary, body } = multipartBodyMulti({
+      files: [
+        { filename: 'a.jpg', mimeType: 'image/jpeg', bytes: Buffer.from([0xff, 0xd8, 0xff, 1]) },
+        { filename: 'b.jpg', mimeType: 'image/jpeg', bytes: Buffer.from([0xff, 0xd8, 0xff, 2]) },
+        { filename: 'c.jpg', mimeType: 'image/jpeg', bytes: Buffer.from([0xff, 0xd8, 0xff, 3]) }
+      ]
+    });
+    const res = await postMultipart(serverHandle.baseUrl, '/api/dqf/cdl-extract', ADMIN_HEADERS, body, boundary);
+    assert.equal(res.status, 200);
+    const json = await res.json();
+    assert.equal(json.results.length, 3, 'every input gets an entry, even on per-file failure');
+    assert.equal(json.results[0].success, true);
+    assert.equal(json.results[1].success, false);
+    assert.equal(json.results[1].reason, 'low_confidence');
+    assert.equal(json.results[1].extracted, null);
+    assert.equal(json.results[2].success, true);
+  });
+
+  it('FN-1634: no PII in logs — multi-file batch logs counts/bytes/timing only', async () => {
+    const spy = makeSpyLogger();
+    loaded = loadDqfRouterWithStubs({
+      extractCdlImpl: async () => HAPPY_AI_RESULT,
+      logger: spy
+    });
+    serverHandle = await startApp(loaded.module);
+
+    const { boundary, body } = multipartBodyMulti({
+      files: [
+        { filename: 'driver-john-doe.jpg', mimeType: 'image/jpeg', bytes: Buffer.from([0xff, 0xd8, 0xff, 1]) },
+        { filename: 'driver-jane-smith.png', mimeType: 'image/png', bytes: Buffer.from([0x89, 0x50, 0x4e, 0x47]) }
+      ]
+    });
+    const res = await postMultipart(serverHandle.baseUrl, '/api/dqf/cdl-extract', ADMIN_HEADERS, body, boundary);
+    assert.equal(res.status, 200);
+
+    const allLoggedJson = JSON.stringify(spy._calls);
+    // Field values from HAPPY_AI_RESULT must NOT appear.
+    assert.ok(!allLoggedJson.includes('John'), 'firstName value must not appear in logs');
+    assert.ok(!allLoggedJson.includes('Doe'), 'lastName value must not appear in logs');
+    assert.ok(!allLoggedJson.includes('12345678'), 'cdlNumber value must not appear in logs');
+    assert.ok(!allLoggedJson.includes('1985-04-12'), 'DOB value must not appear in logs');
+    // Filenames must NOT appear.
+    assert.ok(!allLoggedJson.includes('driver-john-doe'), 'filename must not appear in logs');
+    assert.ok(!allLoggedJson.includes('driver-jane-smith'), 'filename must not appear in logs');
+    // But the batch-complete metadata SHOULD be present.
+    assert.ok(allLoggedJson.includes('cdl_extract_batch_complete'), 'batch-complete event must be logged');
+    assert.ok(allLoggedJson.includes('fileCount'), 'fileCount metadata must be logged');
+    assert.ok(allLoggedJson.includes('successCount'), 'successCount metadata must be logged');
+    assert.ok(allLoggedJson.includes('totalBytes'), 'totalBytes metadata must be logged');
+    assert.ok(allLoggedJson.includes('processingMs'), 'processingMs metadata must be logged');
   });
 });
 
