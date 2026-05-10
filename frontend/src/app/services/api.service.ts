@@ -453,6 +453,16 @@ export class ApiService {
     return this.http.post<CdlExtractionResponse>(`${this.baseUrl}/dqf/cdl-extract`, form);
   }
 
+  // FN-1633 — Multi-file variant. Always posts under the `files` field to match
+  // `upload.array('files', 10)` server-side (FN-1634). Even single-file
+  // selections from the multi picker go through this method; the BE returns
+  // `{ results: CdlExtractionResponse[] }` in upload order.
+  extractCdls(files: File[]): Observable<{ results: CdlExtractionResponse[] }> {
+    const form = new FormData();
+    for (const f of files) form.append('files', f, f.name);
+    return this.http.post<{ results: CdlExtractionResponse[] }>(`${this.baseUrl}/dqf/cdl-extract`, form);
+  }
+
   updateDriver(id: string, driver: any): Observable<any> {
     return this.http.put(`${this.baseUrl}/drivers/${id}`, driver).pipe(
       timeout(30000) // 30s so UI does not stay stuck if backend hangs
