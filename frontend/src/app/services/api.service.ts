@@ -44,6 +44,33 @@ export type InvoiceUploadEvent =
   | { kind: 'progress'; progress: number }
   | { kind: 'result'; result: InvoiceUploadResult };
 
+// FN-1625 — POST /api/dqf/cdl-extract contracts.
+// Backend (FN-1627) accepts multipart `file` (image or PDF, ≤10 MB), forwards
+// to AI service (FN-1626), applies a confidence floor server-side, and returns
+// the camelCase shape below. The CDL bytes are NOT persisted (no R2 / no disk).
+export interface CdlExtractedFields {
+  firstName?: string | null;
+  middleName?: string | null;
+  lastName?: string | null;
+  dateOfBirth?: string | null;
+  streetAddress?: string | null;
+  city?: string | null;
+  state?: string | null;
+  zipCode?: string | null;
+  cdlNumber?: string | null;
+  cdlState?: string | null;
+  cdlClass?: string | null;
+  cdlExpiry?: string | null;
+}
+
+export interface CdlExtractionResponse {
+  success: boolean;
+  extracted: CdlExtractedFields | null;
+  extractedFields?: string[];
+  reason?: 'low_confidence' | 'ai_unavailable' | string;
+  meta?: { lowConfidenceFields?: string[]; processingMs?: number };
+}
+
 @Injectable({
   providedIn: 'root'
 })
@@ -415,6 +442,15 @@ export class ApiService {
 
   createDriver(driver: any): Observable<any> {
     return this.http.post(`${this.baseUrl}/drivers`, driver);
+  }
+
+  // FN-1628 — Upload a CDL (image/PDF) for AI field extraction. The backend
+  // applies a per-field confidence floor before returning, so any value that
+  // arrives in `extracted` is safe to apply directly.
+  extractCdl(file: File): Observable<CdlExtractionResponse> {
+    const form = new FormData();
+    form.append('file', file);
+    return this.http.post<CdlExtractionResponse>(`${this.baseUrl}/dqf/cdl-extract`, form);
   }
 
   updateDriver(id: string, driver: any): Observable<any> {

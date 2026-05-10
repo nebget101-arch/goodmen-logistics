@@ -1,8 +1,8 @@
-import { Component, OnDestroy, OnInit, ViewChild } from '@angular/core';
+import { Component, ElementRef, OnDestroy, OnInit, ViewChild } from '@angular/core';
 import { ActivatedRoute } from '@angular/router';
 import { Subject, takeUntil } from 'rxjs';
 import { finalize } from 'rxjs/operators';
-import { ApiService } from '../../services/api.service';
+import { ApiService, CdlExtractedFields, CdlExtractionResponse } from '../../services/api.service';
 import { OnboardingModalService } from '../../services/onboarding-modal.service';
 import { OperatingEntityContextService } from '../../services/operating-entity-context.service';
 import { AccessControlService } from '../../services/access-control.service';
@@ -55,6 +55,22 @@ export class DriversComponent implements OnInit, OnDestroy {
 
   zipLookupLoading = false;
   editZipLookupLoading = false;
+
+  // FN-1628 — CDL upload + AI extraction state.
+  // `aiPrefilledFields` tracks which inputs the modal should mark with the
+  // AI pill / accent and which `clearAiFields()` will reset. The keys mirror
+  // the camelCase wire contract from FN-1625 (see docs/stories/FN-1625.md).
+  // Concurrency: clicks are ignored while `extractingCdl` is true, so an
+  // in-flight upload is never replaced.
+  extractingCdl = false;
+  aiPrefilledFields = new Set<string>();
+  cdlExtractionMessage: { kind: 'success' | 'error'; text: string } | null = null;
+  /** Fields that the CDL never contains — kept blank with a manual-entry hint. */
+  readonly cdlManualOnlyFields: ReadonlyArray<string> = ['phone', 'hireDate', 'medicalCertExpiry'];
+  /** Allowed input MIME types and 10 MB cap, mirrors `accept=` on the file input. */
+  private readonly cdlMaxBytes = 10 * 1024 * 1024;
+  private readonly cdlAcceptedMimes = ['image/jpeg', 'image/png', 'application/pdf'];
+  @ViewChild('cdlFileInput') cdlFileInput?: ElementRef<HTMLInputElement>;
 
   dqfForm: any = {
     applicationComplete: false,
@@ -432,6 +448,9 @@ export class DriversComponent implements OnInit, OnDestroy {
     this.showAddForm = !this.showAddForm;
     if (!this.showAddForm) {
       this.resetForm();
+      // FN-1628: drop the AI-pre-fill state so the next manual open is clean.
+      this.aiPrefilledFields.clear();
+      this.cdlExtractionMessage = null;
     }
   }
 
@@ -455,6 +474,114 @@ export class DriversComponent implements OnInit, OnDestroy {
       dateOfBirth: '',
       clearinghouseStatus: 'eligible'
     };
+  }
+
+  // FN-1628 — CDL upload + AI extraction flow.
+  openCdlPicker(): void {
+    if (this.extractingCdl) return; // concurrency guard: ignore while a call is in flight
+    this.cdlExtractionMessage = null;
+    this.cdlFileInput?.nativeElement.click();
+  }
+
+  onCdlFileSelected(event: Event): void {
+    const input = event.target as HTMLInputElement;
+    const file = input.files && input.files[0];
+    // Always reset the input so picking the same file twice still fires (change).
+    if (input) input.value = '';
+    if (!file) return;
+    if (this.extractingCdl) return;
+
+    if (!this.cdlAcceptedMimes.includes(file.type)) {
+      this.cdlExtractionMessage = {
+        kind: 'error',
+        text: 'Please upload a JPG, PNG, or PDF of the CDL.'
+      };
+      return;
+    }
+    if (file.size > this.cdlMaxBytes) {
+      this.cdlExtractionMessage = {
+        kind: 'error',
+        text: 'CDL file is over 10 MB. Please upload a smaller image or PDF.'
+      };
+      return;
+    }
+
+    this.extractingCdl = true;
+    this.cdlExtractionMessage = null;
+    this.apiService.extractCdl(file)
+      .pipe(finalize(() => { this.extractingCdl = false; }))
+      .subscribe({
+        next: (resp) => this.applyCdlExtraction(resp),
+        error: () => this.applyCdlExtraction({ success: false, extracted: null, reason: 'ai_unavailable' })
+      });
+  }
+
+  applyCdlExtraction(resp: CdlExtractionResponse): void {
+    // Always start from a clean slate so prior AI state doesn't bleed in.
+    this.resetForm();
+    this.aiPrefilledFields.clear();
+    this.showAddForm = true;
+
+    if (!resp || !resp.success || !resp.extracted) {
+      this.cdlExtractionMessage = {
+        kind: 'error',
+        text: "Couldn't read CDL — please enter manually."
+      };
+      return;
+    }
+
+    const fields = resp.extractedFields && resp.extractedFields.length
+      ? resp.extractedFields
+      : Object.keys(resp.extracted).filter((k) => (resp.extracted as any)[k] != null && (resp.extracted as any)[k] !== '');
+
+    for (const key of fields) {
+      // Defensive: never let a CDL response touch the manual-only fields, even
+      // if the backend slips up. Keeps the contract one-way.
+      if (this.cdlManualOnlyFields.includes(key)) continue;
+      const value = (resp.extracted as any)[key];
+      if (value === null || value === undefined || value === '') continue;
+      this.newDriver[key] = value;
+      this.aiPrefilledFields.add(key);
+    }
+
+    if (this.aiPrefilledFields.size > 0) {
+      this.cdlExtractionMessage = {
+        kind: 'success',
+        text: 'AI extracted these fields from your CDL upload. Please review before saving.'
+      };
+    } else {
+      this.cdlExtractionMessage = {
+        kind: 'error',
+        text: "Couldn't read CDL — please enter manually."
+      };
+    }
+  }
+
+  clearAiFields(): void {
+    // V1: reset all CDL-extractable fields to their initial empty values, even
+    // ones the user has since edited. Documented in docs/stories/FN-1625.md.
+    const cdlFields: Array<keyof CdlExtractedFields> = [
+      'firstName', 'middleName', 'lastName', 'dateOfBirth',
+      'streetAddress', 'city', 'state', 'zipCode',
+      'cdlNumber', 'cdlState', 'cdlClass', 'cdlExpiry'
+    ];
+    for (const f of cdlFields) {
+      if (f === 'cdlClass') {
+        this.newDriver.cdlClass = 'A'; // restore the default chosen for the dropdown
+      } else if (f in this.newDriver) {
+        this.newDriver[f] = '';
+      }
+    }
+    this.aiPrefilledFields.clear();
+    this.cdlExtractionMessage = null;
+  }
+
+  isAiPrefilled(field: string): boolean {
+    return this.aiPrefilledFields.has(field);
+  }
+
+  isCdlManualOnly(field: string): boolean {
+    return this.cdlManualOnlyFields.includes(field);
   }
 
   addDriver(): void {
