@@ -19,6 +19,18 @@ import {
 import { InvestigationHistoryComponent } from './investigation-history/investigation-history.component';
 import { AiSelectOption } from '../../shared/ai-select/ai-select.component';
 
+// FN-1633 — One row in the multi-CDL extraction queue card.
+// `status` controls the pill label and which actions are available:
+//   ready  → server returned a usable extraction; "Review" opens the modal.
+//   failed → client-side reject (mime/size) OR server returned success=false.
+//   done   → the user has finished reviewing this row (saved or cancelled).
+export interface CdlBatchQueueRow {
+  filename: string;
+  status: 'ready' | 'failed' | 'done';
+  reason?: string;
+  response?: CdlExtractionResponse;
+}
+
 @Component({
   selector: 'app-drivers',
   templateUrl: './drivers.component.html',
@@ -71,6 +83,16 @@ export class DriversComponent implements OnInit, OnDestroy {
   private readonly cdlMaxBytes = 10 * 1024 * 1024;
   private readonly cdlAcceptedMimes = ['image/jpeg', 'image/png', 'application/pdf'];
   @ViewChild('cdlFileInput') cdlFileInput?: ElementRef<HTMLInputElement>;
+
+  // FN-1633 — Multi-file CDL extraction queue. Rendered as a compact card under
+  // the header when non-empty. Each row corresponds to one selected file; the
+  // user steps through Reviewable rows one at a time via the existing Add New
+  // Driver modal pre-fill flow (`applyCdlExtraction`). Status pill labels:
+  // ready → "Ready", failed → "Couldn't read", done → "Done".
+  readonly cdlMaxFiles = 10;
+  cdlBatchQueue: CdlBatchQueueRow[] = [];
+  /** Row whose modal is currently open. On close (save or cancel) it's marked done. */
+  private activeQueueRow: CdlBatchQueueRow | null = null;
 
   dqfForm: any = {
     applicationComplete: false,
@@ -451,6 +473,17 @@ export class DriversComponent implements OnInit, OnDestroy {
       // FN-1628: drop the AI-pre-fill state so the next manual open is clean.
       this.aiPrefilledFields.clear();
       this.cdlExtractionMessage = null;
+      // FN-1633: closing the modal completes the active queue row (saved or
+      // cancelled — both leave the user back at the queue with the row Done).
+      this.completeActiveQueueRow();
+    }
+  }
+
+  /** FN-1633 — Mark the in-review row Done and clear the active pointer. */
+  private completeActiveQueueRow(): void {
+    if (this.activeQueueRow) {
+      this.activeQueueRow.status = 'done';
+      this.activeQueueRow = null;
     }
   }
 
@@ -477,6 +510,9 @@ export class DriversComponent implements OnInit, OnDestroy {
   }
 
   // FN-1628 — CDL upload + AI extraction flow.
+  // FN-1633 — Extended for multi-file selection. The picker accepts up to 10
+  // files in one shot; rejected files (bad mime / oversize) appear inline in
+  // the queue card and accepted files go in one multipart POST.
   openCdlPicker(): void {
     if (this.extractingCdl) return; // concurrency guard: ignore while a call is in flight
     this.cdlExtractionMessage = null;
@@ -485,35 +521,112 @@ export class DriversComponent implements OnInit, OnDestroy {
 
   onCdlFileSelected(event: Event): void {
     const input = event.target as HTMLInputElement;
-    const file = input.files && input.files[0];
+    const fileList = input.files;
+    const files: File[] = fileList ? Array.from(fileList) : [];
     // Always reset the input so picking the same file twice still fires (change).
     if (input) input.value = '';
-    if (!file) return;
+    if (!files.length) return;
     if (this.extractingCdl) return;
 
-    if (!this.cdlAcceptedMimes.includes(file.type)) {
+    // Hard cap matches the server-side `upload.array('files', 10)` and avoids
+    // sending a request that would 413 anyway.
+    if (files.length > this.cdlMaxFiles) {
       this.cdlExtractionMessage = {
         kind: 'error',
-        text: 'Please upload a JPG, PNG, or PDF of the CDL.'
-      };
-      return;
-    }
-    if (file.size > this.cdlMaxBytes) {
-      this.cdlExtractionMessage = {
-        kind: 'error',
-        text: 'CDL file is over 10 MB. Please upload a smaller image or PDF.'
+        text: `Please select up to ${this.cdlMaxFiles} CDL files at a time.`
       };
       return;
     }
 
-    this.extractingCdl = true;
+    const accepted: File[] = [];
+    const rejected: CdlBatchQueueRow[] = [];
+    for (const f of files) {
+      if (!this.cdlAcceptedMimes.includes(f.type)) {
+        rejected.push({ filename: f.name, status: 'failed', reason: 'Unsupported format — JPG, PNG, or PDF only.' });
+        continue;
+      }
+      if (f.size > this.cdlMaxBytes) {
+        rejected.push({ filename: f.name, status: 'failed', reason: 'File is over 10 MB.' });
+        continue;
+      }
+      accepted.push(f);
+    }
+
+    // Reset the queue per selection — the user is starting a fresh batch.
+    this.cdlBatchQueue = [...rejected];
     this.cdlExtractionMessage = null;
-    this.apiService.extractCdl(file)
+
+    if (!accepted.length) return;
+
+    this.extractCdls(accepted);
+  }
+
+  /**
+   * FN-1633 — Send the accepted files in one multipart POST and seed the queue
+   * with one row per file in upload order. Failed rows (success=false) get the
+   * existing fallback copy. The concurrency guard (`extractingCdl`) gates a
+   * second click while this call is in flight.
+   */
+  extractCdls(files: File[]): void {
+    if (!files.length || this.extractingCdl) return;
+
+    this.extractingCdl = true;
+    this.apiService.extractCdls(files)
       .pipe(finalize(() => { this.extractingCdl = false; }))
       .subscribe({
-        next: (resp) => this.applyCdlExtraction(resp),
-        error: () => this.applyCdlExtraction({ success: false, extracted: null, reason: 'ai_unavailable' })
+        next: (resp) => this.populateQueueFromResponse(files, resp.results || []),
+        error: () => this.populateQueueFromResponse(
+          files,
+          files.map(() => ({ success: false, extracted: null, reason: 'ai_unavailable' } as CdlExtractionResponse))
+        )
       });
+  }
+
+  private populateQueueFromResponse(files: File[], results: CdlExtractionResponse[]): void {
+    const rows: CdlBatchQueueRow[] = files.map((f, i) => {
+      const r = results[i];
+      if (r && r.success && r.extracted) {
+        return { filename: f.name, status: 'ready', response: r };
+      }
+      return {
+        filename: f.name,
+        status: 'failed',
+        reason: "Couldn't read CDL — please enter manually.",
+        response: r
+      };
+    });
+    // Append after any client-rejected rows recorded in onCdlFileSelected so the
+    // upload-order positions for the API rows are preserved relative to each
+    // other.
+    this.cdlBatchQueue = [...this.cdlBatchQueue, ...rows];
+  }
+
+  /**
+   * FN-1633 — Open the Add New Driver modal pre-filled from this row's
+   * extraction. The row is stashed as `activeQueueRow` so that whether the user
+   * saves (`addDriver`) or cancels (`toggleAddForm`) the modal, we mark the
+   * row Done and return them to the queue.
+   */
+  reviewQueueRow(row: CdlBatchQueueRow): void {
+    if (row.status !== 'ready' || !row.response) return;
+    this.activeQueueRow = row;
+    this.applyCdlExtraction(row.response);
+  }
+
+  /** Pill label shown for each queue row. */
+  cdlQueueStatusLabel(row: CdlBatchQueueRow): string {
+    switch (row.status) {
+      case 'ready': return 'Ready';
+      case 'failed': return "Couldn't read";
+      case 'done': return 'Done';
+    }
+  }
+
+  /** Clear the queue card and reset any AI state — invoked from the queue UI. */
+  dismissCdlQueue(): void {
+    this.cdlBatchQueue = [];
+    this.activeQueueRow = null;
+    this.cdlExtractionMessage = null;
   }
 
   applyCdlExtraction(resp: CdlExtractionResponse): void {
@@ -599,6 +712,9 @@ export class DriversComponent implements OnInit, OnDestroy {
         this.showAddForm = false;
         this.resetForm();
         this.saving = false;
+        // FN-1633: a successful save closes the modal — mark the queue row Done
+        // so the user returns to the queue card with the right pill state.
+        this.completeActiveQueueRow();
         alert('Driver added successfully!');
       },
       error: (error) => {

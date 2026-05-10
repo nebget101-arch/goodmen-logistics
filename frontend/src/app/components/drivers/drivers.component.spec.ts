@@ -10,9 +10,13 @@ import { CdlExtractionResponse } from '../../services/api.service';
 // and irrelevant to the methods under test. The CDL methods are self-contained
 // and can be exercised by constructing the component with stub dependencies.
 
-function makeComponent(opts: { extractCdl?: ReturnType<typeof jasmine.createSpy> } = {}): DriversComponent {
+function makeComponent(opts: {
+  extractCdl?: ReturnType<typeof jasmine.createSpy>,
+  extractCdls?: ReturnType<typeof jasmine.createSpy>
+} = {}): DriversComponent {
   const apiServiceStub: any = {
-    extractCdl: opts.extractCdl ?? jasmine.createSpy('extractCdl').and.returnValue(of({ success: false, extracted: null }))
+    extractCdl: opts.extractCdl ?? jasmine.createSpy('extractCdl').and.returnValue(of({ success: false, extracted: null })),
+    extractCdls: opts.extractCdls ?? jasmine.createSpy('extractCdls').and.returnValue(of({ results: [] }))
   };
   const onboardingModalStub: any = {};
   const routeStub: any = { queryParams: new Subject() };
@@ -43,6 +47,16 @@ function makeChangeEvent(file: File | null): Event {
   input.type = 'file';
   Object.defineProperty(input, 'files', {
     value: file ? [file] as any : [],
+    configurable: true
+  });
+  return { target: input } as unknown as Event;
+}
+
+function makeMultiChangeEvent(files: File[]): Event {
+  const input = document.createElement('input');
+  input.type = 'file';
+  Object.defineProperty(input, 'files', {
+    value: files as any,
     configurable: true
   });
   return { target: input } as unknown as Event;
@@ -147,58 +161,158 @@ describe('DriversComponent — CDL upload + AI prefill (FN-1628)', () => {
     });
   });
 
-  describe('onCdlFileSelected', () => {
-    it('rejects unsupported MIME types before calling the API', () => {
-      const extractCdl = jasmine.createSpy('extractCdl');
-      const c = makeComponent({ extractCdl });
-      const file = makeFile('cdl.gif', 'image/gif', 1024);
+  // FN-1633 — Multi-file picker now seeds a queue instead of opening the modal
+  // directly. Single-file UX is preserved through the same queue (1 row → Review).
+  describe('onCdlFileSelected — multi-file queue (FN-1633)', () => {
+    it('selecting 3 valid files calls extractCdls once with 3 files and seeds the queue', () => {
+      const extractCdls = jasmine.createSpy('extractCdls').and.returnValue(of({
+        results: [
+          { success: true, extracted: { firstName: 'A', cdlNumber: 'A1' }, extractedFields: ['firstName', 'cdlNumber'] },
+          { success: true, extracted: { firstName: 'B', cdlNumber: 'B2' }, extractedFields: ['firstName', 'cdlNumber'] },
+          { success: true, extracted: { firstName: 'C', cdlNumber: 'C3' }, extractedFields: ['firstName', 'cdlNumber'] }
+        ] as CdlExtractionResponse[]
+      }));
+      const c = makeComponent({ extractCdls });
+      const files = [
+        makeFile('a.jpg', 'image/jpeg', 1024),
+        makeFile('b.pdf', 'application/pdf', 2048),
+        makeFile('c.png', 'image/png', 4096)
+      ];
 
-      c.onCdlFileSelected(makeChangeEvent(file));
+      c.onCdlFileSelected(makeMultiChangeEvent(files));
 
-      expect(extractCdl).not.toHaveBeenCalled();
-      expect(c.cdlExtractionMessage?.kind).toBe('error');
-      expect(c.cdlExtractionMessage?.text).toContain('JPG, PNG, or PDF');
-    });
-
-    it('rejects files over the 10 MB cap', () => {
-      const extractCdl = jasmine.createSpy('extractCdl');
-      const c = makeComponent({ extractCdl });
-      const file = makeFile('cdl.pdf', 'application/pdf', 11 * 1024 * 1024);
-
-      c.onCdlFileSelected(makeChangeEvent(file));
-
-      expect(extractCdl).not.toHaveBeenCalled();
-      expect(c.cdlExtractionMessage?.text).toContain('10 MB');
-    });
-
-    it('opens the modal pre-filled on success', () => {
-      const extractCdl = jasmine.createSpy('extractCdl').and.returnValue(of({
-        success: true,
-        extracted: { firstName: 'John', cdlNumber: 'A1' },
-        extractedFields: ['firstName', 'cdlNumber']
-      } as CdlExtractionResponse));
-      const c = makeComponent({ extractCdl });
-      const file = makeFile('cdl.jpg', 'image/jpeg', 1024);
-
-      c.onCdlFileSelected(makeChangeEvent(file));
-
-      expect(extractCdl).toHaveBeenCalledTimes(1);
-      expect(c.extractingCdl).toBeFalse();
+      expect(extractCdls).toHaveBeenCalledTimes(1);
+      expect(extractCdls.calls.mostRecent().args[0].length).toBe(3);
+      expect(c.cdlBatchQueue.length).toBe(3);
+      expect(c.cdlBatchQueue.map(r => r.status)).toEqual(['ready', 'ready', 'ready']);
+      // Reviewing the first row opens the modal pre-filled with that file's fields.
+      c.reviewQueueRow(c.cdlBatchQueue[0]);
       expect(c.showAddForm).toBeTrue();
-      expect(c.newDriver.firstName).toBe('John');
+      expect(c.newDriver.firstName).toBe('A');
+      expect(c.newDriver.cdlNumber).toBe('A1');
     });
 
-    it('falls back to the empty-modal failure path when the API errors out', () => {
-      const extractCdl = jasmine.createSpy('extractCdl').and.returnValue(throwError(() => new Error('boom')));
-      const c = makeComponent({ extractCdl });
-      const file = makeFile('cdl.png', 'image/png', 1024);
+    it('client-side oversize rejection lists the bad row in the queue and only POSTs the accepted files', () => {
+      const extractCdls = jasmine.createSpy('extractCdls').and.returnValue(of({
+        results: [{ success: true, extracted: { firstName: 'A' }, extractedFields: ['firstName'] }] as CdlExtractionResponse[]
+      }));
+      const c = makeComponent({ extractCdls });
+      const ok = makeFile('ok.jpg', 'image/jpeg', 1024);
+      const tooBig = makeFile('huge.pdf', 'application/pdf', 11 * 1024 * 1024);
+
+      c.onCdlFileSelected(makeMultiChangeEvent([ok, tooBig]));
+
+      expect(extractCdls).toHaveBeenCalledTimes(1);
+      expect(extractCdls.calls.mostRecent().args[0]).toEqual([ok]);
+      const failedRow = c.cdlBatchQueue.find(r => r.filename === 'huge.pdf');
+      const okRow = c.cdlBatchQueue.find(r => r.filename === 'ok.jpg');
+      expect(failedRow?.status).toBe('failed');
+      expect(failedRow?.reason).toContain('10 MB');
+      expect(okRow?.status).toBe('ready');
+    });
+
+    it('mixed server response: failed rows show the fallback reason; the success row stays Reviewable', () => {
+      const extractCdls = jasmine.createSpy('extractCdls').and.returnValue(of({
+        results: [
+          { success: true, extracted: { firstName: 'Win', cdlNumber: 'W1' }, extractedFields: ['firstName', 'cdlNumber'] },
+          { success: false, extracted: null, reason: 'low_confidence' },
+          { success: false, extracted: null, reason: 'ai_unavailable' }
+        ] as CdlExtractionResponse[]
+      }));
+      const c = makeComponent({ extractCdls });
+      const files = [
+        makeFile('a.jpg', 'image/jpeg', 1024),
+        makeFile('b.jpg', 'image/jpeg', 1024),
+        makeFile('c.jpg', 'image/jpeg', 1024)
+      ];
+
+      c.onCdlFileSelected(makeMultiChangeEvent(files));
+
+      expect(c.cdlBatchQueue.map(r => r.status)).toEqual(['ready', 'failed', 'failed']);
+      expect(c.cdlBatchQueue[1].reason).toContain("Couldn't read CDL");
+      expect(c.cdlBatchQueue[2].reason).toContain("Couldn't read CDL");
+      // Ready row still opens the modal pre-filled.
+      c.reviewQueueRow(c.cdlBatchQueue[0]);
+      expect(c.newDriver.firstName).toBe('Win');
+      // reviewQueueRow on a failed row is a no-op — modal stays in its current
+      // state and the row status doesn't flip.
+      const before = c.cdlBatchQueue[1].status;
+      c.reviewQueueRow(c.cdlBatchQueue[1]);
+      expect(c.cdlBatchQueue[1].status).toBe(before);
+    });
+
+    it('selecting more than 10 files shows a toast and does not POST', () => {
+      const extractCdls = jasmine.createSpy('extractCdls');
+      const c = makeComponent({ extractCdls });
+      const files = Array.from({ length: 11 }, (_, i) => makeFile(`cdl${i}.jpg`, 'image/jpeg', 1024));
+
+      c.onCdlFileSelected(makeMultiChangeEvent(files));
+
+      expect(extractCdls).not.toHaveBeenCalled();
+      expect(c.cdlBatchQueue.length).toBe(0);
+      expect(c.cdlExtractionMessage?.kind).toBe('error');
+      expect(c.cdlExtractionMessage?.text).toContain('10');
+    });
+
+    it('falls back to per-file failed rows when the API request errors out', () => {
+      const extractCdls = jasmine.createSpy('extractCdls').and.returnValue(throwError(() => new Error('boom')));
+      const c = makeComponent({ extractCdls });
+      const files = [
+        makeFile('a.png', 'image/png', 1024),
+        makeFile('b.png', 'image/png', 1024)
+      ];
+
+      c.onCdlFileSelected(makeMultiChangeEvent(files));
+
+      expect(c.extractingCdl).toBeFalse();
+      expect(c.cdlBatchQueue.length).toBe(2);
+      expect(c.cdlBatchQueue.every(r => r.status === 'failed')).toBeTrue();
+    });
+
+    it('regression: a single file selected via the multi picker still ends up reviewable in the queue', () => {
+      const extractCdls = jasmine.createSpy('extractCdls').and.returnValue(of({
+        results: [{ success: true, extracted: { firstName: 'Solo', cdlNumber: 'S1' }, extractedFields: ['firstName', 'cdlNumber'] }] as CdlExtractionResponse[]
+      }));
+      const c = makeComponent({ extractCdls });
+      const file = makeFile('solo.jpg', 'image/jpeg', 1024);
 
       c.onCdlFileSelected(makeChangeEvent(file));
 
-      expect(c.extractingCdl).toBeFalse();
+      expect(extractCdls).toHaveBeenCalledTimes(1);
+      expect(c.cdlBatchQueue.length).toBe(1);
+      expect(c.cdlBatchQueue[0].status).toBe('ready');
+      c.reviewQueueRow(c.cdlBatchQueue[0]);
       expect(c.showAddForm).toBeTrue();
-      expect(c.aiPrefilledFields.size).toBe(0);
-      expect(c.cdlExtractionMessage?.kind).toBe('error');
+      expect(c.newDriver.firstName).toBe('Solo');
+    });
+  });
+
+  describe('reviewQueueRow → completeActiveQueueRow (FN-1633)', () => {
+    it('marks the active row Done when the modal is closed via toggleAddForm', () => {
+      const extractCdls = jasmine.createSpy('extractCdls').and.returnValue(of({
+        results: [{ success: true, extracted: { firstName: 'X' }, extractedFields: ['firstName'] }] as CdlExtractionResponse[]
+      }));
+      const c = makeComponent({ extractCdls });
+      c.onCdlFileSelected(makeChangeEvent(makeFile('x.jpg', 'image/jpeg', 1024)));
+      c.reviewQueueRow(c.cdlBatchQueue[0]);
+      expect(c.cdlBatchQueue[0].status).toBe('ready');
+
+      c.toggleAddForm(); // closes the modal
+
+      expect(c.cdlBatchQueue[0].status).toBe('done');
+    });
+
+    it('clears the queue card when dismissCdlQueue is called', () => {
+      const extractCdls = jasmine.createSpy('extractCdls').and.returnValue(of({
+        results: [{ success: true, extracted: { firstName: 'X' }, extractedFields: ['firstName'] }] as CdlExtractionResponse[]
+      }));
+      const c = makeComponent({ extractCdls });
+      c.onCdlFileSelected(makeChangeEvent(makeFile('x.jpg', 'image/jpeg', 1024)));
+      expect(c.cdlBatchQueue.length).toBe(1);
+
+      c.dismissCdlQueue();
+
+      expect(c.cdlBatchQueue.length).toBe(0);
     });
   });
 
