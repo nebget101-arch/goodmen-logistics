@@ -9,7 +9,17 @@ const { transformRow } = require('../utils/case-converter');
 const { createDriverDocument } = require('../services/driver-storage-service');
 const { generateEmploymentApplicationPdf } = require('../services/pdf.service');
 const { extractMvrData } = require('../services/mvr-extraction-service');
+const { extractCdl } = require('../services/cdl-extraction-service');
 const pdfParse = require('pdf-parse');
+
+// FN-1627: strict mime allowlist for /cdl-extract — narrower than the
+// shared `upload` filter (excludes TIFF since CDL OCR only supports
+// JPEG/PNG/PDF).
+const CDL_ALLOWED_MIMETYPES = new Set([
+  'image/jpeg',
+  'image/png',
+  'application/pdf'
+]);
 
 // File upload (memory storage - max 10 MB, PDF/image only)
 const upload = multer({
@@ -1885,6 +1895,91 @@ router.get('/driver/:driverId/mvr-data', async (req, res) => {
     // eslint-disable-next-line no-console
     console.error('Error in GET /api/dqf/driver/:driverId/mvr-data', error);
     return res.status(500).json({ message: 'Failed to load MVR data' });
+  }
+});
+
+// FN-1627: POST /api/dqf/cdl-extract
+//
+// Multipart upload of a CDL image/PDF → forwarded to the AI service for
+// vision-based field extraction → returns a camelCase `newDriver`-shaped
+// payload the FE drops into the Add New Driver modal. The file buffer is
+// never persisted (no R2, no disk, no DB) and field values never reach
+// the log buffer.
+//
+// Auth is the router-level `auth(['admin', 'safety'])` gate at the top
+// of this file — no extra RBAC check needed here.
+/**
+ * @openapi
+ * /api/dqf/cdl-extract:
+ *   post:
+ *     summary: Extract identity + license fields from an uploaded CDL
+ *     description: >
+ *       Accepts a single CDL image (JPEG/PNG) or PDF up to 10 MB. Forwards
+ *       the bytes to the AI service for OCR + structured field extraction,
+ *       applies a per-field confidence floor (default 0.6), and returns a
+ *       camelCase payload shaped for the Add New Driver modal. The file is
+ *       NOT persisted; logs contain metadata only (no field values, no PII).
+ *     tags:
+ *       - DQF
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             required: [file]
+ *             properties:
+ *               file:
+ *                 type: string
+ *                 format: binary
+ *     responses:
+ *       200:
+ *         description: Extraction success or graceful failure (FE shows fallback toast on failure).
+ *       400:
+ *         description: Missing file or unsupported mimetype
+ *       413:
+ *         description: File exceeds 10 MB limit
+ */
+function cdlUploadMiddleware(req, res, next) {
+  upload.single('file')(req, res, (err) => {
+    if (err) {
+      if (err.code === 'LIMIT_FILE_SIZE') {
+        return res.status(413).json({ message: 'File exceeds 10 MB limit' });
+      }
+      return res.status(400).json({ message: err.message || 'File upload failed' });
+    }
+    next();
+  });
+}
+
+router.post('/cdl-extract', cdlUploadMiddleware, async (req, res) => {
+  const start = Date.now();
+  try {
+    if (!req.file) {
+      return res.status(400).json({ message: 'file is required' });
+    }
+    if (!CDL_ALLOWED_MIMETYPES.has(req.file.mimetype)) {
+      return res.status(400).json({ message: 'Only JPEG, PNG, or PDF files are accepted' });
+    }
+
+    const result = await extractCdl({
+      fileBuffer: req.file.buffer,
+      mimeType: req.file.mimetype
+    });
+
+    const duration = Date.now() - start;
+    dtLogger.trackRequest('POST', '/api/dqf/cdl-extract', 200, duration);
+    return res.json(result);
+  } catch (error) {
+    const duration = Date.now() - start;
+    dtLogger.error('cdl_extract_unhandled', error, {
+      mimeType: req.file && req.file.mimetype,
+      fileSizeBytes: req.file && req.file.size
+    });
+    dtLogger.trackRequest('POST', '/api/dqf/cdl-extract', 500, duration);
+    return res.status(500).json({ message: 'Failed to extract CDL data' });
   }
 });
 
