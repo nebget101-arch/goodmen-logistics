@@ -2747,3 +2747,164 @@
   color: var(--text-light, #94a3b8);
   font-size: 12px;
 }
+
+/* ── FN-1628: Upload CDL CTA + AI prefill UX ─────────────────────────────── */
+
+.drivers-dashboard .header-actions .btn-cdl-upload {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 42px;
+  padding: 10px 18px;
+  border-radius: 12px;
+  border: 1px solid rgba(168, 85, 247, 0.55);
+  background:
+    radial-gradient(circle at 12% 0%, rgba(168, 85, 247, 0.28), transparent 52%),
+    radial-gradient(circle at 88% 100%, rgba(59, 130, 246, 0.25), transparent 50%),
+    linear-gradient(135deg, rgba(76, 29, 149, 0.92), rgba(30, 58, 138, 0.92));
+  color: #ede9fe;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  cursor: pointer;
+  box-shadow: 0 8px 18px rgba(79, 70, 229, 0.35), inset 0 0 0 1px rgba(196, 181, 253, 0.2);
+  transition: filter 0.15s, box-shadow 0.15s, border-color 0.15s;
+}
+
+.drivers-dashboard .header-actions .btn-cdl-upload .material-symbols-outlined {
+  font-size: 20px;
+  color: #f5d0fe;
+}
+
+.drivers-dashboard .header-actions .btn-cdl-upload:hover:not(:disabled) {
+  border-color: rgba(216, 180, 254, 0.9);
+  box-shadow: 0 10px 24px rgba(79, 70, 229, 0.45), inset 0 0 0 1px rgba(196, 181, 253, 0.28);
+  filter: saturate(1.06);
+}
+
+.drivers-dashboard .header-actions .btn-cdl-upload:disabled {
+  opacity: 0.7;
+  cursor: progress;
+}
+
+.drivers-dashboard .header-actions .btn-cdl-upload .spinner-inline {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border: 2px solid rgba(237, 233, 254, 0.4);
+  border-top-color: #ede9fe;
+  border-radius: 50%;
+  animation: spin 0.6s linear infinite;
+}
+
+.drivers-dashboard .cdl-extract-toast {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 16px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  font-size: 13px;
+}
+
+.drivers-dashboard .cdl-extract-toast--error {
+  background: rgba(239, 68, 68, 0.15);
+  border: 1px solid rgba(239, 68, 68, 0.5);
+  color: #fca5a5;
+}
+
+.drivers-dashboard .cdl-extract-toast .material-symbols-outlined {
+  font-size: 18px;
+}
+
+/* In-modal banner */
+.drivers-dashboard .cdl-ai-banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 0 16px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  font-size: 13px;
+}
+
+.drivers-dashboard .cdl-ai-banner .material-symbols-outlined {
+  font-size: 20px;
+  flex: 0 0 auto;
+}
+
+.drivers-dashboard .cdl-ai-banner-text {
+  flex: 1 1 auto;
+}
+
+.drivers-dashboard .cdl-ai-banner--success {
+  background: rgba(168, 85, 247, 0.14);
+  border: 1px solid rgba(168, 85, 247, 0.5);
+  color: #e9d5ff;
+}
+
+.drivers-dashboard .cdl-ai-banner--success .material-symbols-outlined {
+  color: #f5d0fe;
+}
+
+.drivers-dashboard .cdl-ai-banner--error {
+  background: rgba(239, 68, 68, 0.14);
+  border: 1px solid rgba(239, 68, 68, 0.5);
+  color: #fca5a5;
+}
+
+.drivers-dashboard .cdl-ai-banner-clear {
+  flex: 0 0 auto;
+  background: transparent;
+  border: 1px solid rgba(216, 180, 254, 0.45);
+  color: #ede9fe;
+  padding: 6px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.drivers-dashboard .cdl-ai-banner-clear:hover {
+  border-color: rgba(216, 180, 254, 0.85);
+  background: rgba(168, 85, 247, 0.18);
+}
+
+/* AI pill on labels */
+.drivers-dashboard .ai-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: 8px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: rgba(168, 85, 247, 0.18);
+  border: 1px solid rgba(168, 85, 247, 0.5);
+  color: #e9d5ff;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  vertical-align: middle;
+}
+
+.drivers-dashboard .ai-pill .material-symbols-outlined {
+  font-size: 12px;
+  color: #f5d0fe;
+}
+
+/* AI-prefilled field accent — left border + faint glow */
+.drivers-dashboard .dqf-field--ai .form-input,
+.drivers-dashboard .dqf-field--ai app-ai-date-picker ::ng-deep .mat-mdc-text-field-wrapper,
+.drivers-dashboard .dqf-field--ai app-ai-select {
+  border-left: 3px solid rgba(168, 85, 247, 0.7);
+  box-shadow: 0 0 0 1px rgba(168, 85, 247, 0.18);
+}
+
+/* Manual-entry hint */
+.drivers-dashboard .dqf-field-hint {
+  display: block;
+  margin-top: 4px;
+  font-size: 11px;
+  color: var(--text-light, #94a3b8);
+  font-style: italic;
+}
