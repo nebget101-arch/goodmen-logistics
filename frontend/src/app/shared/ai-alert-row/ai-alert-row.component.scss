@@ -1,0 +1,128 @@
+/* FN-1636 ai-alert-row. Colors from the documented palette (rgba, no hex). */
+:host {
+  display: block;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.alert-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border-bottom: 1px solid rgba(51, 65, 85, 0.45);
+}
+
+.alert-row:last-child {
+  border-bottom: none;
+}
+
+/* Severity pip — color + accessible label carry the meaning (color not alone). */
+.alert-pip {
+  flex: 0 0 auto;
+  width: 9px;
+  height: 9px;
+  border-radius: 999px;
+}
+
+.alert-pip[data-severity='good'] {
+  background: rgba(34, 197, 94, 1);
+  box-shadow: 0 0 8px rgba(34, 197, 94, 0.8);
+}
+.alert-pip[data-severity='info'] {
+  background: rgba(56, 189, 248, 1);
+  box-shadow: 0 0 8px rgba(56, 189, 248, 0.8);
+}
+.alert-pip[data-severity='warning'] {
+  background: rgba(217, 119, 6, 1);
+  box-shadow: 0 0 8px rgba(217, 119, 6, 0.8);
+}
+.alert-pip[data-severity='critical'] {
+  background: rgba(239, 68, 68, 1);
+  box-shadow: 0 0 8px rgba(239, 68, 68, 0.8);
+}
+
+.alert-body {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.alert-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: rgba(148, 163, 184, 1);
+}
+
+.alert-category {
+  font-weight: 600;
+  color: rgba(165, 180, 252, 1);
+}
+
+.alert-message {
+  display: block;
+  margin-top: 2px;
+  font-size: 0.9rem;
+  color: rgba(226, 232, 240, 1);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.alert-message.is-link {
+  text-decoration: none;
+}
+
+.alert-message.is-link:hover,
+.alert-message.is-link:focus-visible {
+  color: rgba(125, 211, 252, 1);
+  text-decoration: underline;
+}
+
+.alert-actions {
+  flex: 0 0 auto;
+  display: flex;
+  gap: 6px;
+}
+
+.btn-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  border: 1px solid rgba(51, 65, 85, 0.9);
+  background: rgba(2, 6, 23, 0.6);
+  color: rgba(148, 163, 184, 1);
+  cursor: pointer;
+  transition: transform 120ms ease, color 150ms ease, border-color 150ms ease;
+}
+
+.btn-icon .material-symbols-outlined {
+  font-size: 1.1rem;
+}
+
+.btn-icon:hover {
+  transform: translateY(-1px);
+  color: rgba(125, 211, 252, 1);
+  border-color: rgba(56, 189, 248, 0.6);
+}
+
+.btn-icon:focus-visible {
+  outline: 2px solid rgba(56, 189, 248, 0.9);
+  outline-offset: 1px;
+}

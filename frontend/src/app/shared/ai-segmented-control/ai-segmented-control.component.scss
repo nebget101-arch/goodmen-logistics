@@ -1,0 +1,47 @@
+/* FN-1636 ai-segmented-control. Active = flat .btn-primary gradient (no glow),
+   inactive = .btn-secondary. Colors from the documented palette (rgba, no hex). */
+:host {
+  display: inline-block;
+}
+
+.seg-group {
+  display: inline-flex;
+  padding: 3px;
+  gap: 3px;
+  border-radius: 12px;
+  background: rgba(2, 6, 23, 0.8);
+  border: 1px solid rgba(51, 65, 85, 0.9);
+}
+
+.seg-btn {
+  appearance: none;
+  border: none;
+  border-radius: 9px;
+  padding: 6px 14px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: transform 120ms ease, background 150ms ease, color 150ms ease;
+}
+
+.seg-btn:focus-visible {
+  outline: 2px solid rgba(56, 189, 248, 0.9);
+  outline-offset: 1px;
+}
+
+/* Active segment — flat primary gradient, intentionally no glow. */
+.seg-btn.btn-primary {
+  background: linear-gradient(135deg, rgba(37, 99, 235, 1) 0%, rgba(29, 78, 216, 1) 50%, rgba(14, 165, 233, 1) 100%);
+  color: rgba(255, 255, 255, 1);
+}
+
+/* Inactive segment — secondary gray. */
+.seg-btn.btn-secondary {
+  background: transparent;
+  color: rgba(148, 163, 184, 1);
+}
+
+.seg-btn.btn-secondary:hover {
+  background: rgba(51, 65, 85, 0.5);
+  color: rgba(226, 232, 240, 1);
+}

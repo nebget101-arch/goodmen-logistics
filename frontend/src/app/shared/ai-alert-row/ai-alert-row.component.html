@@ -1,0 +1,37 @@
+<!-- FN-1636 ai-alert-row -->
+<div class="alert-row" [attr.data-severity]="severity">
+  <span class="alert-pip" [attr.data-severity]="severity" aria-hidden="true"></span>
+  <span class="sr-only">{{ severityLabel }} alert.</span>
+
+  <div class="alert-body">
+    <span class="alert-meta">
+      <span class="alert-category" *ngIf="category">{{ category }}</span>
+      <span class="alert-date" *ngIf="date">{{ date }}</span>
+    </span>
+    <a *ngIf="routerLink; else plainMsg" class="alert-message is-link" [routerLink]="routerLink">{{ message }}</a>
+    <ng-template #plainMsg>
+      <span class="alert-message">{{ message }}</span>
+    </ng-template>
+  </div>
+
+  <div class="alert-actions">
+    <button
+      type="button"
+      class="btn-icon"
+      [attr.aria-label]="'Acknowledge ' + (category || 'alert')"
+      title="Acknowledge"
+      (click)="onAcknowledge($event)"
+    >
+      <span class="material-symbols-outlined" aria-hidden="true">check</span>
+    </button>
+    <button
+      type="button"
+      class="btn-icon"
+      [attr.aria-label]="'Snooze ' + (category || 'alert')"
+      title="Snooze"
+      (click)="onSnooze($event)"
+    >
+      <span class="material-symbols-outlined" aria-hidden="true">snooze</span>
+    </button>
+  </div>
+</div>

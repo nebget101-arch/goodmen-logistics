@@ -1,0 +1,127 @@
+<!-- FN-1636 dev-only primitives showcase -->
+<div class="dev-page">
+  <header class="dev-header">
+    <p class="dev-kicker">FleetNeuron Dev</p>
+    <h1>Dashboard primitives</h1>
+    <p class="dev-subtitle">FN-1636 — isolated render of every primitive variant. Dev builds only.</p>
+  </header>
+
+  <!-- ── kpi-card ─────────────────────────────────────────────── -->
+  <section class="dev-section">
+    <h2>kpi-card — status variants</h2>
+    <div class="dev-grid">
+      <app-kpi-card label="Fleet Health" value="98%" subline="42 of 43 in service" status="good"></app-kpi-card>
+      <app-kpi-card label="Active Loads" value="27" subline="3 pending pickup" status="info"></app-kpi-card>
+      <app-kpi-card label="Expiring Docs" value="5" subline="within 30 days" status="warning"></app-kpi-card>
+      <app-kpi-card label="HOS Violations" value="1" subline="needs review" status="critical"></app-kpi-card>
+    </div>
+    <h2>kpi-card — with trend + link</h2>
+    <div class="dev-grid">
+      <app-kpi-card
+        label="Revenue (7d)"
+        value="$48.2k"
+        subline="vs prior week"
+        status="good"
+        [trend]="{ direction: 'up', deltaText: '+12%' }"
+        routerLink="/invoices"
+      ></app-kpi-card>
+      <app-kpi-card
+        label="On-time %"
+        value="91%"
+        status="warning"
+        [trend]="{ direction: 'down', deltaText: '-3%' }"
+      ></app-kpi-card>
+      <app-kpi-card label="Idle Trucks" value="4" status="info" [trend]="{ direction: 'flat', deltaText: 'no change' }"></app-kpi-card>
+    </div>
+  </section>
+
+  <!-- ── ai-segmented-control ─────────────────────────────────── -->
+  <section class="dev-section">
+    <h2>ai-segmented-control</h2>
+    <app-ai-segmented-control
+      [segments]="timeframeSegments"
+      [(selectedKey)]="selectedTimeframe"
+      ariaLabel="Timeframe"
+    ></app-ai-segmented-control>
+    <p class="dev-note">Selected: <strong>{{ selectedTimeframe }}</strong></p>
+  </section>
+
+  <!-- ── ai-skeleton ──────────────────────────────────────────── -->
+  <section class="dev-section">
+    <h2>ai-skeleton — three sizes</h2>
+    <div class="dev-stack">
+      <app-ai-skeleton width="100%" height="14px"></app-ai-skeleton>
+      <app-ai-skeleton width="60%" height="24px"></app-ai-skeleton>
+      <app-ai-skeleton [width]="80" [height]="80" [radius]="12"></app-ai-skeleton>
+    </div>
+  </section>
+
+  <!-- ── ai-hero-strip ────────────────────────────────────────── -->
+  <section class="dev-section">
+    <h2>ai-hero-strip — variants</h2>
+    <div class="dev-stack">
+      <app-ai-hero-strip [items]="heroEmpty">
+        <a heroAction class="dev-link" routerLink="/dashboard">View all</a>
+      </app-ai-hero-strip>
+      <app-ai-hero-strip [items]="heroSingle">
+        <a heroAction class="dev-link" routerLink="/drivers">View all</a>
+      </app-ai-hero-strip>
+      <app-ai-hero-strip [items]="heroThree">
+        <a heroAction class="dev-link" routerLink="/dashboard">View all</a>
+      </app-ai-hero-strip>
+      <app-ai-hero-strip [items]="heroCriticalDominant">
+        <a heroAction class="dev-link" routerLink="/invoices">View all</a>
+      </app-ai-hero-strip>
+    </div>
+  </section>
+
+  <!-- ── ai-alert-row ─────────────────────────────────────────── -->
+  <section class="dev-section">
+    <h2>ai-alert-row — four severities</h2>
+    <div class="dev-panel">
+      <app-ai-alert-row
+        severity="critical"
+        category="Compliance"
+        message="HOS violation pending review for driver J. Doe"
+        date="2m ago"
+        routerLink="/hos"
+        (acknowledge)="onAck('critical')"
+        (snooze)="onSnooze('critical')"
+      ></app-ai-alert-row>
+      <app-ai-alert-row
+        severity="warning"
+        category="Documents"
+        message="2 driver medical cards expire within 30 days"
+        date="1h ago"
+        (acknowledge)="onAck('warning')"
+        (snooze)="onSnooze('warning')"
+      ></app-ai-alert-row>
+      <app-ai-alert-row
+        severity="info"
+        category="Loads"
+        message="5 new loads imported from inbound email"
+        date="3h ago"
+        (acknowledge)="onAck('info')"
+        (snooze)="onSnooze('info')"
+      ></app-ai-alert-row>
+      <app-ai-alert-row
+        severity="good"
+        category="Maintenance"
+        message="Truck 104 PM service completed"
+        date="Yesterday"
+        (acknowledge)="onAck('good')"
+        (snooze)="onSnooze('good')"
+      ></app-ai-alert-row>
+    </div>
+    <p class="dev-note">Last action: <strong>{{ lastAction || '—' }}</strong> (also logged to console)</p>
+  </section>
+
+  <!-- ── .ai-panel-flat (stub degraded banner) ────────────────── -->
+  <section class="dev-section">
+    <h2>.ai-panel-flat — degraded-data banner stub</h2>
+    <div class="ai-panel-flat dev-banner" data-severity="warning" role="status">
+      <span class="material-symbols-outlined" aria-hidden="true">warning</span>
+      Live telematics feed is degraded — showing cached data from 10 minutes ago.
+    </div>
+  </section>
+</div>
