@@ -1,13 +1,20 @@
 <div class="dashboard-shell">
-  <header class="dashboard-header">
+  <!-- FN-1640: canonical .ai-header (kicker → H1 + icon → subtitle → company context) -->
+  <header class="ai-header">
     <div>
-      <h1>FleetNeuron Control Center</h1>
-      <p>AI-augmented visibility into compliance, assets, and operations.</p>
-      <p *ngIf="activeOperatingEntityName" class="dashboard-context-label">Company: {{ activeOperatingEntityName }}</p>
+      <p class="ai-kicker">FLEETNEURON AI · CONTROL</p>
+      <h1>
+        <span class="material-symbols-outlined title-icon">space_dashboard</span>
+        Fleet Control Center
+      </h1>
+      <p class="subtitle">AI-augmented visibility into compliance, assets, and operations.</p>
+      <p *ngIf="activeOperatingEntityName" class="company-context">Company: {{ activeOperatingEntityName }}</p>
     </div>
-    <div class="dashboard-header-pill">
-      <span class="status-dot"></span>
-      Live compliance signal
+    <div class="header-actions">
+      <a class="btn-primary ai-glow-btn header-cta" routerLink="/audit">
+        <span class="material-symbols-outlined" aria-hidden="true">assessment</span>
+        Generate Audit Report
+      </a>
     </div>
   </header>
 
@@ -15,91 +22,83 @@
 
   <app-control-center class="dashboard-control-center"></app-control-center>
 
-  <div *ngIf="loading" class="dashboard-loading">
-    <div class="orbital-loader">
-      <div class="loader-ring ring-1"></div>
-      <div class="loader-ring ring-2"></div>
-      <div class="loader-core"></div>
+  <!-- FN-1640: degraded-data banner — .ai-panel-flat (warning) + Retry -->
+  <div
+    *ngIf="!loading && isDegraded"
+    class="ai-panel-flat degraded-flat"
+    data-severity="warning"
+    role="status"
+  >
+    <span class="material-symbols-outlined degraded-flat__icon" aria-hidden="true">warning</span>
+    <div class="degraded-flat__text">
+      <strong>Some metrics may be stale.</strong>
+      <span *ngIf="degradedGroups.length">{{ degradedGroups.join(', ') }} reported problems.</span>
+      <span *ngIf="!degradedGroups.length">Individual pages show the most current data.</span>
     </div>
-    <p>Analyzing fleet telemetry…</p>
+    <button type="button" class="btn-secondary degraded-flat__retry" (click)="retry()">
+      <span class="material-symbols-outlined" aria-hidden="true">refresh</span>
+      Retry
+    </button>
   </div>
 
-  <div *ngIf="!loading && isDegraded" class="degraded-banner">
-    <span class="degraded-banner__icon">&#9888;</span>
-    <div class="degraded-banner__text">
-      <strong>Some dashboard metrics may be incomplete.</strong>
-      Individual pages show the most current data.
-      <span *ngIf="degradedGroups.length" class="degraded-banner__groups">
-        Affected: {{ degradedGroups.join(', ') }}
-      </span>
+  <!-- FN-1640: per-panel skeleton loading state -->
+  <section *ngIf="loading" class="dashboard-grid" aria-label="Loading dashboard metrics">
+    <div class="dashboard-column">
+      <div class="ai-panel" aria-busy="true">
+        <h2 class="cluster-title">Loads progress</h2>
+        <div class="kpi-grid">
+          <app-ai-skeleton
+            *ngFor="let _ of [].constructor(loadsSkeletonCount)"
+            width="100%"
+            height="104px"
+            radius="14px"
+          ></app-ai-skeleton>
+        </div>
+      </div>
+      <div class="ai-panel" aria-busy="true">
+        <h2 class="cluster-title">Billing status</h2>
+        <div class="kpi-grid kpi-grid-5">
+          <app-ai-skeleton
+            *ngFor="let _ of [].constructor(billingSkeletonCount)"
+            width="100%"
+            height="104px"
+            radius="14px"
+          ></app-ai-skeleton>
+        </div>
+      </div>
     </div>
-  </div>
+  </section>
 
+  <!-- FN-1640: KPI clusters rendered via <app-kpi-card> -->
   <section *ngIf="!loading" class="dashboard-grid">
     <div class="dashboard-column">
-      <div class="panel panel-loads">
-        <div class="panel-header">
-          <h2>Loads progress</h2>
-          <span class="panel-tag">Dispatch</span>
-        </div>
-        <div class="loads-metrics-grid">
-          <a class="metric-card metric-card-link" routerLink="/loads" [queryParams]="{status: 'dispatched'}">
-            <div class="metric-label">Dispatched</div>
-            <div class="metric-value">{{ stats.loadsDispatched ?? 0 }}</div>
-            <div class="metric-sub">Assigned, ready to move</div>
-          </a>
-          <a class="metric-card metric-card-link metric-info" routerLink="/loads" [queryParams]="{status: 'in_transit'}">
-            <div class="metric-label">In Transit</div>
-            <div class="metric-value">{{ stats.loadsInTransit ?? 0 }}</div>
-            <div class="metric-sub">Currently on the road</div>
-          </a>
-          <a class="metric-card metric-card-link metric-good" routerLink="/loads" [queryParams]="{status: 'delivered'}">
-            <div class="metric-label">Delivered</div>
-            <div class="metric-value">{{ stats.loadsDelivered ?? 0 }}</div>
-            <div class="metric-sub">Completed</div>
-          </a>
-          <a class="metric-card metric-card-link" routerLink="/loads" [queryParams]="{status: 'cancelled'}">
-            <div class="metric-label">Canceled</div>
-            <div class="metric-value">{{ stats.loadsCanceled ?? 0 }}</div>
-            <div class="metric-sub">Cancelled loads</div>
-          </a>
+      <div class="ai-panel">
+        <h2 class="cluster-title">Loads progress</h2>
+        <div class="kpi-grid">
+          <app-kpi-card
+            *ngFor="let card of loadsCards"
+            [label]="card.label"
+            [value]="card.value"
+            [subline]="card.subline"
+            [status]="card.status"
+            [routerLink]="card.routerLink"
+          ></app-kpi-card>
         </div>
       </div>
 
-      <div class="panel panel-billing">
-        <div class="panel-header">
-          <h2>Billing status</h2>
-          <span class="panel-tag">Finance</span>
-        </div>
-        <div class="loads-metrics-grid loads-metrics-grid-5">
-          <a class="metric-card metric-card-link" routerLink="/loads" [queryParams]="{billingStatus: 'pending'}">
-            <div class="metric-label">Pending</div>
-            <div class="metric-value">{{ stats.billingPending ?? 0 }}</div>
-            <div class="metric-sub">Awaiting billing</div>
-          </a>
-          <a class="metric-card metric-card-link" routerLink="/loads" [queryParams]="{billingStatus: 'cancelled'}">
-            <div class="metric-label">Canceled</div>
-            <div class="metric-value">{{ stats.billingCanceled ?? 0 }}</div>
-            <div class="metric-sub">Billing canceled</div>
-          </a>
-          <a class="metric-card metric-card-link metric-info" routerLink="/loads" [queryParams]="{billingStatus: 'invoiced'}">
-            <div class="metric-label">Invoiced</div>
-            <div class="metric-value">{{ stats.billingInvoiced ?? 0 }}</div>
-            <div class="metric-sub">BOL received / Sent to factoring</div>
-          </a>
-          <a class="metric-card metric-card-link metric-warn" routerLink="/loads" [queryParams]="{billingStatus: 'funded'}">
-            <div class="metric-label">Funded</div>
-            <div class="metric-value">{{ stats.billingFunded ?? 0 }}</div>
-            <div class="metric-sub">Advance funded</div>
-          </a>
-          <a class="metric-card metric-card-link metric-good" routerLink="/loads" [queryParams]="{billingStatus: 'paid'}">
-            <div class="metric-label">Paid</div>
-            <div class="metric-value">{{ stats.billingPaid ?? 0 }}</div>
-            <div class="metric-sub">Payment received</div>
-          </a>
+      <div class="ai-panel">
+        <h2 class="cluster-title">Billing status</h2>
+        <div class="kpi-grid kpi-grid-5">
+          <app-kpi-card
+            *ngFor="let card of billingCards"
+            [label]="card.label"
+            [value]="card.value"
+            [subline]="card.subline"
+            [status]="card.status"
+            [routerLink]="card.routerLink"
+          ></app-kpi-card>
         </div>
       </div>
-
     </div>
   </section>
 </div>
