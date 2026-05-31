@@ -1,0 +1,33 @@
+/* FN-1636 ai-skeleton shimmer. Colors from the documented palette (rgba, no hex). */
+:host {
+  display: block;
+}
+
+.skeleton-bar {
+  display: block;
+  background: linear-gradient(
+    100deg,
+    rgba(30, 41, 59, 0.6) 30%,
+    rgba(71, 85, 105, 0.55) 50%,
+    rgba(30, 41, 59, 0.6) 70%
+  );
+  background-size: 200% 100%;
+  animation: ai-skeleton-shimmer 1.4s ease-in-out infinite;
+}
+
+@keyframes ai-skeleton-shimmer {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+/* Respect reduced-motion: hold a static placeholder. */
+@media (prefers-reduced-motion: reduce) {
+  .skeleton-bar {
+    animation: none;
+    background-position: 0 0;
+  }
+}
