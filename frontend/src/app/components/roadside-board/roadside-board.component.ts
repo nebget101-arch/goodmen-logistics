@@ -1,6 +1,14 @@
 import { Component, OnInit } from '@angular/core';
 import { RoadsideService } from '../../services/roadside.service';
+import { ToastService } from '../../shared/toast/toast.service';
+import { StepperStep } from '../../shared/status-stepper/status-stepper.component';
+import { AiSelectOption } from '../../shared/ai-select/ai-select.component';
+import { RailTab } from '../../shared/side-rail-tabs/side-rail-tabs.component';
 import { firstValueFrom } from 'rxjs';
+
+/** Canonical call lifecycle, in advance order. Drives the status stepper. */
+type StepKey = 'NEW' | 'TRIAGED' | 'DISPATCHED' | 'RESOLVED';
+const STEP_ORDER: StepKey[] = ['NEW', 'TRIAGED', 'DISPATCHED', 'RESOLVED'];
 
 @Component({
   selector: 'app-roadside-board',
@@ -21,6 +29,19 @@ export class RoadsideBoardComponent implements OnInit {
   resolvedDispatchAddress = '';
   resolvingDispatchAddress = false;
   private geocodeCache = new Map<string, string>();
+
+  /** Whether the "Start a new roadside call" panel (hidden behind + New Call) is open. */
+  showCreate = false;
+  /** Step whose panel is expanded in the detail pane (stepper-driven). */
+  activeStepKey: StepKey = 'NEW';
+  /** Caller Profile read→edit toggle (inline pencil at the call site). */
+  editingCaller = false;
+  /** Active side-rail tab on the detail pane. */
+  railTab = 'timeline';
+
+  /** Left-rail filters (client-side over the already-loaded list — no new endpoints). */
+  filterUrgency = '';
+  filterStatus = '';
 
   triageForm: any = {
     intake_source: 'AI_AGENT',
@@ -60,11 +81,222 @@ export class RoadsideBoardComponent implements OnInit {
     incident_summary: ''
   };
 
-  constructor(private roadsideService: RoadsideService) {}
+  // ── Stable option lists for <app-ai-select> ──────────────────────────────
+  // Assigned once (never getters) — getter-based [options] cause CD loops (FN-317).
+  readonly sourceOptions: AiSelectOption[] = [
+    { value: 'PHONE', label: 'Phone' },
+    { value: 'SMS', label: 'SMS' },
+    { value: 'APP', label: 'App' },
+    { value: 'WEB', label: 'Web' },
+    { value: 'DISPATCH', label: 'Dispatch' }
+  ];
+  readonly urgencyOptions: AiSelectOption[] = [
+    { value: 'LOW', label: 'Low' },
+    { value: 'NORMAL', label: 'Normal' },
+    { value: 'HIGH', label: 'High' },
+    { value: 'CRITICAL', label: 'Critical' }
+  ];
+  readonly issueOptions: AiSelectOption[] = [
+    { value: 'OTHER', label: 'Other' },
+    { value: 'FLAT_TIRE', label: 'Flat tire' },
+    { value: 'BATTERY', label: 'Battery' },
+    { value: 'ENGINE', label: 'Engine' },
+    { value: 'BRAKE', label: 'Brake' },
+    { value: 'TRANSMISSION', label: 'Transmission' },
+    { value: 'ELECTRICAL', label: 'Electrical' },
+    { value: 'ACCIDENT', label: 'Accident' },
+    { value: 'LOCKOUT', label: 'Lockout' },
+    { value: 'FUEL', label: 'Fuel' },
+    { value: 'TOW_REQUIRED', label: 'Tow required' }
+  ];
+  readonly intakeSourceOptions: AiSelectOption[] = [
+    { value: 'AI_AGENT', label: 'AI agent' },
+    { value: 'HUMAN_AGENT', label: 'Human agent' },
+    { value: 'DRIVER_SELF', label: 'Driver self-report' }
+  ];
+  readonly riskOptions: AiSelectOption[] = [
+    { value: 'LOW', label: 'Low' },
+    { value: 'MEDIUM', label: 'Medium' },
+    { value: 'HIGH', label: 'High' },
+    { value: 'CRITICAL', label: 'Critical' }
+  ];
+  readonly dispatchStatusOptions: AiSelectOption[] = [
+    { value: 'PENDING', label: 'Pending' },
+    { value: 'ACCEPTED', label: 'Accepted' },
+    { value: 'EN_ROUTE', label: 'En route' },
+    { value: 'ARRIVED', label: 'Arrived' },
+    { value: 'COMPLETED', label: 'Completed' },
+    { value: 'CANCELED', label: 'Canceled' }
+  ];
+  readonly paymentStatusOptions: AiSelectOption[] = [
+    { value: 'UNPAID', label: 'Unpaid' },
+    { value: 'PENDING', label: 'Pending' },
+    { value: 'AUTHORIZED', label: 'Authorized' },
+    { value: 'PAID', label: 'Paid' },
+    { value: 'FAILED', label: 'Failed' },
+    { value: 'REFUNDED', label: 'Refunded' }
+  ];
+  readonly payerOptions: AiSelectOption[] = [
+    { value: 'COMPANY', label: 'Company' },
+    { value: 'DRIVER', label: 'Driver' },
+    { value: 'CUSTOMER', label: 'Customer' },
+    { value: 'INSURANCE', label: 'Insurance' },
+    { value: 'OTHER', label: 'Other' }
+  ];
+  readonly urgencyFilterOptions: AiSelectOption[] = [
+    { value: '', label: 'Any urgency' },
+    ...this.urgencyOptions
+  ];
+  readonly statusFilterOptions: AiSelectOption[] = [
+    { value: '', label: 'All statuses' },
+    { value: 'NEW', label: 'New' },
+    { value: 'TRIAGED', label: 'Triaged' },
+    { value: 'DISPATCHED', label: 'Dispatched' },
+    { value: 'RESOLVED', label: 'Resolved' }
+  ];
+
+  /** Side-rail tabs on the detail pane. */
+  readonly railTabs: RailTab[] = [
+    { key: 'timeline', label: 'Timeline', icon: 'timeline' },
+    { key: 'location', label: 'Location', icon: 'pin_drop' },
+    { key: 'attachments', label: 'Attachments', icon: 'attach_file' },
+    { key: 'link', label: 'Public Link', icon: 'link' }
+  ];
+
+  /** Stepper steps rebuilt whenever the selected call's status changes. */
+  stepperSteps: StepperStep[] = [];
+
+  /** Placeholder skeleton rows rendered while the call list loads. */
+  readonly skeletonRows = [0, 1, 2, 3];
+
+  constructor(
+    private roadsideService: RoadsideService,
+    private toast: ToastService
+  ) {}
 
   ngOnInit(): void {
     this.loadCalls();
   }
+
+  // ── Derived view state ───────────────────────────────────────────────────
+
+  /** Canonical lifecycle step for the selected call's raw status string. */
+  get currentStepKey(): StepKey {
+    return this.stepKeyForStatus(this.selectedCall?.status);
+  }
+
+  private stepKeyForStatus(status: string): StepKey {
+    const s = String(status || 'NEW').toUpperCase();
+    if (/(RESOLVED|CLOSED|COMPLETED)/.test(s)) return 'RESOLVED';
+    if (/(DISPATCH|EN_ROUTE|ARRIVED)/.test(s)) return 'DISPATCHED';
+    if (/TRIAG/.test(s)) return 'TRIAGED';
+    return 'NEW';
+  }
+
+  /** Calls filtered by the left-rail urgency/status selects (client-side only). */
+  get filteredCalls(): any[] {
+    return this.calls.filter((c) => {
+      const urgencyOk =
+        !this.filterUrgency ||
+        String(c.urgency || '').toUpperCase() === this.filterUrgency;
+      const statusOk =
+        !this.filterStatus || this.stepKeyForStatus(c.status) === this.filterStatus;
+      return urgencyOk && statusOk;
+    });
+  }
+
+  /** Completed steps (everything before the current one), for summary chips. */
+  get completedSteps(): StepperStep[] {
+    const currentIndex = STEP_ORDER.indexOf(this.currentStepKey);
+    return this.stepperSteps.filter((_s, i) => i < currentIndex);
+  }
+
+  private rebuildSteps(): void {
+    const currentIndex = STEP_ORDER.indexOf(this.currentStepKey);
+    const detailFor: Record<StepKey, string> = {
+      NEW: this.callerSummaryLine,
+      TRIAGED: this.triageSummaryLine,
+      DISPATCHED: this.dispatchSummaryLine,
+      RESOLVED: this.resolveSummaryLine
+    };
+    const labelFor: Record<StepKey, string> = {
+      NEW: 'New',
+      TRIAGED: 'Triaged',
+      DISPATCHED: 'Dispatched',
+      RESOLVED: 'Resolved'
+    };
+    this.stepperSteps = STEP_ORDER.map((key, i) => ({
+      key,
+      label: labelFor[key],
+      kicker: `Step ${i + 1}`,
+      value: detailFor[key],
+      status: i < currentIndex ? 'complete' : i === currentIndex ? 'current' : 'pending'
+    }));
+    this.activeStepKey = this.currentStepKey;
+  }
+
+  // ── Summary lines for stepper values + collapsed chips ────────────────────
+  get callerSummaryLine(): string {
+    const c = this.selectedCall;
+    if (!c) return '';
+    return (
+      [c.caller_name, c.caller_phone].filter(Boolean).join(' · ') ||
+      'Caller info captured'
+    );
+  }
+  get triageSummaryLine(): string {
+    const c = this.selectedCall;
+    const action = c?.triage?.recommended_action || c?.recommended_action;
+    if (!action && this.stepKeyForStatus(c?.status) === 'NEW') return 'Triage pending';
+    return action || 'Triage applied';
+  }
+  get dispatchSummaryLine(): string {
+    const d = this.selectedCall?.dispatch;
+    if (!d) return 'No dispatch yet';
+    return [
+      d.assigned_vendor_name || 'Vendor TBD',
+      d.eta_minutes != null ? `ETA ${d.eta_minutes} min` : null
+    ]
+      .filter(Boolean)
+      .join(' · ');
+  }
+  get resolveSummaryLine(): string {
+    const c = this.selectedCall;
+    return c?.resolution || c?.resolved_at ? 'Call closed' : 'Not resolved';
+  }
+
+  // ── Stepper / panel navigation ────────────────────────────────────────────
+  onStepChange(key: string): void {
+    if ((STEP_ORDER as string[]).includes(key)) {
+      this.activeStepKey = key as StepKey;
+      if (key === 'NEW') this.editingCaller = false;
+    }
+  }
+
+  editStep(key: string): void {
+    if (!(STEP_ORDER as string[]).includes(key)) return;
+    this.activeStepKey = key as StepKey;
+    if (key === 'NEW') this.editingCaller = true;
+  }
+
+  onRailTabChange(key: string): void {
+    this.railTab = key;
+  }
+
+  openCreate(): void {
+    this.showCreate = true;
+    this.selectedCall = null;
+  }
+
+  closeCreate(): void {
+    this.showCreate = false;
+  }
+
+  toggleEditCaller(): void {
+    this.editingCaller = !this.editingCaller;
+  }
+
+  // ── Data operations (endpoints unchanged) ────────────────────────────────
 
   loadCalls(): void {
     this.loading = true;
@@ -89,7 +321,7 @@ export class RoadsideBoardComponent implements OnInit {
     this.roadsideService.createCall(this.newCall).subscribe({
       next: (created) => {
         this.saving = false;
-        this.successMessage = `Roadside call created: ${created.call_number}`;
+        this.toast.success(`Roadside call created: ${created.call_number}`);
         this.newCall = {
           source_channel: 'PHONE',
           urgency: 'NORMAL',
@@ -99,6 +331,7 @@ export class RoadsideBoardComponent implements OnInit {
           caller_email: '',
           incident_summary: ''
         };
+        this.showCreate = false;
         this.loadCalls();
       },
       error: (err) => {
@@ -112,6 +345,9 @@ export class RoadsideBoardComponent implements OnInit {
     this.errorMessage = '';
     this.successMessage = '';
     this.publicLink = null;
+    this.showCreate = false;
+    this.editingCaller = false;
+    this.railTab = 'timeline';
     this.roadsideService.getCall(callId).subscribe({
       next: (call) => {
         this.selectedCall = call;
@@ -122,6 +358,7 @@ export class RoadsideBoardComponent implements OnInit {
           eta_minutes: call?.dispatch?.eta_minutes ?? 60,
           notes: call?.dispatch?.notes || ''
         };
+        this.rebuildSteps();
         this.resolveDispatchAddressFromSnapshot();
         this.loadTimeline();
       },
@@ -136,6 +373,7 @@ export class RoadsideBoardComponent implements OnInit {
     this.roadsideService.getCall(this.selectedCall.id).subscribe({
       next: (call) => {
         this.selectedCall = call;
+        this.rebuildSteps();
         this.loadTimeline();
       },
       error: (err) => {
@@ -149,7 +387,7 @@ export class RoadsideBoardComponent implements OnInit {
     this.roadsideService.createPublicLink(this.selectedCall.id, { ttl_hours: 48 }).subscribe({
       next: (res: any) => {
         this.publicLink = res?.url || null;
-        this.successMessage = 'Public link generated.';
+        this.toast.success('Public link generated.');
       },
       error: (err: any) => {
         this.errorMessage = err?.error?.error || 'Failed to create public link';
@@ -162,7 +400,7 @@ export class RoadsideBoardComponent implements OnInit {
     this.roadsideService.setStatus(this.selectedCall.id, status).subscribe({
       next: (row: any) => {
         this.selectedCall = { ...this.selectedCall, ...row };
-        this.successMessage = `Status updated to ${status}`;
+        this.rebuildSteps();
         this.loadCalls();
       },
       error: (err: any) => {
@@ -176,7 +414,8 @@ export class RoadsideBoardComponent implements OnInit {
     this.roadsideService.triage(this.selectedCall.id, this.triageForm).subscribe({
       next: (updated) => {
         this.selectedCall = updated;
-        this.successMessage = 'Triage applied.';
+        this.toast.success('Triage saved. Ready to dispatch.');
+        this.rebuildSteps();
         this.loadCalls();
         this.loadTimeline();
       },
@@ -191,7 +430,8 @@ export class RoadsideBoardComponent implements OnInit {
     this.roadsideService.assignDispatch(this.selectedCall.id, this.dispatchForm).subscribe({
       next: (updated) => {
         this.selectedCall = updated;
-        this.successMessage = 'Dispatch assignment saved.';
+        this.toast.success('Dispatch assignment saved.');
+        this.rebuildSteps();
         this.loadCalls();
         this.loadTimeline();
       },
@@ -206,7 +446,8 @@ export class RoadsideBoardComponent implements OnInit {
     this.roadsideService.resolveCall(this.selectedCall.id, this.resolveForm).subscribe({
       next: (updated) => {
         this.selectedCall = updated;
-        this.successMessage = 'Call resolved.';
+        this.toast.success('Call closed. Logged to timeline.');
+        this.rebuildSteps();
         this.loadCalls();
         this.loadTimeline();
       },
@@ -227,9 +468,11 @@ export class RoadsideBoardComponent implements OnInit {
       })
       .subscribe({
         next: (link) => {
-          this.successMessage = link?.work_order_id
-            ? `Work order linked: ${link.work_order_id}`
-            : `Work order link status: ${link?.link_status || 'PENDING'}`;
+          this.toast.success(
+            link?.work_order_id
+              ? `Work order linked: ${link.work_order_id}`
+              : `Work order link status: ${link?.link_status || 'PENDING'}`
+          );
           this.selectCall(this.selectedCall.id);
         },
         error: (err) => {
@@ -263,7 +506,7 @@ export class RoadsideBoardComponent implements OnInit {
         metadata: { file_name: file.name }
       }));
 
-      this.successMessage = 'Media uploaded and attached.';
+      this.toast.success('Media uploaded and attached.');
       this.selectCall(this.selectedCall.id);
     } catch (error: any) {
       this.errorMessage = error?.message || 'Failed to upload media';
