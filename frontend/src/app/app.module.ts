@@ -34,6 +34,8 @@ import { HosComponent } from './components/hos/hos.component';
 import { SmartAutocompleteComponent } from './shared/components/smart-autocomplete/smart-autocomplete.component';
 // FN-1636 — dev-only primitives showcase (route gated by !environment.production)
 import { DashboardPrimitivesComponent } from './dev/dashboard-primitives/dashboard-primitives.component';
+// FN-1644 — dev-only Roadside primitives sandbox (route gated by !environment.production)
+import { RoadsidePrimitivesComponent } from './components/dev/roadside-primitives/roadside-primitives.component';
 import { LoadsComponent } from './components/loads/loads.component';
 import { DispatchBoardComponent } from './components/dispatch-board/dispatch-board.component';
 import { AuditComponent } from './components/audit/audit.component';
@@ -104,6 +106,7 @@ import { ControlCenterComponent } from './components/control-center/control-cent
   declarations: [
     AppComponent,
     DashboardPrimitivesComponent,
+    RoadsidePrimitivesComponent,
     DashboardComponent,
     DriversComponent,
     DispatchDriversComponent,

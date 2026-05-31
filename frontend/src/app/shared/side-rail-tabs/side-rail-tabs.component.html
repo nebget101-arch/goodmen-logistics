@@ -1,0 +1,22 @@
+<div class="side-rail-tabs__strip" role="tablist">
+  <button
+    *ngFor="let tab of tabs; trackBy: trackByKey"
+    type="button"
+    role="tab"
+    class="side-rail-tabs__tab"
+    [class.is-active]="tab.key === activeKey"
+    [attr.aria-selected]="tab.key === activeKey"
+    (click)="select(tab.key)"
+  >
+    <span
+      *ngIf="tab.icon"
+      class="side-rail-tabs__icon material-symbols-outlined"
+      aria-hidden="true"
+      >{{ tab.icon }}</span
+    >
+    <span class="side-rail-tabs__label">{{ tab.label }}</span>
+  </button>
+</div>
+<div class="side-rail-tabs__panes">
+  <ng-content></ng-content>
+</div>

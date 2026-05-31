@@ -1,0 +1,85 @@
+.toast-host {
+  position: fixed;
+  top: 1rem;
+  right: 1rem;
+  z-index: 10000;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  max-width: 22rem;
+  pointer-events: none;
+}
+
+.toast {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  padding: 0.7rem 0.85rem;
+  background: rgba(15, 23, 42, 0.95);
+  border: 1px solid rgba(71, 85, 105, 1);
+  border-left: 3px solid rgba(100, 116, 139, 1);
+  border-radius: 10px;
+  color: rgba(229, 231, 235, 1);
+  box-shadow: 0 10px 30px rgba(2, 6, 23, 0.8);
+  pointer-events: auto;
+}
+
+.toast__message {
+  flex: 1 1 auto;
+  font-size: 0.82rem;
+  line-height: 1.35;
+}
+
+.toast__close {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: rgba(148, 163, 184, 1);
+  font-size: 0.8rem;
+  cursor: pointer;
+  transition: color 0.2s ease, background 0.2s ease;
+}
+
+.toast__close:hover {
+  color: rgba(229, 231, 235, 1);
+  background: rgba(103, 232, 249, 0.15);
+}
+
+.toast__close:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.2);
+}
+
+/* ── Success ── */
+.toast.is-success {
+  border-left-color: rgba(34, 197, 94, 0.7);
+}
+
+.toast.is-success .toast__message {
+  color: rgba(134, 239, 172, 1);
+}
+
+/* ── Error ── */
+.toast.is-error {
+  border-left-color: rgba(248, 113, 113, 0.7);
+}
+
+.toast.is-error .toast__message {
+  color: rgba(252, 165, 165, 1);
+}
+
+/* ── Info ── */
+.toast.is-info {
+  border-left-color: rgba(56, 189, 248, 0.95);
+}
+
+.toast.is-info .toast__message {
+  color: rgba(103, 232, 249, 1);
+}

@@ -1,0 +1,16 @@
+<div class="summary-chip">
+  <span class="summary-chip__tick material-symbols-outlined" aria-hidden="true">check_circle</span>
+  <span class="summary-chip__body">
+    <span class="summary-chip__title">{{ title }}</span>
+    <span class="summary-chip__detail">{{ detail }}</span>
+  </span>
+  <button
+    *ngIf="editable"
+    type="button"
+    class="summary-chip__edit material-symbols-outlined"
+    aria-label="Edit"
+    (click)="onEdit()"
+  >
+    edit
+  </button>
+</div>
