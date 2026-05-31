@@ -1,0 +1,15 @@
+<!-- FN-1636 ai-segmented-control -->
+<div class="seg-group" role="group" [attr.aria-label]="ariaLabel">
+  <button
+    *ngFor="let seg of segments; trackBy: trackByKey"
+    type="button"
+    class="seg-btn"
+    [class.btn-primary]="isSelected(seg.key)"
+    [class.btn-secondary]="!isSelected(seg.key)"
+    [class.is-active]="isSelected(seg.key)"
+    [attr.aria-pressed]="isSelected(seg.key)"
+    (click)="select(seg.key)"
+  >
+    {{ seg.label }}
+  </button>
+</div>

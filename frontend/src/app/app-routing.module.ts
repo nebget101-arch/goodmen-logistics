@@ -1,5 +1,7 @@
 import { NgModule } from '@angular/core';
 import { RouterModule, Routes } from '@angular/router';
+// FN-1636 — dev-only primitives showcase
+import { DashboardPrimitivesComponent } from './dev/dashboard-primitives/dashboard-primitives.component';
 import { DashboardComponent } from './components/dashboard/dashboard.component';
 import { DriversComponent } from './components/drivers/drivers.component';
 import { DispatchDriversComponent } from './components/dispatch-drivers/dispatch-drivers.component';
@@ -287,7 +289,11 @@ const routes: Routes = [
   { path: 'reset-password', component: ResetPasswordComponent },
   { path: 'privacy', component: PrivacyPolicyComponent },
   { path: 'terms', component: TermsComponent },
-  { path: 'communication-preferences', component: CommunicationPreferencesComponent }
+  { path: 'communication-preferences', component: CommunicationPreferencesComponent },
+  // FN-1636 — dev-only primitives showcase; excluded from production builds.
+  ...(environment.production
+    ? []
+    : [{ path: 'dev/dashboard-primitives', component: DashboardPrimitivesComponent }])
 ];
 
 @NgModule({

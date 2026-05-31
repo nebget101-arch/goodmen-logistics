@@ -1,0 +1,28 @@
+<!-- FN-1636 kpi-card — renders as <a> when routerLink is set, else <div>. -->
+<ng-template #body>
+  <span class="kpi-accent" aria-hidden="true"></span>
+  <p class="kpi-label">{{ label }}</p>
+  <p class="kpi-value">{{ value }}</p>
+  <p class="kpi-subline" *ngIf="subline">{{ subline }}</p>
+  <span class="kpi-trend" *ngIf="trend" [attr.data-direction]="trend.direction" aria-hidden="true">
+    <span class="material-symbols-outlined kpi-trend-icon">{{ trendIcon }}</span>
+    {{ trend.deltaText }}
+  </span>
+</ng-template>
+
+<a
+  *ngIf="routerLink; else plain"
+  class="kpi-card"
+  [class.is-link]="true"
+  [attr.data-status]="status"
+  [routerLink]="routerLink"
+  [attr.aria-label]="ariaLabel"
+>
+  <ng-container [ngTemplateOutlet]="body"></ng-container>
+</a>
+
+<ng-template #plain>
+  <div class="kpi-card" [attr.data-status]="status" role="group" [attr.aria-label]="ariaLabel">
+    <ng-container [ngTemplateOutlet]="body"></ng-container>
+  </div>
+</ng-template>
