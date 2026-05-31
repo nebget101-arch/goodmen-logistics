@@ -18,6 +18,7 @@ import {
 } from '../../models/drug-alcohol.model';
 import { InvestigationHistoryComponent } from './investigation-history/investigation-history.component';
 import { AiSelectOption } from '../../shared/ai-select/ai-select.component';
+import { US_STATE_OPTIONS } from '../../shared/constants/us-states';
 
 // FN-1633 — One row in the multi-CDL extraction queue card.
 // `status` controls the pill label and which actions are available:
@@ -266,6 +267,13 @@ export class DriversComponent implements OnInit, OnDestroy {
     { value: 'B', label: 'Class B' },
     { value: 'C', label: 'Class C' }
   ];
+
+  /**
+   * FN-1648: US state options for Add/Edit Driver State + CDL State selects.
+   * MUST stay a stable readonly field — getter-based `[options]` bindings
+   * cause infinite change-detection loops on `<app-ai-select>` (FN-317 RCA).
+   */
+  readonly stateOptions: AiSelectOption[] = US_STATE_OPTIONS;
 
   readonly drugTestTypeOptions: AiSelectOption[] =
     this.drugTestTypes.map(tt => ({ value: tt, label: this.drugTestTypeLabels[tt] }));

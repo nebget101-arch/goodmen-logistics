@@ -2,6 +2,7 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { ActivatedRoute, Router, convertToParamMap } from '@angular/router';
 import { FormsModule } from '@angular/forms';
 import { CUSTOM_ELEMENTS_SCHEMA } from '@angular/core';
+import { HttpClient } from '@angular/common/http';
 import { of, throwError } from 'rxjs';
 import { DriverEditComponent } from './driver-edit.component';
 import { ApiService } from '../../services/api.service';
@@ -11,6 +12,7 @@ describe('DriverEditComponent', () => {
   let fixture: ComponentFixture<DriverEditComponent>;
   let apiServiceSpy: jasmine.SpyObj<ApiService>;
   let routerSpy: jasmine.SpyObj<Router>;
+  let httpClientSpy: jasmine.SpyObj<HttpClient>;
 
   function createApiSpy(): jasmine.SpyObj<ApiService> {
     const spy = jasmine.createSpyObj<ApiService>('ApiService', [
@@ -44,6 +46,8 @@ describe('DriverEditComponent', () => {
   function setup(routeId: string | null = 'd1'): void {
     apiServiceSpy = createApiSpy();
     routerSpy = jasmine.createSpyObj<Router>('Router', ['navigate', 'createUrlTree', 'serializeUrl', 'navigateByUrl']);
+    httpClientSpy = jasmine.createSpyObj<HttpClient>('HttpClient', ['get']);
+    httpClientSpy.get.and.returnValue(of({ places: [{ 'place name': 'Springfield', 'state abbreviation': 'IL' }] }));
 
     TestBed.configureTestingModule({
       declarations: [DriverEditComponent],
@@ -51,6 +55,7 @@ describe('DriverEditComponent', () => {
       providers: [
         { provide: ApiService, useValue: apiServiceSpy },
         { provide: Router, useValue: routerSpy },
+        { provide: HttpClient, useValue: httpClientSpy },
         {
           provide: ActivatedRoute,
           useValue: {
@@ -118,5 +123,46 @@ describe('DriverEditComponent', () => {
 
     expect(window.alert).toHaveBeenCalled();
     expect(apiServiceSpy.updateDriver).not.toHaveBeenCalled();
+  });
+
+  // FN-1648: zip blur → auto-fill city/state via zippopotam.us
+  it('auto-fills city and state from zippopotam on zip blur with a 5-digit zip', () => {
+    setup('d1');
+    fixture.detectChanges();
+
+    component.driver.zip = '62701';
+    component.onZipBlur();
+
+    expect(httpClientSpy.get).toHaveBeenCalledWith('https://api.zippopotam.us/us/62701');
+    expect(component.driver.city).toBe('Springfield');
+    expect(component.driver.state).toBe('IL');
+  });
+
+  it('does not call zippopotam for invalid or empty zip values', () => {
+    setup('d1');
+    fixture.detectChanges();
+    httpClientSpy.get.calls.reset();
+
+    component.driver.zip = '';
+    component.onZipBlur();
+    component.driver.zip = '123';
+    component.onZipBlur();
+
+    expect(httpClientSpy.get).not.toHaveBeenCalled();
+  });
+
+  it('tolerates zippopotam 404/network errors without throwing', () => {
+    setup('d1');
+    fixture.detectChanges();
+    httpClientSpy.get.and.returnValue(throwError(() => ({ status: 404 })));
+
+    component.driver.zip = '99999';
+    component.driver.city = 'Original City';
+    component.driver.state = 'CA';
+
+    expect(() => component.onZipBlur()).not.toThrow();
+    // City/state should be untouched on error.
+    expect(component.driver.city).toBe('Original City');
+    expect(component.driver.state).toBe('CA');
   });
 });
