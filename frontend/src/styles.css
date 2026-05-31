@@ -2374,3 +2374,81 @@ input[type="datetime-local"]:hover::-webkit-calendar-picker-indicator {
 .ai-panel-flat[data-severity="critical"] {
   border-top-color: rgba(239, 68, 68, 0.95);
 }
+
+/* ── FN-1644 Roadside primitives: .num-field + .read-field utilities ── */
+
+/* Numeric input + trailing unit chip (min / % / $). Right-aligned monospace. */
+.num-field {
+  display: flex;
+  align-items: stretch;
+  flex-wrap: wrap;
+  width: 100%;
+}
+
+.num-field .form-input {
+  flex: 1 1 auto;
+  width: auto;
+  min-width: 0;
+  font-family: 'Courier New', monospace;
+  text-align: right;
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+  border-right: 0;
+}
+
+.num-field .unit {
+  display: inline-flex;
+  align-items: center;
+  padding: 0 0.7rem;
+  background: rgba(2, 6, 23, 0.8);
+  border: 1px solid rgba(71, 85, 105, 0.95);
+  border-left: 0;
+  border-top-right-radius: 10px;
+  border-bottom-right-radius: 10px;
+  color: rgba(103, 232, 249, 1);
+  font-size: 0.85rem;
+  white-space: nowrap;
+}
+
+/* Read-only display field with an inline pencil edit button. */
+.read-field {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  width: 100%;
+  padding: 0.55rem 0.75rem;
+  background: rgba(2, 6, 23, 0.8);
+  border: 1px dashed rgba(71, 85, 105, 0.95);
+  border-radius: 10px;
+  color: rgba(203, 213, 225, 1);
+  font-size: 0.9rem;
+}
+
+.read-field .btn-icon {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: rgba(148, 163, 184, 1);
+  font-size: 1.05rem;
+  cursor: pointer;
+  transition: color 0.2s ease, background 0.2s ease;
+}
+
+.read-field .btn-icon:hover {
+  color: rgba(103, 232, 249, 1);
+  background: rgba(103, 232, 249, 0.15);
+}
+
+.read-field .btn-icon:focus-visible {
+  outline: none;
+  color: rgba(103, 232, 249, 1);
+  box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.2);
+}

@@ -26,6 +26,11 @@ import { AiSegmentedControlComponent } from './ai-segmented-control/ai-segmented
 import { AiSkeletonComponent } from './ai-skeleton/ai-skeleton.component';
 import { AiHeroStripComponent } from './ai-hero-strip/ai-hero-strip.component';
 import { AiAlertRowComponent } from './ai-alert-row/ai-alert-row.component';
+// FN-1644 — Roadside primitives
+import { StatusStepperComponent } from './status-stepper/status-stepper.component';
+import { SummaryChipComponent } from './summary-chip/summary-chip.component';
+import { SideRailTabsComponent } from './side-rail-tabs/side-rail-tabs.component';
+import { ToastHostComponent } from './toast/toast-host.component';
 import { HasPermissionDirective, HasAnyPermissionDirective } from '../directives/has-permission.directive';
 import { AiExplainableDirective } from '../directives/ai-explainable.directive';
 import { FabSafeAreaDirective } from '../directives/fab-safe-area.directive';
@@ -46,6 +51,10 @@ import { FabSafeAreaDirective } from '../directives/fab-safe-area.directive';
     AiSkeletonComponent,
     AiHeroStripComponent,
     AiAlertRowComponent,
+    StatusStepperComponent,
+    SummaryChipComponent,
+    SideRailTabsComponent,
+    ToastHostComponent,
     HasPermissionDirective,
     HasAnyPermissionDirective
   ],
@@ -84,6 +93,10 @@ import { FabSafeAreaDirective } from '../directives/fab-safe-area.directive';
     AiSkeletonComponent,
     AiHeroStripComponent,
     AiAlertRowComponent,
+    StatusStepperComponent,
+    SummaryChipComponent,
+    SideRailTabsComponent,
+    ToastHostComponent,
     HasPermissionDirective,
     HasAnyPermissionDirective,
     AiExplainableDirective,

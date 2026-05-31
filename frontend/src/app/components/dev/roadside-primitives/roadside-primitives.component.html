@@ -1,0 +1,84 @@
+<div class="dev-sandbox">
+  <h1 class="dev-sandbox__title">Roadside primitives (FN-1644)</h1>
+
+  <section class="dev-sandbox__section">
+    <h2 class="dev-sandbox__heading">Status stepper</h2>
+    <p class="dev-sandbox__note">
+      All five states. Active key: <code>{{ activeKey }}</code>. Use Arrow / Home /
+      End to move focus across reachable steps; Enter or Space to select.
+    </p>
+    <app-status-stepper
+      [steps]="steps"
+      [activeKey]="activeKey"
+      (stepChange)="onStepChange($event)"
+    ></app-status-stepper>
+  </section>
+
+  <section class="dev-sandbox__section">
+    <h2 class="dev-sandbox__heading">Summary chip</h2>
+    <div class="dev-sandbox__row">
+      <app-summary-chip
+        title="Pickup confirmed"
+        detail="1200 Market St, San Francisco, CA 94102 — dock 4"
+      ></app-summary-chip>
+      <app-summary-chip
+        title="Driver assigned"
+        detail="J. Rivera · Unit 318 · DOT 1234567"
+        [editable]="true"
+        (edit)="onChipEdit('Driver assigned')"
+      ></app-summary-chip>
+    </div>
+  </section>
+
+  <section class="dev-sandbox__section">
+    <h2 class="dev-sandbox__heading">Side rail tabs</h2>
+    <app-side-rail-tabs [tabs]="railTabs" [(activeKey)]="activeTab">
+      <div data-rail-pane="timeline">Timeline pane — recent events.</div>
+      <div data-rail-pane="location">Location pane — last known coordinates.</div>
+      <div data-rail-pane="attachments">Attachments pane — BOL, photos.</div>
+      <div data-rail-pane="public">Public Link pane — shareable status URL.</div>
+    </app-side-rail-tabs>
+  </section>
+
+  <section class="dev-sandbox__section">
+    <h2 class="dev-sandbox__heading">Numeric fields (.num-field)</h2>
+    <div class="dev-sandbox__row">
+      <label class="num-field">
+        <input class="form-input" type="number" value="45" aria-label="ETA minutes" />
+        <span class="unit">min</span>
+      </label>
+      <label class="num-field">
+        <input class="form-input" type="number" value="80" aria-label="Capacity percent" />
+        <span class="unit">%</span>
+      </label>
+      <label class="num-field">
+        <input class="form-input" type="number" value="350" aria-label="Quote dollars" />
+        <span class="unit">$</span>
+      </label>
+    </div>
+  </section>
+
+  <section class="dev-sandbox__section">
+    <h2 class="dev-sandbox__heading">Read field (.read-field)</h2>
+    <div class="read-field">
+      <span>Reference #: RS-2026-00412</span>
+      <button
+        type="button"
+        class="btn-icon material-symbols-outlined"
+        aria-label="Edit reference"
+        (click)="onReadFieldEdit()"
+      >
+        edit
+      </button>
+    </div>
+  </section>
+
+  <section class="dev-sandbox__section">
+    <h2 class="dev-sandbox__heading">Toasts</h2>
+    <div class="dev-sandbox__row">
+      <button type="button" class="btn" (click)="showSuccess()">Success</button>
+      <button type="button" class="btn" (click)="showError()">Error</button>
+      <button type="button" class="btn" (click)="showInfo()">Info</button>
+    </div>
+  </section>
+</div>
