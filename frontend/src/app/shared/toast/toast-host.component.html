@@ -1,0 +1,20 @@
+<div class="toast-host" role="region" aria-label="Notifications" aria-live="polite">
+  <div
+    *ngFor="let toast of toasts$ | async; trackBy: trackById"
+    class="toast"
+    [class.is-success]="toast.type === 'success'"
+    [class.is-error]="toast.type === 'error'"
+    [class.is-info]="toast.type === 'info'"
+    role="status"
+  >
+    <span class="toast__message">{{ toast.message }}</span>
+    <button
+      type="button"
+      class="toast__close"
+      aria-label="Dismiss notification"
+      (click)="dismiss(toast.id)"
+    >
+      ✕
+    </button>
+  </div>
+</div>

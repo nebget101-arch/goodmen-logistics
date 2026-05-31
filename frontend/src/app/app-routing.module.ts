@@ -2,6 +2,8 @@ import { NgModule } from '@angular/core';
 import { RouterModule, Routes } from '@angular/router';
 // FN-1636 — dev-only primitives showcase
 import { DashboardPrimitivesComponent } from './dev/dashboard-primitives/dashboard-primitives.component';
+// FN-1644 — dev-only Roadside primitives sandbox
+import { RoadsidePrimitivesComponent } from './components/dev/roadside-primitives/roadside-primitives.component';
 import { DashboardComponent } from './components/dashboard/dashboard.component';
 import { DriversComponent } from './components/drivers/drivers.component';
 import { DispatchDriversComponent } from './components/dispatch-drivers/dispatch-drivers.component';
@@ -293,7 +295,11 @@ const routes: Routes = [
   // FN-1636 — dev-only primitives showcase; excluded from production builds.
   ...(environment.production
     ? []
-    : [{ path: 'dev/dashboard-primitives', component: DashboardPrimitivesComponent }])
+    : [{ path: 'dev/dashboard-primitives', component: DashboardPrimitivesComponent }]),
+  // FN-1644 — dev-only Roadside primitives sandbox; excluded from production builds.
+  ...(environment.production
+    ? []
+    : [{ path: 'dev/roadside-primitives', component: RoadsidePrimitivesComponent }])
 ];
 
 @NgModule({
