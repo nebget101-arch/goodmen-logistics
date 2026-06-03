@@ -50,6 +50,7 @@ const locationsRouter = require(path.join(sharedRoot, 'routes', 'locations'));
 const locationBinsRouter = require(path.join(sharedRoot, 'routes', 'location-bins'));
 const userLocationsRouter = require(path.join(sharedRoot, 'routes', 'user-locations'));
 const geoRouter = require(path.join(sharedRoot, 'routes', 'geo'));
+const geofencesRouter = require(path.join(sharedRoot, 'routes', 'geofences'));
 const invoicesRouter = require(path.join(sharedRoot, 'routes', 'invoices'));
 const creditRouter = require(path.join(sharedRoot, 'routes', 'credit'));
 const dbExampleRouter = require(path.join(sharedRoot, 'routes', 'db-example'));
@@ -96,6 +97,7 @@ app.use('/api/locations', authMiddleware, tenantContextMiddleware, locationsRout
 app.use('/api/locations/:locationId/bins', authMiddleware, tenantContextMiddleware, locationBinsRouter);
 app.use('/api', authMiddleware, tenantContextMiddleware, userLocationsRouter);
 app.use('/api/geo', authMiddleware, tenantContextMiddleware, geoRouter);
+app.use('/api/geofences', authMiddleware, tenantContextMiddleware, geofencesRouter);
 app.use('/api/invoices', authMiddleware, tenantContextMiddleware, requireInvoicesPlan, invoicesRouter);
 app.use('/api/credit', authMiddleware, tenantContextMiddleware, creditRouter);
 app.use('/api/db-example', authMiddleware, tenantContextMiddleware, dbExampleRouter);
