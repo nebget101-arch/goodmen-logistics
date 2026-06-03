@@ -124,6 +124,10 @@ const routes: Routes = [
   },
   { path: 'dispatch-board', component: DispatchBoardComponent, canActivate: [AuthGuard, PlanGuard], data: { planPath: '/dispatch-board' } },
   {
+    path: 'geofences',
+    loadChildren: () => import('./components/geofences/geofences.module').then(m => m.GeofencesModule)
+  },
+  {
     path: 'roadside',
     component: RoadsideBoardComponent,
     canActivate: [AuthGuard, PlanGuard, PermissionGuard],
