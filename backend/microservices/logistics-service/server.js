@@ -44,6 +44,7 @@ const swaggerSpec = swaggerJsdoc(swaggerOptions);
 const loadsRouter = require(path.join(sharedRoot, 'routes', 'loads'));
 const loadTemplatesRouter = require(path.join(sharedRoot, 'routes', 'load-templates'));
 const loadShareLinksRouter = require(path.join(sharedRoot, 'routes', 'load-share-links'));
+const publicTrackRouter = require(path.join(sharedRoot, 'routes', 'public-track'));
 const fuelRouter = require(path.join(sharedRoot, 'routes', 'fuel'));
 const tollsRouter = require(path.join(sharedRoot, 'routes', 'tolls'));
 const brokersRouter = require(path.join(sharedRoot, 'routes', 'brokers'));
@@ -88,6 +89,12 @@ const requireIftaPlan = requirePlanAccess('/compliance/ifta');
 
 app.get('/api-docs-json', (_req, res) => res.json(swaggerSpec));
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
+
+// FN-1679: Public, UNAUTHENTICATED tracking read API. Mounted ahead of every
+// `app.use('/api', authMiddleware, ...)` catch-all below so the auth guard
+// never runs for /api/track/:token. The router itself hashes the token and
+// resolves the share link — there is no session/tenant context here.
+app.use('/api/track', publicTrackRouter);
 
 app.use('/api/fuel', authMiddleware, tenantContextMiddleware, fuelRouter);
 app.use('/api/tolls', authMiddleware, tenantContextMiddleware, tollsRouter);
