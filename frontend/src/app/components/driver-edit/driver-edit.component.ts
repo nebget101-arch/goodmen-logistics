@@ -1,8 +1,10 @@
 import { Component, OnDestroy, OnInit } from '@angular/core';
+import { HttpClient } from '@angular/common/http';
 import { ActivatedRoute, Router } from '@angular/router';
 import { Subject, forkJoin, takeUntil } from 'rxjs';
 import { finalize } from 'rxjs/operators';
 import { ApiService } from '../../services/api.service';
+import { US_STATE_OPTIONS } from '../../shared/constants/us-states';
 
 type PayTab = 'rates' | 'deductions' | 'payee' | 'notes';
 
@@ -104,6 +106,13 @@ export class DriverEditComponent implements OnInit, OnDestroy {
     { value: 'C', label: 'Class C' }
   ];
 
+  /**
+   * FN-1648: US state options for the State and CDL State `<app-ai-select>`
+   * bindings. MUST stay a stable readonly field — getter-based `[options]`
+   * bindings cause infinite change-detection loops (FN-317 RCA).
+   */
+  readonly stateOptions = US_STATE_OPTIONS;
+
   readonly deductionTargetOptions = [
     { value: 'primary', label: 'Driver' },
     { value: 'additional', label: 'Equipment Owner' }
@@ -198,7 +207,8 @@ export class DriverEditComponent implements OnInit, OnDestroy {
   constructor(
     private apiService: ApiService,
     private route: ActivatedRoute,
-    private router: Router
+    private router: Router,
+    private http: HttpClient
   ) {}
 
   ngOnInit(): void {
@@ -1121,6 +1131,28 @@ export class DriverEditComponent implements OnInit, OnDestroy {
     const parsed = new Date(text);
     if (Number.isNaN(parsed.getTime())) return '';
     return parsed.toISOString().slice(0, 10);
+  }
+
+  /**
+   * FN-1648: Zip blur → auto-fill City + State via zippopotam.us.
+   * Silently tolerates 404 / network failure (no console spam, no UI crash).
+   * Pattern mirrors `loads.component.ts` lookupPickupZip/lookupDeliveryZip.
+   */
+  onZipBlur(): void {
+    const zip = (this.driver?.zip || '').toString().trim();
+    if (!zip || !/^\d{5}(-\d{4})?$/.test(zip)) return;
+    const lookupZip = zip.split('-')[0];
+    this.http.get<any>(`https://api.zippopotam.us/us/${lookupZip}`).subscribe({
+      next: (data) => {
+        const place = data?.places?.[0];
+        if (!place) return;
+        this.driver.city = place['place name'] || this.driver.city;
+        this.driver.state = place['state abbreviation'] || this.driver.state;
+      },
+      error: () => {
+        // 404 (zip not found) or network — leave fields as-is.
+      }
+    });
   }
 
   /** Save / cancel */

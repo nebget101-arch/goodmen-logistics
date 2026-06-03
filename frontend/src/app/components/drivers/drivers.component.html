@@ -349,15 +349,14 @@
                     <span class="material-symbols-outlined" aria-hidden="true">auto_awesome</span>AI
                   </span>
                 </label>
-                <input
-                  id="state"
-                  type="text"
+                <app-ai-select
+                  inputId="state"
+                  [options]="stateOptions"
                   [(ngModel)]="newDriver.state"
-                  class="form-input"
-                  maxlength="2"
-                  placeholder="ST"
-                  style="text-transform: uppercase;"
-                />
+                  [allowEmpty]="true"
+                  emptyLabel="-- Select state --"
+                  placeholder="Select state"
+                ></app-ai-select>
               </div>
               <div class="dqf-field" style="flex: 1;" [class.dqf-field--ai]="isAiPrefilled('zipCode')">
                 <label for="zipCode">
@@ -432,15 +431,14 @@
                   <span class="material-symbols-outlined" aria-hidden="true">auto_awesome</span>AI
                 </span>
               </label>
-              <input
-                id="cdlState"
-                type="text"
+              <app-ai-select
+                inputId="cdlState"
+                [options]="stateOptions"
                 [(ngModel)]="newDriver.cdlState"
-                class="form-input"
-                placeholder="CA"
-                maxlength="2"
-                required
-              />
+                [allowEmpty]="true"
+                emptyLabel="-- Select CDL state --"
+                placeholder="Select CDL state"
+              ></app-ai-select>
             </div>
             <div class="dqf-field" [class.dqf-field--ai]="isAiPrefilled('cdlClass')">
               <label for="cdlClass">
@@ -531,7 +529,14 @@
               </div>
               <div class="dqf-field" style="flex: 1;">
                 <label for="editState">State</label>
-                <input id="editState" type="text" [(ngModel)]="editingDriver.state" class="form-input" maxlength="2" placeholder="ST" style="text-transform: uppercase;" />
+                <app-ai-select
+                  inputId="editState"
+                  [options]="stateOptions"
+                  [(ngModel)]="editingDriver.state"
+                  [allowEmpty]="true"
+                  emptyLabel="-- Select state --"
+                  placeholder="Select state"
+                ></app-ai-select>
               </div>
               <div class="dqf-field" style="flex: 1;">
                 <label for="editZipCode">Zip Code</label>
@@ -577,7 +582,14 @@
             </div>
             <div class="dqf-field">
               <label for="editCdlState">CDL State *</label>
-              <input id="editCdlState" type="text" [(ngModel)]="editingDriver.cdlState" maxlength="2" class="form-input" />
+              <app-ai-select
+                inputId="editCdlState"
+                [options]="stateOptions"
+                [(ngModel)]="editingDriver.cdlState"
+                [allowEmpty]="true"
+                emptyLabel="-- Select CDL state --"
+                placeholder="Select CDL state"
+              ></app-ai-select>
             </div>
             <div class="dqf-field">
               <label for="editCdlClass">CDL Class *</label>

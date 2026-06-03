@@ -111,11 +111,18 @@
               </div>
               <div class="field">
                 <label for="state">State</label>
-                <input id="state" class="form-input" maxlength="2" [(ngModel)]="driver.state" />
+                <app-ai-select
+                  inputId="state"
+                  [options]="stateOptions"
+                  [(ngModel)]="driver.state"
+                  [allowEmpty]="true"
+                  emptyLabel="-- Select state --"
+                  placeholder="Select state"
+                ></app-ai-select>
               </div>
               <div class="field">
                 <label for="zip">Zip</label>
-                <input id="zip" class="form-input" [(ngModel)]="driver.zip" />
+                <input id="zip" class="form-input" [(ngModel)]="driver.zip" (blur)="onZipBlur()" />
               </div>
               <div class="field">
                 <label for="coDriver">Co-Driver</label>
@@ -155,7 +162,14 @@
               </div>
               <div class="field">
                 <label for="cdlState">CDL State *</label>
-                <input id="cdlState" class="form-input" maxlength="2" [(ngModel)]="driver.cdlState" />
+                <app-ai-select
+                  inputId="cdlState"
+                  [options]="stateOptions"
+                  [(ngModel)]="driver.cdlState"
+                  [allowEmpty]="true"
+                  emptyLabel="-- Select CDL state --"
+                  placeholder="Select CDL state"
+                ></app-ai-select>
               </div>
               <div class="field">
                 <label for="cdlClass">CDL Class</label>
