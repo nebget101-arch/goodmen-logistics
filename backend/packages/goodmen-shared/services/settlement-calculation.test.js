@@ -16,6 +16,7 @@ describe('computeLoadPay', () => {
   it('per_mile: driver pay = loaded_miles * cents_per_mile / 100', () => {
     const { driverPay } = computeLoadPay({
       payModel: 'per_mile',
+      gross: 1000,
       loadedMiles: 500,
       centsPerMile: 50
     });
@@ -34,6 +35,7 @@ describe('computeLoadPay', () => {
   it('flat_per_load: driver pay = flat_per_load_amount', () => {
     const { driverPay } = computeLoadPay({
       payModel: 'flat_per_load',
+      gross: 1000,
       flatPerLoadAmount: 450
     });
     assert.strictEqual(driverPay, 450);
@@ -50,6 +52,47 @@ describe('computeLoadPay', () => {
   it('unknown pay model returns 0', () => {
     const { driverPay } = computeLoadPay({ payModel: 'unknown', gross: 1000 });
     assert.strictEqual(driverPay, 0);
+  });
+
+  it('uses equipment owner percentage for additional payee subtotal when present', () => {
+    const { driverPay, additionalPayeePay } = computeLoadPay({
+      payModel: 'percentage',
+      gross: 2000,
+      percentageRate: 80,
+      hasAdditionalPayee: true,
+      equipmentOwnerPercentage: 20,
+      additionalPayeeRate: 5
+    });
+
+    assert.strictEqual(driverPay, 1600);
+    assert.strictEqual(additionalPayeePay, 400);
+  });
+
+  it('falls back to additional payee rate when equipment owner percentage is absent', () => {
+    const { driverPay, additionalPayeePay } = computeLoadPay({
+      payModel: 'percentage',
+      gross: 2000,
+      percentageRate: 80,
+      hasAdditionalPayee: true,
+      equipmentOwnerPercentage: null,
+      additionalPayeeRate: 5
+    });
+
+    assert.strictEqual(driverPay, 1600);
+    assert.strictEqual(additionalPayeePay, 100);
+  });
+
+  it('allows company-retained remainder when driver and EO percentages do not sum to 100', () => {
+    const { driverPay, additionalPayeePay } = computeLoadPay({
+      payModel: 'percentage',
+      gross: 1700,
+      percentageRate: 44,
+      hasAdditionalPayee: true,
+      equipmentOwnerPercentage: 44
+    });
+
+    assert.strictEqual(driverPay, 748);
+    assert.strictEqual(additionalPayeePay, 748);
   });
 });
 
@@ -120,5 +163,22 @@ describe('recalculateSettlementTotals', () => {
     assert.strictEqual(totals.total_deductions, 200);
     assert.strictEqual(totals.total_advances, 100);
     assert.strictEqual(totals.net_pay_driver, 2640 - 200 - 100);
+  });
+
+  it('tracks equipment owner revenue in additional payee totals', () => {
+    const settlement = { settlement_type: 'equipment_owner' };
+    const loadItems = [
+      { gross_amount: 1700, driver_pay_amount: 0, additional_payee_amount: 561 },
+      { gross_amount: 2500, driver_pay_amount: 0, additional_payee_amount: 825 }
+    ];
+    const adjustmentItems = [
+      { item_type: 'deduction', amount: 100 },
+      { item_type: 'advance', amount: 25 }
+    ];
+    const totals = recalculateSettlementTotals(settlement, loadItems, adjustmentItems, { pay_model: 'percentage' });
+    assert.strictEqual(totals.subtotal_gross, 4200);
+    assert.strictEqual(totals.subtotal_driver_pay, 0);
+    assert.strictEqual(totals.subtotal_additional_payee, 1386);
+    assert.strictEqual(totals.net_pay_additional_payee, 1386 - 100 - 25);
   });
 });

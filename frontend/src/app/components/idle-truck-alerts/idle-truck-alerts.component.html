@@ -1,0 +1,155 @@
+<div class="ita-page">
+
+  <!-- Header -->
+  <div class="header">
+    <div>
+      <h1>
+        Idle Truck Alerts
+        <span class="unresolved-badge" *ngIf="unresolvedCount > 0">{{ unresolvedCount }}</span>
+      </h1>
+      <p class="subtitle">Trucks with active drivers that have had no recent loads but still accrue recurring deductions.</p>
+    </div>
+    <div class="header-actions">
+      <button class="btn-sm btn-clear" type="button" *ngIf="alertTypeFilter || responseStatusFilter" (click)="clearFilters()">
+        <span class="material-symbols-outlined">filter_alt_off</span> Clear filters
+      </button>
+    </div>
+  </div>
+
+  <!-- Filters -->
+  <div class="filters-row">
+    <div class="filter-group">
+      <label class="filter-label">Alert Type</label>
+      <select class="filter-select" [(ngModel)]="alertTypeFilter" (ngModelChange)="applyFilters()">
+        <option value="">All types</option>
+        <option *ngFor="let opt of alertTypeOptions" [value]="opt.value">{{ opt.label }}</option>
+      </select>
+    </div>
+    <div class="filter-group">
+      <label class="filter-label">Status</label>
+      <select class="filter-select" [(ngModel)]="responseStatusFilter" (ngModelChange)="applyFilters()">
+        <option value="">All statuses</option>
+        <option *ngFor="let opt of responseStatusOptions" [value]="opt.value">{{ opt.label }}</option>
+      </select>
+    </div>
+  </div>
+
+  <!-- Feedback -->
+  <div class="alert alert-danger" *ngIf="error">{{ error }}</div>
+  <div class="alert alert-success" *ngIf="successMessage">{{ successMessage }}</div>
+
+  <!-- Loading -->
+  <div class="loading-wrap" *ngIf="loading">
+    <div class="spinner"></div> Loading alerts…
+  </div>
+
+  <!-- Table -->
+  <div class="table-card" *ngIf="!loading">
+    <div class="empty-state" *ngIf="alerts.length === 0">
+      <span class="material-symbols-outlined empty-icon">local_shipping</span>
+      <span>No idle truck alerts found.</span>
+    </div>
+
+    <table class="table" *ngIf="alerts.length > 0">
+      <thead>
+        <tr>
+          <th>Truck</th>
+          <th>Driver</th>
+          <th>Alert Type</th>
+          <th>Accrued Deductions</th>
+          <th>Status</th>
+          <th>Created</th>
+          <th>Responded</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr *ngFor="let alert of alerts">
+          <td class="cell-truck">{{ alert.truckNumber || alert.vehicleId }}</td>
+          <td>{{ alert.driverName || alert.driverId || '—' }}</td>
+          <td>
+            <span class="badge" [ngClass]="getAlertTypeClass(alert.alertType)">
+              {{ getAlertTypeLabel(alert.alertType) }}
+            </span>
+          </td>
+          <td class="cell-amount">${{ alert.accruedDeductions.toFixed(2) }}</td>
+          <td>
+            <span class="badge" [ngClass]="getStatusClass(alert.responseStatus)">
+              {{ getStatusLabel(alert.responseStatus) }}
+            </span>
+          </td>
+          <td class="cell-date">{{ alert.createdAt }}</td>
+          <td class="cell-date">{{ alert.respondedAt || '—' }}</td>
+          <td class="cell-actions">
+            <button
+              *ngIf="alert.responseStatus === 'pending' || alert.responseStatus === 'acknowledged'"
+              class="btn-sm btn-respond"
+              type="button"
+              (click)="openRespondModal(alert)"
+            >
+              <span class="material-symbols-outlined">reply</span> Respond
+            </button>
+            <span class="cell-notes" *ngIf="alert.responseNotes">{{ alert.responseNotes }}</span>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p class="total-hint" *ngIf="!loading && total > 0">Showing {{ alerts.length }} of {{ total }} alerts</p>
+
+</div>
+
+<!-- Respond Modal -->
+<div class="modal-overlay" *ngIf="showRespondModal" (click)="closeRespondModal()">
+  <div class="modal-card" (click)="$event.stopPropagation()">
+    <div class="modal-header">
+      <h2>
+        <span class="material-symbols-outlined">reply</span>
+        Respond to Alert
+      </h2>
+    </div>
+    <div class="modal-body" *ngIf="respondingAlert">
+      <div class="alert-summary">
+        <div class="summary-row">
+          <span class="label">Truck</span>
+          <span class="value">{{ respondingAlert.truckNumber || respondingAlert.vehicleId }}</span>
+        </div>
+        <div class="summary-row">
+          <span class="label">Driver</span>
+          <span class="value">{{ respondingAlert.driverName || respondingAlert.driverId || '—' }}</span>
+        </div>
+        <div class="summary-row">
+          <span class="label">Accrued</span>
+          <span class="value amount-value">${{ respondingAlert.accruedDeductions.toFixed(2) }}</span>
+        </div>
+      </div>
+
+      <div class="form-group" style="margin-bottom: 14px;">
+        <label class="form-label">Response Status</label>
+        <select class="filter-select" [(ngModel)]="respondStatus">
+          <option *ngFor="let opt of respondStatusOptions" [value]="opt.value">{{ opt.label }}</option>
+        </select>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Notes (optional)</label>
+        <textarea
+          class="form-textarea"
+          [(ngModel)]="respondNotes"
+          rows="3"
+          placeholder="Add context or next steps…"
+        ></textarea>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-secondary" type="button" (click)="closeRespondModal()">
+        <span class="material-symbols-outlined">close</span> Cancel
+      </button>
+      <button class="btn-confirm" type="button" (click)="confirmRespond()" [disabled]="saving">
+        <span class="material-symbols-outlined">check</span>
+        {{ saving ? 'Saving…' : 'Confirm' }}
+      </button>
+    </div>
+  </div>
+</div>

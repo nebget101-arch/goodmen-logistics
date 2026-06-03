@@ -114,7 +114,9 @@
               <th>On Hand</th>
               <th>Reserved</th>
               <th>Available</th>
+              <th>Bin</th>
               <th>Status</th>
+              <th></th>
             </tr>
           </thead>
           <tbody>
@@ -124,10 +126,31 @@
               <td>{{ r.on_hand_qty }}</td>
               <td>{{ r.reserved_qty }}</td>
               <td>{{ r.available_qty }}</td>
+              <td class="bin-cell">
+                <span *ngIf="r.bin_code" class="bin-badge" title="{{ r.bin_name || r.bin_code }}">{{ r.bin_code }}</span>
+                <span *ngIf="!r.bin_code && r.bin_location" class="bin-legacy" title="Legacy bin location">{{ r.bin_location }}</span>
+                <span *ngIf="!r.bin_code && !r.bin_location" class="bin-none">—</span>
+              </td>
               <td>{{ r.status }}</td>
+              <td class="action-cell">
+                <button
+                  type="button"
+                  class="btn-edit-item"
+                  (click)="openEditDialog(r)"
+                  title="Edit bin / reorder level"
+                >Edit</button>
+              </td>
             </tr>
           </tbody>
         </table>
+
+        <!-- FN-705: Inventory item edit dialog -->
+        <app-inventory-item-edit-dialog
+          [item]="editingItem"
+          [isOpen]="showEditDialog"
+          (saved)="onItemSaved($event)"
+          (close)="closeEditDialog()"
+        ></app-inventory-item-edit-dialog>
       </div>
     </div>
 

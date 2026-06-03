@@ -1,0 +1,149 @@
+<!-- ─────────────────────────────────────────────────────────────────────────
+  FN-743 — Loads Hero CTA
+  Prominent entry-point panel: Upload PDF · Forward Email · Manual · Clone
+  ───────────────────────────────────────────────────────────────────────── -->
+
+<div class="hero-cta" role="region" aria-label="Create new load">
+
+  <!-- ── Primary row: Upload PDF + Forward Email ────────────────────────── -->
+  <div class="hero-primary-row">
+
+    <!-- Upload PDF (drag-drop zone) -->
+    <div
+      class="hero-card hero-card--upload"
+      [class.hero-card--drag-over]="isDragOver"
+      (dragover)="onDragOver($event)"
+      (dragleave)="onDragLeave($event)"
+      (drop)="onDrop($event)"
+    >
+      <div class="hero-card__badge">
+        <span class="material-symbols-outlined">auto_awesome</span>
+        AI-powered
+      </div>
+
+      <div class="hero-card__icon-wrap">
+        <span class="material-symbols-outlined">upload_file</span>
+      </div>
+
+      <h3 class="hero-card__title">Upload Rate Confirmation</h3>
+      <p class="hero-card__desc">
+        Drop 1–10 PDFs or click to browse — AI extracts load data in seconds.
+      </p>
+
+      <!-- Inner drop zone -->
+      <div class="upload-dropzone" [class.upload-dropzone--active]="isDragOver">
+        <span class="material-symbols-outlined upload-dropzone__cloud-icon">cloud_upload</span>
+        <span class="upload-dropzone__hint" *ngIf="!isDragOver">Drag &amp; drop PDFs here</span>
+        <span class="upload-dropzone__hint upload-dropzone__hint--drop" *ngIf="isDragOver">
+          <span class="material-symbols-outlined">download</span>
+          Release to upload
+        </span>
+        <label class="upload-dropzone__browse-btn" role="button" tabindex="0">
+          <span class="material-symbols-outlined">folder_open</span>
+          Browse files
+          <input
+            #heroFileInput
+            type="file"
+            accept="application/pdf"
+            multiple
+            (change)="onFileInput($event, heroFileInput)"
+          >
+        </label>
+        <span class="upload-dropzone__limit">Max 10 PDFs · PDF only</span>
+      </div>
+    </div>
+
+    <!-- Forward Email -->
+    <button
+      type="button"
+      class="hero-card hero-card--email"
+      (click)="openForwardEmailModal()"
+    >
+      <div class="hero-card__icon-wrap hero-card__icon-wrap--email">
+        <span class="material-symbols-outlined">forward_to_inbox</span>
+      </div>
+
+      <h3 class="hero-card__title">Forward Email</h3>
+      <p class="hero-card__desc">
+        Forward rate confirmations to your dedicated inbox — loads are created automatically.
+      </p>
+
+      <div class="hero-card__cta-pill">
+        <span class="material-symbols-outlined">mail</span>
+        Get Inbound Address
+        <span class="material-symbols-outlined hero-card__cta-arrow">arrow_forward</span>
+      </div>
+    </button>
+
+  </div>
+
+  <!-- ── Secondary row: Create Manually + Clone Existing Load ───────────── -->
+  <div class="hero-secondary-row">
+
+    <button type="button" class="hero-tile hero-tile--manual" (click)="onManualCreate()">
+      <span class="hero-tile__icon material-symbols-outlined">edit_note</span>
+      <span class="hero-tile__body">
+        <span class="hero-tile__title">Create Manually</span>
+        <span class="hero-tile__desc">4-step wizard — full control over all fields</span>
+      </span>
+      <span class="material-symbols-outlined hero-tile__arrow">chevron_right</span>
+    </button>
+
+    <button type="button" class="hero-tile hero-tile--clone" (click)="onCloneLoad()">
+      <span class="hero-tile__icon material-symbols-outlined">content_copy</span>
+      <span class="hero-tile__body">
+        <span class="hero-tile__title">Clone Existing Load</span>
+        <span class="hero-tile__desc">Duplicate a previous load and edit as needed</span>
+      </span>
+      <span class="material-symbols-outlined hero-tile__arrow">chevron_right</span>
+    </button>
+
+  </div>
+
+</div>
+
+<!-- ── Forward Email modal (stub — real address wired in FN-726) ──────── -->
+<div
+  class="hero-modal-overlay"
+  *ngIf="showForwardEmailModal"
+  (click)="closeForwardEmailModal()"
+  role="dialog"
+  aria-modal="true"
+  aria-label="Forward email address"
+>
+  <div class="hero-modal email-modal" (click)="$event.stopPropagation()">
+
+    <div class="hero-modal__header">
+      <span class="material-symbols-outlined email-modal__header-icon">forward_to_inbox</span>
+      <h3>Your Inbound Email Address</h3>
+      <button
+        type="button"
+        class="hero-modal__close"
+        (click)="closeForwardEmailModal()"
+        aria-label="Close"
+      >
+        <span class="material-symbols-outlined">close</span>
+      </button>
+    </div>
+
+    <div class="hero-modal__body">
+      <p class="email-modal__desc">
+        Forward any rate confirmation email with a PDF attachment to this address.
+        FleetNeuron will parse the attachment and automatically create a draft load for review.
+      </p>
+
+      <div class="email-modal__address-row">
+        <code class="email-modal__address">{{ tenantInboundEmail }}</code>
+        <button type="button" class="copy-btn" title="Copy address">
+          <span class="material-symbols-outlined">content_copy</span>
+        </button>
+      </div>
+
+      <div class="email-modal__notice">
+        <span class="material-symbols-outlined">info</span>
+        Personalized addresses coming soon. Contact support to configure your dedicated inbox.
+      </div>
+    </div>
+
+  </div>
+</div>

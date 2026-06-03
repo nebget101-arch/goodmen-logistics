@@ -1,0 +1,561 @@
+/* ──────────────────────────────────────────────────────────────────────────
+   FN-866 / FN-881 — Load Wizard Step 4 (Attachments)
+
+   Modelled after `step-attachments.component.scss` (legacy FN-736 step) but
+   scoped under `.wa-*` so the two UIs can co-exist until S10 removes the
+   legacy modal.
+   ────────────────────────────────────────────────────────────────────────── */
+
+:host {
+  display: block;
+}
+
+.wa-container {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding: 28px 32px;
+  color: #e2e8f0;
+  min-height: 280px;
+}
+
+/* ── Header ───────────────────────────────────────────────────────────── */
+
+.wa-header {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.wa-title-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.wa-title {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 600;
+  color: #38bdf8;
+  letter-spacing: 0.01em;
+}
+
+.wa-count {
+  font-size: 0.78rem;
+  font-weight: 500;
+  color: #38bdf8;
+  background: rgba(56, 189, 248, 0.1);
+  padding: 2px 8px;
+  border-radius: 10px;
+}
+
+.wa-subtitle {
+  margin: 0;
+  font-size: 0.82rem;
+  color: #94a3b8;
+  line-height: 1.4;
+}
+
+/* ── Sub-section titles ──────────────────────────────────────────────── */
+
+.wa-subsection-title {
+  margin: 4px 0 0;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: #94a3b8;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+/* ── Drop zone ───────────────────────────────────────────────────────── */
+
+.wa-dropzone {
+  position: relative;
+  border: 2px dashed rgba(51, 65, 85, 0.6);
+  border-radius: 12px;
+  padding: 32px 24px;
+  text-align: center;
+  cursor: pointer;
+  transition: border-color 0.2s, background 0.2s;
+  background: rgba(15, 23, 42, 0.4);
+
+  &:hover {
+    border-color: rgba(56, 189, 248, 0.35);
+    background: rgba(56, 189, 248, 0.04);
+  }
+
+  &.is-drag-over {
+    border-color: #38bdf8;
+    background: rgba(56, 189, 248, 0.08);
+    border-style: solid;
+  }
+}
+
+.wa-dropzone-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+.wa-dropzone-icon {
+  font-size: 2.4rem;
+  color: #475569;
+  transition: color 0.2s;
+
+  .wa-dropzone:hover &,
+  .wa-dropzone.is-drag-over & {
+    color: #38bdf8;
+  }
+}
+
+.wa-dropzone-label {
+  margin: 0;
+  font-size: 0.92rem;
+  font-weight: 500;
+  color: #94a3b8;
+}
+
+.wa-dropzone-divider {
+  font-size: 0.78rem;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.wa-browse-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 7px 18px;
+  border-radius: 8px;
+  font-size: 0.84rem;
+  font-weight: 500;
+  cursor: pointer;
+  background: rgba(56, 189, 248, 0.1);
+  border: 1px solid rgba(56, 189, 248, 0.3);
+  color: #38bdf8;
+  transition: background 0.14s, border-color 0.14s;
+
+  &:hover {
+    background: rgba(56, 189, 248, 0.18);
+    border-color: #38bdf8;
+  }
+}
+
+.wa-file-input {
+  position: absolute;
+  width: 0;
+  height: 0;
+  overflow: hidden;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.wa-dropzone-hint {
+  margin: 4px 0 0;
+  font-size: 0.72rem;
+  color: #64748b;
+}
+
+/* ── File list (shared: existing + queued) ───────────────────────────── */
+
+.wa-file-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.wa-file-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 14px;
+  background: rgba(15, 23, 42, 0.6);
+  border: 1px solid rgba(51, 65, 85, 0.5);
+  border-radius: 10px;
+  transition: border-color 0.15s;
+
+  &:hover {
+    border-color: rgba(51, 65, 85, 0.8);
+  }
+
+  &.has-error {
+    border-color: rgba(239, 68, 68, 0.45);
+    background: rgba(239, 68, 68, 0.05);
+  }
+}
+
+.wa-existing-card {
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+/* ── File info row ───────────────────────────────────────────────────── */
+
+.wa-file-info {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  flex: 1;
+}
+
+.wa-file-icon {
+  font-size: 1.5rem;
+  color: #38bdf8;
+  flex-shrink: 0;
+}
+
+.wa-file-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.wa-file-name {
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: #e2e8f0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-decoration: none;
+
+  &:is(a) {
+    color: #60a5fa;
+
+    &:hover {
+      text-decoration: underline;
+    }
+  }
+}
+
+.wa-file-sub {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.72rem;
+  color: #64748b;
+}
+
+.wa-type-chip {
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #94a3b8;
+  background: rgba(51, 65, 85, 0.5);
+  border: 1px solid rgba(51, 65, 85, 0.8);
+  padding: 1px 6px;
+  border-radius: 999px;
+}
+
+.wa-status {
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 1px 6px;
+  border-radius: 999px;
+}
+
+.wa-status-ok {
+  color: #4ade80;
+  background: rgba(74, 222, 128, 0.1);
+  border: 1px solid rgba(74, 222, 128, 0.3);
+}
+
+/* ── Progress ────────────────────────────────────────────────────────── */
+
+.wa-progress {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.wa-progress-track {
+  flex: 1;
+  height: 4px;
+  background: rgba(51, 65, 85, 0.5);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.wa-progress-fill {
+  height: 100%;
+  background: #38bdf8;
+  border-radius: 2px;
+  transition: width 0.2s ease-out;
+}
+
+.wa-progress-text {
+  font-size: 0.72rem;
+  color: #94a3b8;
+  min-width: 36px;
+  text-align: right;
+}
+
+/* ── Error row ───────────────────────────────────────────────────────── */
+
+.wa-error-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: rgba(239, 68, 68, 0.08);
+  border: 1px solid rgba(239, 68, 68, 0.25);
+  color: #fca5a5;
+  font-size: 0.8rem;
+}
+
+.wa-error-icon {
+  font-size: 1.1rem;
+  color: #f87171;
+}
+
+.wa-error-text {
+  flex: 1;
+}
+
+/* ── Per-file controls ──────────────────────────────────────────────── */
+
+.wa-file-controls {
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.wa-control-group {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.wa-control-label {
+  font-size: 0.7rem;
+  font-weight: 500;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.wa-select {
+  appearance: none;
+  -webkit-appearance: none;
+  background:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%2394a3b8'/%3E%3C/svg%3E")
+    no-repeat right 8px center,
+    rgba(15, 23, 42, 0.8);
+  border: 1px solid rgba(51, 65, 85, 0.6);
+  border-radius: 6px;
+  padding: 6px 28px 6px 10px;
+  font-size: 0.82rem;
+  color: #e2e8f0;
+  min-width: 160px;
+  cursor: pointer;
+  transition: border-color 0.15s;
+
+  &:focus {
+    outline: none;
+    border-color: #38bdf8;
+  }
+
+  &:hover:not(:disabled) {
+    border-color: rgba(56, 189, 248, 0.35);
+  }
+
+  &:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
+
+  option {
+    background: #0f172a;
+    color: #e2e8f0;
+  }
+}
+
+.wa-notes-group {
+  flex: 1;
+  min-width: 140px;
+}
+
+.wa-input {
+  background: rgba(15, 23, 42, 0.8);
+  border: 1px solid rgba(51, 65, 85, 0.6);
+  border-radius: 6px;
+  padding: 6px 10px;
+  font-size: 0.82rem;
+  color: #e2e8f0;
+  width: 100%;
+  transition: border-color 0.15s;
+
+  &::placeholder {
+    color: #475569;
+  }
+
+  &:focus {
+    outline: none;
+    border-color: #38bdf8;
+  }
+
+  &:hover:not(:disabled) {
+    border-color: rgba(56, 189, 248, 0.35);
+  }
+
+  &:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
+}
+
+/* ── Buttons / row actions ───────────────────────────────────────────── */
+
+.wa-row-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.wa-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 1px solid rgba(51, 65, 85, 0.5);
+  border-radius: 6px;
+  padding: 5px;
+  color: #64748b;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s, background 0.15s;
+  flex-shrink: 0;
+
+  .material-symbols-outlined {
+    font-size: 1.05rem;
+  }
+
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+}
+
+.wa-icon-danger {
+  border-color: rgba(239, 68, 68, 0.3);
+
+  &:hover:not(:disabled) {
+    color: #f87171;
+    border-color: rgba(239, 68, 68, 0.6);
+    background: rgba(239, 68, 68, 0.08);
+  }
+}
+
+.wa-btn {
+  font-size: 0.78rem;
+  font-weight: 500;
+  padding: 5px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+
+  &:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
+}
+
+.wa-btn-danger {
+  background: rgba(239, 68, 68, 0.12);
+  border-color: rgba(239, 68, 68, 0.5);
+  color: #fca5a5;
+
+  &:hover:not(:disabled) {
+    background: rgba(239, 68, 68, 0.2);
+    border-color: #ef4444;
+    color: #fecaca;
+  }
+}
+
+.wa-btn-ghost {
+  background: transparent;
+  border-color: rgba(51, 65, 85, 0.6);
+  color: #94a3b8;
+
+  &:hover:not(:disabled) {
+    background: rgba(51, 65, 85, 0.4);
+    color: #e2e8f0;
+  }
+}
+
+.wa-confirm-text {
+  font-size: 0.78rem;
+  color: #fca5a5;
+  font-weight: 500;
+}
+
+/* ── Empty state ─────────────────────────────────────────────────────── */
+
+.wa-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 20px;
+  text-align: center;
+}
+
+.wa-empty-icon {
+  font-size: 2rem;
+  color: #334155;
+}
+
+.wa-empty-text {
+  margin: 0;
+  font-size: 0.82rem;
+  color: #64748b;
+  max-width: 320px;
+  line-height: 1.4;
+}
+
+/* ── Responsive ──────────────────────────────────────────────────────── */
+
+@media (max-width: 600px) {
+  .wa-container {
+    padding: 20px 16px;
+  }
+
+  .wa-dropzone {
+    padding: 24px 16px;
+  }
+
+  .wa-file-controls {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .wa-select {
+    min-width: unset;
+    width: 100%;
+  }
+
+  .wa-existing-card {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .wa-row-actions {
+    justify-content: flex-end;
+  }
+}

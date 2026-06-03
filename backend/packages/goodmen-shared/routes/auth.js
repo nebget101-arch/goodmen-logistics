@@ -72,8 +72,27 @@ router.post('/login', async (req, res) => {
     }
     const match = await bcrypt.compare(password, user.password_hash);
     if (!match) return res.status(401).json({ error: 'Invalid credentials' });
+
+    // FN-811: include tenant_id in JWT so gateway WS handshake can scope
+    // sockets to `tenant:<id>` without a DB round-trip.
+    let tenantId = user.tenant_id || null;
+    if (!tenantId) {
+      try {
+        const defaultCtx = await tenantContextService.getDefaultContextForUser(knex, user.id);
+        tenantId = defaultCtx?.tenant?.tenant_id || defaultCtx?.tenant?.id || null;
+      } catch (ctxErr) {
+        // Fall through with null tenantId; WS connect will fail gracefully.
+      }
+    }
+
     const token = jwt.sign(
-      { id: user.id, role: user.role, username: user.username, driver_id: user.driver_id || null },
+      {
+        id: user.id,
+        role: user.role,
+        username: user.username,
+        driver_id: user.driver_id || null,
+        tenant_id: tenantId
+      },
       JWT_SECRET,
       { expiresIn: '8h' }
     );
@@ -107,7 +126,7 @@ router.post('/login', async (req, res) => {
  *       content:
  *         application/json:
  *           schema:
-    const isGlobalAdmin = roles.includes('super_admin');
+ *             type: object
  *             required: [email]
  *             properties:
  *               email:
@@ -405,6 +424,77 @@ router.post('/contact', async (req, res) => {
   }
 });
 
+/**
+ * @openapi
+ * /api/auth/me:
+ *   get:
+ *     summary: Get full session context for the authenticated user
+ *     description: >
+ *       Returns the unified session bootstrap payload including user profile, RBAC roles and permissions,
+ *       assigned locations, tenant context, subscription plan, and accessible operating entities.
+ *       The frontend calls this after login to hydrate the application state.
+ *       The bearer token is a JWT issued by POST /api/auth/login with an 8-hour TTL.
+ *       There is no refresh-token flow; when the token expires the user must re-authenticate.
+ *     tags:
+ *       - Auth
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Session context payload
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean }
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     user:
+ *                       type: object
+ *                       properties:
+ *                         id: { type: string, format: uuid }
+ *                         username: { type: string }
+ *                         firstName: { type: string, nullable: true }
+ *                         lastName: { type: string, nullable: true }
+ *                         email: { type: string, nullable: true }
+ *                         role: { type: string, nullable: true }
+ *                     roles:
+ *                       type: array
+ *                       items: { type: string }
+ *                     permissions:
+ *                       type: array
+ *                       items: { type: string }
+ *                     locations:
+ *                       type: array
+ *                       items:
+ *                         type: object
+ *                         properties:
+ *                           id: { type: string, format: uuid }
+ *                           name: { type: string }
+ *                     tenantId: { type: string, format: uuid, nullable: true }
+ *                     tenantName: { type: string, nullable: true }
+ *                     subscriptionPlanId: { type: string }
+ *                     subscriptionPlan: { type: object, nullable: true }
+ *                     accessibleOperatingEntities:
+ *                       type: array
+ *                       items:
+ *                         type: object
+ *                         properties:
+ *                           id: { type: string, format: uuid }
+ *                           name: { type: string }
+ *                           mcNumber: { type: string, nullable: true }
+ *                           dotNumber: { type: string, nullable: true }
+ *                           isDefault: { type: boolean }
+ *                     selectedOperatingEntityId: { type: string, format: uuid, nullable: true }
+ *       401:
+ *         description: Unauthorized — missing or expired token
+ *       404:
+ *         description: User not found in database
+ *       503:
+ *         description: Database not available
+ */
 // GET /auth/me
 // Unified session/access/context payload for frontend bootstrap.
 router.get('/me', authMiddleware, async (req, res) => {

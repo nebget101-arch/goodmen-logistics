@@ -24,7 +24,9 @@ const routes: Routes = [
       { path: 'expenses', component: ReportViewComponent, data: { reportKey: 'expenses' } },
       { path: 'gross-profit', component: ReportViewComponent, data: { reportKey: 'gross-profit' } },
       { path: 'gross-profit-per-load', component: ReportViewComponent, data: { reportKey: 'gross-profit-per-load' } },
-      { path: 'profit-loss', component: ReportViewComponent, data: { reportKey: 'profit-loss' } }
+      { path: 'profit-loss', component: ReportViewComponent, data: { reportKey: 'profit-loss' } },
+      { path: 'direct-load-profit', component: ReportViewComponent, data: { reportKey: 'direct-load-profit' } },
+      { path: 'fully-loaded-profit', component: ReportViewComponent, data: { reportKey: 'fully-loaded-profit' } }
     ]
   }
 ];

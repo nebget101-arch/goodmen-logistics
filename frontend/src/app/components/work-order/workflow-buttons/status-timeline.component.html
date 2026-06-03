@@ -1,0 +1,33 @@
+<div class="status-timeline">
+  <!-- Main flow steps -->
+  <ng-container *ngFor="let step of mainSteps; let i = index; let last = last">
+    <div class="timeline-step" [ngClass]="'timeline-' + step.state">
+      <div class="timeline-circle">
+        <span *ngIf="step.state === 'past'" class="timeline-check">&#10003;</span>
+        <span *ngIf="step.state === 'current'" class="timeline-dot"></span>
+      </div>
+      <span class="timeline-label">{{ step.label }}</span>
+    </div>
+    <div *ngIf="!last" class="timeline-connector" [ngClass]="{
+      'connector-done': step.state === 'past'
+    }"></div>
+
+    <!-- Waiting Parts branch (shown after In Progress) -->
+    <ng-container *ngIf="step.status === 'IN_PROGRESS' && isWaitingParts">
+      <div class="timeline-branch">
+        <div class="branch-connector"></div>
+        <div class="timeline-step timeline-current timeline-branch-step">
+          <div class="timeline-circle timeline-circle-amber">
+            <span class="timeline-dot"></span>
+          </div>
+          <span class="timeline-label">Waiting Parts</span>
+        </div>
+      </div>
+    </ng-container>
+  </ng-container>
+
+  <!-- Canceled badge -->
+  <div *ngIf="isCanceled" class="timeline-canceled">
+    <span class="timeline-canceled-badge">Canceled</span>
+  </div>
+</div>

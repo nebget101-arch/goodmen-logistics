@@ -1,0 +1,153 @@
+<!-- FN-702: Delete Location Dialog — dependency detection + soft vs hard delete -->
+<div class="dld-backdrop" *ngIf="isOpen && location" (click)="onBackdropClick($event)">
+  <div class="dld-modal" role="dialog" aria-modal="true" [attr.aria-label]="'Delete ' + location.name">
+
+    <!-- ═══════════════════════════════════════════════════════════════════ -->
+    <!-- PHASE 1 — confirm                                                   -->
+    <!-- ═══════════════════════════════════════════════════════════════════ -->
+    <ng-container *ngIf="phase === 'confirm'">
+
+      <div class="dld-header dld-header--danger">
+        <span class="material-symbols-outlined dld-header-icon">delete_forever</span>
+        <span class="dld-title">Delete Location</span>
+        <button class="dld-close-btn" type="button" (click)="onClose()" [disabled]="inFlight" aria-label="Close">
+          <span class="material-symbols-outlined">close</span>
+        </button>
+      </div>
+
+      <div class="dld-body">
+        <p class="dld-confirm-text">
+          Are you sure you want to delete
+          <strong class="dld-location-name">{{ location.name }}</strong>?
+        </p>
+        <p class="dld-confirm-sub">
+          If this location has no associated records, it will be permanently removed.
+          If it has linked data, you'll be offered the option to deactivate it instead.
+        </p>
+        <div class="dld-type-pill">
+          <span class="material-symbols-outlined">location_on</span>
+          {{ location.location_type || 'Unknown type' }}
+          <ng-container *ngIf="location.city || location.state">
+            — {{ cityState(location) }}
+          </ng-container>
+        </div>
+
+        <!-- Inline error -->
+        <div *ngIf="errorMsg" class="dld-alert-error">
+          <span class="material-symbols-outlined">error</span>
+          {{ errorMsg }}
+        </div>
+      </div>
+
+      <div class="dld-footer">
+        <button class="dld-btn" type="button" [disabled]="inFlight" (click)="onClose()">
+          Cancel
+        </button>
+        <button
+          class="dld-btn dld-btn--danger"
+          type="button"
+          [disabled]="inFlight"
+          (click)="onConfirmDelete()"
+        >
+          <span *ngIf="inFlight" class="dld-spinner"></span>
+          <span *ngIf="!inFlight" class="material-symbols-outlined">delete_forever</span>
+          {{ inFlight ? 'Checking…' : 'Delete' }}
+        </button>
+      </div>
+
+    </ng-container>
+
+    <!-- ═══════════════════════════════════════════════════════════════════ -->
+    <!-- PHASE 2 — has_deps: dependency warning + soft-delete offer          -->
+    <!-- ═══════════════════════════════════════════════════════════════════ -->
+    <ng-container *ngIf="phase === 'has_deps'">
+
+      <div class="dld-header dld-header--warning">
+        <span class="material-symbols-outlined dld-header-icon">warning</span>
+        <span class="dld-title">Location Has Active Records</span>
+        <button class="dld-close-btn" type="button" (click)="onClose()" [disabled]="inFlight" aria-label="Close">
+          <span class="material-symbols-outlined">close</span>
+        </button>
+      </div>
+
+      <div class="dld-body">
+        <p class="dld-warning-text">
+          <strong>{{ location.name }}</strong> cannot be permanently deleted because it still
+          has linked records. You can <strong>mark it inactive</strong> to hide it from new
+          assignments while preserving its history.
+        </p>
+
+        <!-- Dependency summary grid -->
+        <div class="dld-dep-grid">
+          <div
+            *ngFor="let key of depKeys"
+            class="dld-dep-item"
+            [class.dld-dep-item--active]="hasDep(key)"
+          >
+            <span class="material-symbols-outlined dld-dep-icon">{{ depIcons[key] }}</span>
+            <div class="dld-dep-info">
+              <span class="dld-dep-count">{{ dependencies?.[key] ?? 0 }}</span>
+              <span class="dld-dep-label">{{ depNames[key] }}</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Inline error -->
+        <div *ngIf="errorMsg" class="dld-alert-error">
+          <span class="material-symbols-outlined">error</span>
+          {{ errorMsg }}
+        </div>
+      </div>
+
+      <div class="dld-footer">
+        <button class="dld-btn" type="button" [disabled]="inFlight" (click)="onClose()">
+          Cancel
+        </button>
+        <button
+          class="dld-btn dld-btn--warning"
+          type="button"
+          [disabled]="inFlight"
+          (click)="onMarkInactive()"
+        >
+          <span *ngIf="inFlight" class="dld-spinner dld-spinner--amber"></span>
+          <span *ngIf="!inFlight" class="material-symbols-outlined">visibility_off</span>
+          {{ inFlight ? 'Saving…' : 'Mark Inactive' }}
+        </button>
+      </div>
+
+    </ng-container>
+
+    <!-- ═══════════════════════════════════════════════════════════════════ -->
+    <!-- PHASE 3 — done: success confirmation                                -->
+    <!-- ═══════════════════════════════════════════════════════════════════ -->
+    <ng-container *ngIf="phase === 'done'">
+
+      <div class="dld-header dld-header--success">
+        <span class="material-symbols-outlined dld-header-icon">check_circle</span>
+        <span class="dld-title">{{ wasHardDeleted ? 'Location Deleted' : 'Location Deactivated' }}</span>
+      </div>
+
+      <div class="dld-body dld-body--center">
+        <span class="material-symbols-outlined dld-done-icon">
+          {{ wasHardDeleted ? 'delete_forever' : 'visibility_off' }}
+        </span>
+        <p class="dld-done-text" *ngIf="wasHardDeleted">
+          <strong>{{ location.name }}</strong> has been permanently deleted.
+        </p>
+        <p class="dld-done-text" *ngIf="!wasHardDeleted">
+          <strong>{{ location.name }}</strong> has been marked inactive and will no longer
+          appear in active location lists.
+        </p>
+      </div>
+
+      <div class="dld-footer dld-footer--center">
+        <button class="dld-btn dld-btn--primary" type="button" (click)="onClose()">
+          <span class="material-symbols-outlined">done</span>
+          Close
+        </button>
+      </div>
+
+    </ng-container>
+
+  </div><!-- /dld-modal -->
+</div><!-- /dld-backdrop -->

@@ -209,6 +209,82 @@
   color: #fca5a5;
 }
 
+/* Ownership chips — reuse existing AI dark-theme tokens (teal / amber / blue);
+   no new hex values introduced (FN-1351 precedent). */
+.vehicles-dashboard .chip-ownership {
+  letter-spacing: 0.04em;
+}
+
+.vehicles-dashboard .chip-ownership--company {
+  background: rgba(20, 184, 166, 0.18);
+  border: 1px solid rgba(20, 184, 166, 0.5);
+  color: #5eead4;
+}
+
+.vehicles-dashboard .chip-ownership--oo {
+  background: rgba(245, 158, 11, 0.2);
+  border: 1px solid rgba(245, 158, 11, 0.5);
+  color: #fcd34d;
+}
+
+.vehicles-dashboard .chip-ownership--leased {
+  background: rgba(59, 130, 246, 0.22);
+  border: 1px solid rgba(59, 130, 246, 0.55);
+  color: #93c5fd;
+}
+
+.vehicles-dashboard .owner-name {
+  display: block;
+  margin-top: 4px;
+  font-size: 11px;
+  color: var(--text-light);
+  font-weight: 400;
+  white-space: nowrap;
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Ownership filter chip-set — sibling of the smart-filter-chip pattern */
+.vehicles-dashboard .ownership-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 12px;
+}
+
+.vehicles-dashboard .ownership-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 12px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  background: rgba(15, 23, 42, 0.5);
+  border: 1px solid rgba(51, 65, 85, 0.5);
+  color: #94a3b8;
+  transition: background 0.13s, border-color 0.13s, color 0.13s;
+}
+
+.vehicles-dashboard .ownership-chip:hover {
+  background: rgba(20, 184, 166, 0.08);
+  border-color: rgba(20, 184, 166, 0.35);
+  color: #5eead4;
+}
+
+.vehicles-dashboard .ownership-chip--active {
+  background: rgba(20, 184, 166, 0.18);
+  border-color: rgba(20, 184, 166, 0.6);
+  color: #2dd4bf;
+}
+
+.vehicles-dashboard .ownership-chip:focus-visible {
+  outline: 2px solid rgba(20, 184, 166, 0.7);
+  outline-offset: 2px;
+}
+
 /* ============================================
    Loading State
    ============================================ */
@@ -329,13 +405,17 @@
    ============================================ */
 .vehicles-dashboard .table-responsive {
   overflow-x: auto;
+  /* Bound vertical scroll so the thead can stick on long lists. */
+  max-height: calc(100vh - 360px);
+  overflow-y: auto;
   margin: 0 20px 0;
   padding-right: 24px;
 }
 
 .vehicles-dashboard .vehicles-table {
   width: 100%;
-  border-collapse: collapse;
+  border-collapse: separate;
+  border-spacing: 0;
   background: transparent;
 }
 
@@ -345,7 +425,11 @@
 }
 
 .vehicles-dashboard .vehicles-table th {
-  padding: 12px 12px;
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: rgba(15, 23, 42, 0.96);
+  padding: 10px 12px;
   text-align: left;
   font-weight: 600;
   color: var(--text-light);
@@ -353,6 +437,7 @@
   text-transform: uppercase;
   letter-spacing: 0.05em;
   white-space: nowrap;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.25);
 }
 
 .vehicles-dashboard .vehicles-table th.sortable {
@@ -376,11 +461,12 @@
 }
 
 .vehicles-dashboard .vehicles-table td {
-  padding: 14px 12px;
+  padding: 10px 12px;
   border-bottom: 1px solid rgba(148, 163, 184, 0.15);
   vertical-align: middle;
   color: var(--text-dark);
   font-size: 13px;
+  line-height: 1.35;
 }
 
 /* Keep Actions column (header + cells) inside the card border */
@@ -419,6 +505,12 @@
 .vehicles-dashboard .vehicle-plate {
   color: var(--text-light);
   font-size: 12px;
+}
+
+.vehicles-dashboard .vehicle-driver {
+  color: var(--text-light);
+  font-size: 12px;
+  font-style: italic;
 }
 
 .vehicles-dashboard .vin-text {
@@ -646,8 +738,18 @@
     min-width: 44px;
   }
 
+  /* Card layout on mobile — turn the sticky bound off so the page scrolls naturally */
+  .vehicles-dashboard .table-responsive {
+    max-height: none;
+    overflow-y: visible;
+  }
+
   .vehicles-dashboard .vehicles-table thead {
     display: none;
+  }
+
+  .vehicles-dashboard .vehicles-table th {
+    position: static;
   }
 
   .vehicles-dashboard .vehicles-table,
@@ -1148,6 +1250,233 @@
   text-decoration: underline;
 }
 
+/* ----- FN-1390: Maintenance History tab ----- */
+
+.vehicles-details-modal .detail-tabs {
+  display: flex;
+  gap: 4px;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.25);
+  margin: 0 0 18px 0;
+  padding: 0 0 0 0;
+}
+
+.vehicles-details-modal .detail-tab {
+  appearance: none;
+  background: transparent;
+  border: none;
+  color: rgba(148, 163, 184, 0.85);
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  padding: 10px 14px;
+  border-radius: 10px 10px 0 0;
+  cursor: pointer;
+  transition: color 120ms ease, background-color 120ms ease, border-color 120ms ease;
+  border-bottom: 2px solid transparent;
+}
+
+.vehicles-details-modal .detail-tab:hover {
+  color: rgba(226, 232, 240, 0.95);
+  background: rgba(59, 130, 246, 0.08);
+}
+
+.vehicles-details-modal .detail-tab.is-active {
+  color: rgba(226, 232, 240, 1);
+  border-bottom-color: rgba(59, 130, 246, 0.85);
+}
+
+.vehicles-details-modal .detail-tab:focus-visible {
+  outline: 2px solid rgba(59, 130, 246, 0.6);
+  outline-offset: 2px;
+}
+
+.vehicles-details-modal .maintenance-history-tab {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.vehicles-details-modal .maintenance-header-strip {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  background: rgba(30, 41, 59, 0.5);
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  border-left: 4px solid rgba(59, 130, 246, 0.6);
+  border-radius: 12px;
+  padding: 14px 18px;
+}
+
+.vehicles-details-modal .maintenance-kpi {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.vehicles-details-modal .maintenance-kpi-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: rgba(148, 163, 184, 0.85);
+}
+
+.vehicles-details-modal .maintenance-kpi-value {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text-dark);
+}
+
+.vehicles-details-modal .maintenance-state {
+  padding: 18px;
+  border-radius: 12px;
+  text-align: center;
+  font-size: 13px;
+  background: rgba(30, 41, 59, 0.4);
+  border: 1px dashed rgba(148, 163, 184, 0.3);
+  color: rgba(203, 213, 225, 0.85);
+}
+
+.vehicles-details-modal .maintenance-state--error {
+  border-style: solid;
+  border-color: rgba(239, 68, 68, 0.5);
+  color: rgba(252, 165, 165, 0.95);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: center;
+}
+
+.vehicles-details-modal .maintenance-state--empty {
+  color: rgba(148, 163, 184, 0.95);
+}
+
+.vehicles-details-modal .maintenance-table-wrapper {
+  background: rgba(30, 41, 59, 0.5);
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.vehicles-details-modal .maintenance-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12.5px;
+  color: var(--text-dark);
+}
+
+.vehicles-details-modal .maintenance-table thead th {
+  background: rgba(15, 23, 42, 0.6);
+  color: rgba(148, 163, 184, 0.95);
+  font-weight: 600;
+  text-transform: uppercase;
+  font-size: 10.5px;
+  letter-spacing: 0.06em;
+  text-align: left;
+  padding: 10px 12px;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.25);
+}
+
+.vehicles-details-modal .maintenance-table thead th.num,
+.vehicles-details-modal .maintenance-table tbody td.num {
+  text-align: right;
+}
+
+.vehicles-details-modal .maintenance-table tbody td {
+  padding: 10px 12px;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.12);
+}
+
+.vehicles-details-modal .maintenance-row {
+  cursor: pointer;
+  transition: background-color 120ms ease;
+}
+
+.vehicles-details-modal .maintenance-row:hover,
+.vehicles-details-modal .maintenance-row:focus-visible {
+  background: rgba(59, 130, 246, 0.1);
+  outline: none;
+}
+
+.vehicles-details-modal .maintenance-row:focus-visible {
+  box-shadow: inset 0 0 0 2px rgba(59, 130, 246, 0.6);
+}
+
+.vehicles-details-modal .maintenance-title-cell {
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.vehicles-details-modal .invoice-pill {
+  appearance: none;
+  border: 1px solid rgba(59, 130, 246, 0.5);
+  background: rgba(59, 130, 246, 0.12);
+  color: rgba(191, 219, 254, 1);
+  border-radius: 999px;
+  padding: 4px 10px;
+  font-size: 11.5px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color 120ms ease, border-color 120ms ease;
+}
+
+.vehicles-details-modal .invoice-pill:hover {
+  background: rgba(59, 130, 246, 0.22);
+  border-color: rgba(59, 130, 246, 0.75);
+}
+
+.vehicles-details-modal .invoice-pill:focus-visible {
+  outline: 2px solid rgba(59, 130, 246, 0.6);
+  outline-offset: 2px;
+}
+
+.vehicles-details-modal .invoice-pill-empty {
+  color: rgba(148, 163, 184, 0.7);
+  font-size: 12px;
+}
+
+.vehicles-details-modal .badge.badge-info {
+  background: rgba(59, 130, 246, 0.18);
+  color: rgba(191, 219, 254, 1);
+  border: 1px solid rgba(59, 130, 246, 0.4);
+}
+
+.vehicles-details-modal .badge.badge-warning {
+  background: rgba(234, 179, 8, 0.16);
+  color: rgba(253, 224, 71, 1);
+  border: 1px solid rgba(234, 179, 8, 0.4);
+}
+
+.vehicles-details-modal .badge.badge-muted {
+  background: rgba(148, 163, 184, 0.18);
+  color: rgba(203, 213, 225, 0.95);
+  border: 1px solid rgba(148, 163, 184, 0.4);
+}
+
+.vehicles-details-modal .maintenance-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  padding: 10px 12px;
+  border-top: 1px solid rgba(148, 163, 184, 0.15);
+}
+
+.vehicles-details-modal .maintenance-page-indicator {
+  font-size: 12px;
+  color: rgba(148, 163, 184, 0.95);
+}
+
+.vehicles-details-modal .btn-link {
+  background: transparent;
+  border: none;
+  color: rgba(96, 165, 250, 1);
+  cursor: pointer;
+  font-size: 12px;
+  text-decoration: underline;
+}
+
 @media (max-width: 768px) {
   .vehicles-details-modal .details-grid {
     grid-template-columns: 1fr;
@@ -1159,5 +1488,18 @@
   .vehicles-details-modal .safety-history-item {
     grid-template-columns: 1fr;
     gap: 4px;
+  }
+  .vehicles-details-modal .maintenance-header-strip {
+    grid-template-columns: 1fr;
+  }
+  .vehicles-details-modal .maintenance-table {
+    font-size: 11.5px;
+  }
+  .vehicles-details-modal .maintenance-table thead th,
+  .vehicles-details-modal .maintenance-table tbody td {
+    padding: 8px 8px;
+  }
+  .vehicles-details-modal .maintenance-title-cell {
+    max-width: 140px;
   }
 }

@@ -14,6 +14,41 @@ function normalizePhone(phone) {
   return null;
 }
 
+/**
+ * @openapi
+ * /api/communication-preferences:
+ *   put:
+ *     summary: Update communication opt-in preferences
+ *     description: Public endpoint (no auth required) that upserts email/SMS opt-in preferences for a given email or phone number into the communication_consents table.
+ *     tags:
+ *       - Users
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [optInEmail, optInSms]
+ *             properties:
+ *               email: { type: string, format: email, description: At least one of email or phone is required }
+ *               phone: { type: string, description: At least one of email or phone is required }
+ *               optInEmail: { type: boolean }
+ *               optInSms: { type: boolean }
+ *     responses:
+ *       200:
+ *         description: Preferences updated
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean }
+ *                 message: { type: string }
+ *       400:
+ *         description: Validation error — missing email/phone or boolean flags
+ *       500:
+ *         description: Server error
+ */
 // PUT /api/communication-preferences (public – no auth)
 router.put('/', async (req, res) => {
   try {

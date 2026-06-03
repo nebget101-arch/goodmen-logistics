@@ -1,3 +1,4 @@
+require('./tracing');
 const dotenv = require('dotenv');
 const path = require('path');
 
@@ -23,10 +24,12 @@ require('@goodmen/shared').setDatabase({
 const authRouter = require('@goodmen/shared/routes/auth');
 const usersRouter = require('@goodmen/shared/routes/users');
 const communicationPreferencesRouter = require('@goodmen/shared/routes/communication-preferences');
+const userPreferencesRouter = require('@goodmen/shared/routes/user-preferences');
 const rolesRouter = require('@goodmen/shared/routes/roles');
 const trialRequestsRouter = require('@goodmen/shared/routes/trial-requests');
 const billingRouter = require('./routes/billing');
 const stripeWebhookRouter = require('./routes/stripe');
+const createDashboardLayoutRouter = require('./routes/dashboard-layout');
 const permissionsRouter = require('@goodmen/shared/routes/permissions');
 const authMiddleware = require('@goodmen/shared/middleware/auth-middleware');
 const tenantContextMiddleware = require('@goodmen/shared/middleware/tenant-context-middleware');
@@ -40,44 +43,28 @@ app.use('/api/stripe', stripeWebhookRouter);
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 
-const swaggerOptions = {
-  definition: {
-    openapi: '3.0.0',
-    info: {
-      title: 'Auth & Users Service API',
-      version: '1.0.0',
-      description: 'API documentation for the Auth & Users microservice.'
-    },
-    components: {
-      securitySchemes: {
-        bearerAuth: {
-          type: 'http',
-          scheme: 'bearer',
-          bearerFormat: 'JWT'
-        }
-      }
-    },
-    security: [
-      {
-        bearerAuth: []
-      }
-    ]
-  },
+const { buildSwaggerOptions } = require('@goodmen/shared/config/swagger');
+const swaggerOptions = buildSwaggerOptions({
+  title: 'Auth & Users Service API',
+  description: 'API documentation for the Auth & Users microservice.',
   apis: [
     path.join(__dirname, '../../packages/goodmen-shared/routes/*.js'),
     __filename
   ]
-};
+});
 
 const swaggerSpec = swaggerJsdoc(swaggerOptions);
 
+app.get('/api-docs-json', (_req, res) => res.json(swaggerSpec));
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 
 app.use('/api/auth', authRouter);
+app.use('/api/users/me/dashboard-layout', authMiddleware, tenantContextMiddleware, createDashboardLayoutRouter());
 app.use('/api/users', authMiddleware, tenantContextMiddleware, usersRouter);
 app.use('/api/roles', authMiddleware, tenantContextMiddleware, rolesRouter);
 app.use('/api/permissions', authMiddleware, tenantContextMiddleware, permissionsRouter);
 app.use('/api/communication-preferences', authMiddleware, tenantContextMiddleware, communicationPreferencesRouter);
+app.use('/api/user-preferences', authMiddleware, tenantContextMiddleware, userPreferencesRouter);
 app.use('/api/billing', billingRouter);
 
 // Public marketing endpoints – no auth middleware on the base route
@@ -104,7 +91,13 @@ app.get('/health', (req, res) => {
   res.json(healthStatus);
 });
 
-app.listen(PORT, () => {
+app.listen(PORT, async () => {
+  try {
+    await knex.migrate.latest();
+    console.log('✅ Database migrations applied');
+  } catch (err) {
+    console.error('⚠️  Migration error (non-fatal):', err.message);
+  }
   console.log(`🔐 Auth/Users service running on http://localhost:${PORT}`);
   // Start the daily trial conversion job
   startTrialConversionJob();

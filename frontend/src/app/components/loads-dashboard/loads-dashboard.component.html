@@ -1,4 +1,87 @@
-<div class="loads-dashboard">
+<!-- FN-806: Hover-preview templates shared across every row. The preview
+     reads from `previewLoad` / `previewBroker`, populated by
+     prefetchLoadPreview(load) on mouseenter. -->
+<ng-template #driverPreviewTpl>
+  <div class="hover-preview hover-preview--driver">
+    <div class="hover-preview__name">
+      {{ previewLoad?.driver_name || '—' }}
+    </div>
+    <div class="hover-preview__row">
+      <span class="hover-preview__label">Position</span>
+      <span class="hover-preview__value">{{ getPreviewDriverPosition() || 'Unavailable' }}</span>
+    </div>
+    <div class="hover-preview__row">
+      <span class="hover-preview__label">HOS</span>
+      <span class="hover-preview__value hover-preview__value--muted">Data unavailable</span>
+    </div>
+    <div class="hover-preview__footnote" *ngIf="!previewLoad">Loading…</div>
+  </div>
+</ng-template>
+
+<ng-template #brokerPreviewTpl>
+  <div class="hover-preview hover-preview--broker">
+    <div class="hover-preview__name">
+      {{ previewLoad?.broker_display_name || previewLoad?.broker_name || '—' }}
+    </div>
+    <ng-container *ngIf="previewBroker as broker; else brokerFallback">
+      <div class="hover-preview__row">
+        <span class="hover-preview__label">Payment terms</span>
+        <span class="hover-preview__value">{{ broker.payment_rating || 'Unknown' }}</span>
+      </div>
+      <div class="hover-preview__row">
+        <span class="hover-preview__label">Credit score</span>
+        <span class="hover-preview__value">
+          {{ broker.credit_score != null && broker.credit_score !== '' ? broker.credit_score : 'Unknown' }}
+        </span>
+      </div>
+      <div class="hover-preview__row" *ngIf="broker.is_blocked">
+        <span class="hover-preview__badge hover-preview__badge--danger">Blocked</span>
+      </div>
+      <div class="hover-preview__row" *ngIf="broker.is_preferred && !broker.is_blocked">
+        <span class="hover-preview__badge hover-preview__badge--ok">Preferred</span>
+      </div>
+    </ng-container>
+    <ng-template #brokerFallback>
+      <div class="hover-preview__footnote">
+        {{ previewLoad ? 'Broker details unavailable' : 'Loading…' }}
+      </div>
+    </ng-template>
+  </div>
+</ng-template>
+
+<ng-template #attachmentsPreviewTpl>
+  <div class="hover-preview hover-preview--attachments">
+    <div class="hover-preview__title">Attachments</div>
+    <ng-container *ngIf="previewLoad; else attLoading">
+      <ul class="hover-preview__list" *ngIf="getPreviewAttachments().length; else attEmpty">
+        <li class="hover-preview__list-item" *ngFor="let att of getPreviewAttachments()">
+          <span class="material-symbols-outlined hover-preview__icon">description</span>
+          <span class="hover-preview__file-name">{{ att.file_name || att.type }}</span>
+          <span class="hover-preview__file-type">{{ att.type }}</span>
+        </li>
+      </ul>
+      <div class="hover-preview__footnote" *ngIf="getPreviewAttachmentOverflow() > 0">
+        +{{ getPreviewAttachmentOverflow() }} more
+      </div>
+      <ng-template #attEmpty>
+        <div class="hover-preview__footnote">No attachments</div>
+      </ng-template>
+    </ng-container>
+    <ng-template #attLoading>
+      <div class="hover-preview__footnote">Loading…</div>
+    </ng-template>
+  </div>
+</ng-template>
+
+<div
+  class="loads-dashboard"
+  [class.has-drawer]="drawerLoadId"
+  [class.loads-dashboard--compact]="densityMode === 'compact'"
+  [class.loads-dashboard--comfortable]="densityMode === 'comfortable'"
+  [class.loads-dashboard--spacious]="densityMode === 'spacious'"
+  [style.--loads-row-height]="rowHeightPx + 'px'"
+  [style.padding-right.px]="drawerLoadId ? drawerWidth : null"
+>
   <div class="header">
     <div>
       <h1>{{ isDriverRole ? 'My Loads' : 'Loads' }}</h1>
@@ -6,66 +89,122 @@
       <p class="subtitle" *ngIf="activeOperatingEntityName">Company: {{ activeOperatingEntityName }}</p>
     </div>
 <div class="header-actions">
-        <div class="search-box ai-search-box">
-        <input type="text" class="ai-search-input" placeholder="Search loads, brokers, drivers..." (input)="onSearch($any($event.target).value)">
-      </div>
-      <ng-container *ngIf="!isDriverRole">
-        <div class="dropdown new-load-dropdown" (click)="$event.stopPropagation()" *appHasPermission="'loads.create'">
-          <button class="btn btn-primary btn-new-load-ai" (click)="showNewLoadMenu = !showNewLoadMenu">
-            <span class="material-symbols-outlined">local_shipping</span>
-            New Load
-            <span class="material-symbols-outlined cta-caret">expand_more</span>
-          </button>
-          <div class="dropdown-menu new-load-menu" *ngIf="showNewLoadMenu">
-            <button
-              type="button"
-              class="new-load-item"
-              (click)="openAutoCreate()"
-            >
-              <span class="new-load-icon ai">
-                <span class="material-symbols-outlined">auto_awesome</span>
-              </span>
-              <span class="new-load-text">
-                <span class="title">Auto-Create from PDF</span>
-                <span class="subtitle">Automatically extract load details from a PDF using AI.</span>
-              </span>
-            </button>
-            <button
-              type="button"
-              class="new-load-item"
-              (click)="openBulkUpload()"
-            >
-              <span class="new-load-icon">
-                <span class="material-symbols-outlined">upload_file</span>
-              </span>
-              <span class="new-load-text">
-                <span class="title">Bulk Upload Rate Confirmations</span>
-                <span class="subtitle">Upload up to 10 PDFs; AI extracts data, creates drafts for validation.</span>
-              </span>
-            </button>
-            <button
-              type="button"
-              class="new-load-item"
-              (click)="openManualEntry()"
-            >
-              <span class="new-load-icon">
-                <span class="material-symbols-outlined">edit_note</span>
-              </span>
-              <span class="new-load-text">
-                <span class="title">Manual Load Entry</span>
-                <span class="subtitle">Enter load information yourself with full control.</span>
-              </span>
-            </button>
+        <!-- FN-813: realtime presence + connection status -->
+        <div class="realtime-presence" *ngIf="presenceUsers.length > 0" aria-label="Other users viewing this page">
+          <div
+            class="realtime-presence__avatar"
+            *ngFor="let u of presenceUsers | slice:0:4; trackBy: trackByPresence"
+            [title]="u.displayName"
+          >
+            <img *ngIf="u.avatarUrl" [src]="u.avatarUrl" [alt]="u.displayName" />
+            <span *ngIf="!u.avatarUrl">{{ presenceInitials(u) }}</span>
+          </div>
+          <div class="realtime-presence__more" *ngIf="presenceUsers.length > 4">
+            +{{ presenceUsers.length - 4 }}
           </div>
         </div>
-      </ng-container>
+        <span
+          class="realtime-status"
+          [class.realtime-status--connected]="wsStatus === 'connected'"
+          [class.realtime-status--reconnecting]="wsStatus === 'reconnecting'"
+          [class.realtime-status--disconnected]="wsStatus === 'disconnected'"
+          [title]="wsStatus === 'connected' ? 'Live updates on' : wsStatus === 'reconnecting' ? 'Reconnecting…' : 'Live updates offline'"
+          aria-hidden="true"
+        ></span>
+        <div class="search-box ai-search-box">
+        <input #searchInput type="text" class="ai-search-input" placeholder="Search loads, brokers, drivers..." (input)="onSearch($any($event.target).value)">
+      </div>
+      <button
+        type="button"
+        class="btn btn-secondary btn-templates"
+        (click)="navigateToTemplates()"
+        *ngIf="!isDriverRole"
+      >
+        <span class="material-symbols-outlined">bookmark</span>
+        Templates
+      </button>
+      <!-- FN-1594: entry point to the spreadsheet-import wizard. -->
+      <button
+        type="button"
+        class="btn btn-secondary btn-templates"
+        (click)="navigateToImport()"
+        *appHasPermission="'loads.create'"
+        data-testid="loads-import-from-spreadsheet"
+      >
+        <span class="material-symbols-outlined">upload_file</span>
+        Import from spreadsheet
+      </button>
     </div>
+  </div>
+
+  <!-- FN-813: reconnecting banner while the WS is retrying -->
+  <div class="realtime-banner" *ngIf="wsStatus === 'reconnecting'" role="status" aria-live="polite">
+    <span class="realtime-banner__dot"></span>
+    Reconnecting to live updates…
+  </div>
+
+  <!-- FN-743: Hero CTA panel — replaces old "New Load" dropdown -->
+  <ng-container *ngIf="!isDriverRole">
+    <app-loads-hero-cta
+      *appHasPermission="'loads.create'"
+      (singlePdfSelected)="onHeroSinglePdf($event)"
+      (bulkPdfsSelected)="onHeroBulkPdfs($event)"
+      (pdfsCapped)="onPdfsCapped()"
+      (manualCreateClick)="openLoadWizard()"
+      (cloneLoadClick)="openCloneLoad()"
+    ></app-loads-hero-cta>
+
+    <!-- FN-862: preview trigger for the new shell-based wizard (alongside legacy). -->
+    <div class="load-wizard-v2-trigger" *appHasPermission="'loads.create'">
+      <button
+        type="button"
+        class="load-wizard-v2-btn"
+        data-testid="open-load-wizard-v2"
+        (click)="openLoadWizardV2()"
+      >
+        <span class="material-symbols-outlined">auto_awesome</span>
+        Try new wizard (beta)
+      </button>
+    </div>
+  </ng-container>
+
+  <!-- FN-821: WebSocket disconnected warning banner (wired by FN-790 once the WS client lands on dev). -->
+  <div
+    class="loads-ws-banner"
+    role="status"
+    *ngIf="wsDisconnected"
+    aria-live="polite"
+  >
+    <span class="material-symbols-outlined loads-ws-banner__icon">wifi_off</span>
+    <span class="loads-ws-banner__text">
+      Live updates paused. Reconnecting… the list will refresh automatically.
+    </span>
   </div>
 
   <div *ngIf="errorMessage" class="alert alert-error">{{ errorMessage }}</div>
   <div *ngIf="successMessage" class="alert alert-success">{{ successMessage }}</div>
 
-  <div class="status-summary-bar" *ngIf="!loading">
+  <!-- FN-794: Intelligence panel (Gross / Delivered / In Transit / Needs Attention + period pills) -->
+  <app-intelligence-panel
+    *ngIf="!isDriverRole"
+    [period]="intelligencePeriod"
+    [metrics]="intelligenceMetrics"
+    [loading]="loading"
+    [needsAttentionActive]="needsAttentionActive"
+    (periodChange)="onIntelligencePeriodChange($event)"
+    (needsAttentionClick)="onIntelligenceNeedsAttentionClick()"
+  ></app-intelligence-panel>
+
+  <!-- FN-795: AI insights list (60s refresh) — visually paired with the intelligence panel -->
+  <!-- FN-1353: clicking an insight applies a smart-filter (mapped types) or
+       navigates to the original href (unmapped types). -->
+  <app-intelligence-insights
+    *ngIf="!isDriverRole"
+    [period]="intelligencePeriod"
+    (insightApply)="applyAiInsight($event)"
+  ></app-intelligence-insights>
+
+  <div class="status-summary-bar status-summary-bar--collapsible" *ngIf="!loading">
     <div class="status-summary-bar__header">
       <div class="status-summary-bar__period">
         <button
@@ -81,34 +220,128 @@
       <div class="status-summary-bar__total">
         TOTAL: ${{ summaryTotals.totalGross | number:'1.0-2' }}
       </div>
-    </div>
-    <div class="status-summary-bar__track">
-      <div
-        *ngFor="let seg of statusBarSegments"
-        class="status-summary-bar__segment"
-        [style.width.%]="seg.pct"
-        [style.background]="seg.color"
-        [title]="seg.label + ': $' + (seg.amount | number:'1.0-2')"
-        (click)="setStatusFilter(filters.status === seg.status ? '' : seg.status)"
-        [class.active]="filters.status === seg.status"
-      >
-        <span class="segment-label" *ngIf="seg.pct > 8">{{ seg.label }}</span>
-        <span class="segment-value" *ngIf="seg.pct > 5">${{ seg.amount | number:'1.0-0' }}</span>
-      </div>
-    </div>
-    <div class="status-summary-bar__legend">
+      <!-- FN-795: collapsible toggle for the status/billing chip rows -->
       <button
         type="button"
-        class="legend-item"
-        *ngFor="let seg of statusBarSegments"
-        [class.active]="filters.status === seg.status"
-        (click)="setStatusFilter(filters.status === seg.status ? '' : seg.status)"
+        class="status-summary-bar__toggle"
+        [class.status-summary-bar__toggle--open]="chipRowsOpen"
+        [attr.aria-expanded]="chipRowsOpen"
+        (click)="toggleChipRows()"
       >
-        <span class="legend-dot" [style.background]="seg.color"></span>
-        <span class="legend-label">{{ seg.label }}</span>
-        <span class="legend-value">${{ seg.amount | number:'1.0-2' }}</span>
+        <span class="material-symbols-outlined">{{ chipRowsOpen ? 'expand_less' : 'expand_more' }}</span>
+        <span>{{ chipRowsOpen ? 'Hide' : 'Show' }} breakdown</span>
       </button>
     </div>
+
+    <div class="status-summary-bar__collapsible" *ngIf="chipRowsOpen">
+      <!-- Status breakdown -->
+      <div class="status-summary-bar__section">
+        <div class="status-summary-bar__section-label">Status</div>
+        <div class="status-summary-bar__track">
+          <div
+            *ngFor="let seg of statusBarSegments"
+            class="status-summary-bar__segment"
+            [style.width.%]="seg.pct"
+            [style.background]="seg.color"
+            [title]="seg.label + ': $' + (seg.amount | number:'1.0-2')"
+            (click)="setStatusFilter(filters.status === seg.status ? '' : seg.status)"
+            [class.active]="filters.status === seg.status"
+          >
+            <span class="segment-label" *ngIf="seg.pct > 8">{{ seg.label }}</span>
+            <span class="segment-value" *ngIf="seg.pct > 5">${{ seg.amount | number:'1.0-0' }}</span>
+          </div>
+        </div>
+        <div class="status-summary-bar__legend">
+          <button
+            type="button"
+            class="legend-item"
+            *ngFor="let seg of statusBarSegments"
+            [class.active]="filters.status === seg.status"
+            (click)="setStatusFilter(filters.status === seg.status ? '' : seg.status)"
+          >
+            <span class="legend-dot" [style.background]="seg.color"></span>
+            <span class="legend-label">{{ seg.label }}</span>
+            <span class="legend-value">${{ seg.amount | number:'1.0-2' }}</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- FN-795: Billing breakdown (same layout, using byBilling totals) -->
+      <div class="status-summary-bar__section" *ngIf="billingBarSegments.length">
+        <div class="status-summary-bar__section-label">Billing</div>
+        <div class="status-summary-bar__track">
+          <div
+            *ngFor="let seg of billingBarSegments"
+            class="status-summary-bar__segment"
+            [style.width.%]="seg.pct"
+            [style.background]="seg.color"
+            [title]="seg.label + ': $' + (seg.amount | number:'1.0-2')"
+            (click)="setBillingFilter(filters.billingStatus === seg.status ? '' : seg.status)"
+            [class.active]="filters.billingStatus === seg.status"
+          >
+            <span class="segment-label" *ngIf="seg.pct > 8">{{ seg.label }}</span>
+            <span class="segment-value" *ngIf="seg.pct > 5">${{ seg.amount | number:'1.0-0' }}</span>
+          </div>
+        </div>
+        <div class="status-summary-bar__legend">
+          <button
+            type="button"
+            class="legend-item"
+            *ngFor="let seg of billingBarSegments"
+            [class.active]="filters.billingStatus === seg.status"
+            (click)="setBillingFilter(filters.billingStatus === seg.status ? '' : seg.status)"
+          >
+            <span class="legend-dot" [style.background]="seg.color"></span>
+            <span class="legend-label">{{ seg.label }}</span>
+            <span class="legend-value">${{ seg.amount | number:'1.0-2' }}</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- FN-1353: Two-row filter container.
+       Row 1 = time-range / period chips (status-summary-bar above is the
+       primary period control; the active-filters summary further down is
+       still rendered in its own block).
+       Row 2 = semantic smart-filter chips (FN-798). -->
+  <div class="loads-filters">
+    <div class="loads-filters__row loads-filters__row--semantic">
+      <!-- FN-798: Smart filter chips (AND logic, teal active fill) -->
+      <app-smart-filters
+        [counts]="smartFilterCounts"
+        [active]="smartFilterKeys"
+        [loading]="smartFilterCountsLoading"
+        (toggle)="toggleSmartFilter($event)"
+        (clearAll)="clearSmartFilters()"
+      ></app-smart-filters>
+    </div>
+  </div>
+
+  <!-- FN-746: Needs review toggle chip -->
+  <div class="quick-filter-row" *ngIf="!isDriverRole">
+    <button
+      type="button"
+      class="quick-filter-chip"
+      [class.quick-filter-chip--active]="filters.needsReview"
+      (click)="toggleNeedsReview()"
+      title="Show only loads that need dispatcher review"
+    >
+      <span class="material-symbols-outlined">warning</span>
+      Needs review
+    </button>
+
+    <!-- FN-762: Source = Email toggle chip -->
+    <button
+      type="button"
+      class="quick-filter-chip"
+      [class.quick-filter-chip--active]="filters.source === 'email'"
+      (click)="toggleEmailSource()"
+      title="Show only loads created from a forwarded email"
+    >
+      <span class="material-symbols-outlined">alternate_email</span>
+      Source: Email
+    </button>
   </div>
 
   <!-- Active filters summary -->
@@ -322,215 +555,952 @@
     </div>
   </form>
 
-  <div class="table-card">
-    <table class="table" *ngIf="!loading">
+  <!-- FN-1353: List-region toolbar header — view toggle + (table-only) tools -->
+  <div class="loads-list-region-header" *ngIf="!isDriverRole">
+    <div class="loads-list-region-header__spacer"></div>
+    <app-view-toggle
+      class="loads-list-region-header__view-toggle"
+      [value]="viewMode"
+      (valueChange)="setViewMode($event)"
+    ></app-view-toggle>
+  </div>
+
+  <!-- FN-767: Loads table toolbar — column visibility picker + saved views.
+       FN-1353: only relevant in Table view (Cards/Kanban don't have user-
+       resizable columns). -->
+  <div class="loads-table-toolbar" *ngIf="!isDriverRole && viewMode === 'table'">
+    <div class="loads-table-toolbar__group dropdown" (click)="$event.stopPropagation()">
+      <button
+        type="button"
+        class="btn btn-outline btn-sm"
+        (click)="toggleSavedViewsMenu()"
+        title="Saved filter views"
+      >
+        <span class="material-symbols-outlined">view_list</span>
+        <span>Views</span>
+        <span class="material-symbols-outlined">expand_more</span>
+      </button>
+      <div class="dropdown-menu loads-views-menu" *ngIf="showSavedViewsMenu">
+        <div class="loads-views-menu__empty" *ngIf="savedViews.length === 0">No saved views yet.</div>
+        <button
+          type="button"
+          class="loads-views-menu__item"
+          *ngFor="let view of savedViews"
+          (click)="applySavedView(view); $event.stopPropagation()"
+        >
+          <span class="loads-views-menu__name">{{ view.name }}</span>
+          <span
+            class="loads-views-menu__delete material-symbols-outlined"
+            title="Delete saved view"
+            (click)="deleteSavedView(view.id); $event.stopPropagation()"
+          >close</span>
+        </button>
+        <div class="loads-views-menu__save">
+          <input
+            type="text"
+            placeholder="Save current view as…"
+            [(ngModel)]="newViewName"
+            (keyup.enter)="saveCurrentAsView()"
+          />
+          <button
+            type="button"
+            class="btn btn-primary btn-xs"
+            [disabled]="!newViewName.trim()"
+            (click)="saveCurrentAsView()"
+          >Save</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="loads-table-toolbar__group dropdown" (click)="$event.stopPropagation()">
+      <button
+        type="button"
+        class="btn btn-outline btn-sm"
+        (click)="toggleColumnPicker()"
+        title="Show or hide columns"
+      >
+        <span class="material-symbols-outlined">view_column</span>
+        <span>Columns</span>
+        <span class="material-symbols-outlined">expand_more</span>
+      </button>
+      <div class="dropdown-menu loads-columns-menu" *ngIf="showColumnPicker">
+        <label
+          class="loads-columns-menu__item"
+          *ngFor="let col of columnDefs"
+          [class.loads-columns-menu__item--locked]="col.alwaysVisible"
+        >
+          <input
+            type="checkbox"
+            [checked]="isColVisible(col.key)"
+            [disabled]="col.alwaysVisible"
+            (change)="toggleColumnVisible(col.key)"
+          />
+          <span>{{ col.label }}</span>
+        </label>
+        <!-- FN-1059: Reset column widths (AC6) -->
+        <div class="loads-columns-menu__divider"></div>
+        <button
+          type="button"
+          class="loads-columns-menu__action"
+          (click)="resetColumnWidths(); $event.stopPropagation()"
+        >
+          <span class="material-symbols-outlined">restart_alt</span>
+          <span>Reset column widths</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- FN-821: density mode toggle — persisted per-user in UserPreferences. -->
+    <div class="loads-table-toolbar__group dropdown" (click)="$event.stopPropagation()">
+      <button
+        type="button"
+        class="btn btn-outline btn-sm"
+        (click)="toggleDensityMenu()"
+        title="Row height"
+        [attr.aria-expanded]="densityMenuOpen"
+      >
+        <span class="material-symbols-outlined">
+          {{ densityMode === 'compact' ? 'density_small' : densityMode === 'spacious' ? 'density_large' : 'density_medium' }}
+        </span>
+        <span>Density</span>
+        <span class="material-symbols-outlined">expand_more</span>
+      </button>
+      <div class="dropdown-menu loads-density-menu" *ngIf="densityMenuOpen">
+        <button
+          type="button"
+          class="loads-density-menu__item"
+          *ngFor="let opt of densityOptions"
+          [class.loads-density-menu__item--active]="densityMode === opt.value"
+          (click)="setDensity(opt.value); $event.stopPropagation()"
+        >
+          <span class="material-symbols-outlined">{{ opt.icon }}</span>
+          <span class="loads-density-menu__label">{{ opt.label }}</span>
+          <span class="loads-density-menu__meta">{{ opt.heightPx }}px</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- FN-768: Bulk actions toolbar (visible when any rows are selected) -->
+  <div class="bulk-actions-bar" *ngIf="selectedCount > 0 && !isDriverRole">
+    <div class="bulk-actions-summary">
+      <strong>{{ selectedCount }}</strong> selected
+      <button type="button" class="btn-link" (click)="clearSelection()">Clear</button>
+    </div>
+    <div class="bulk-actions-controls">
+      <div class="bulk-control">
+        <label class="bulk-control-label" for="bulkStatus">Change status</label>
+        <select
+          id="bulkStatus"
+          [(ngModel)]="bulkStatusToApply"
+          [disabled]="bulkActionInFlight"
+          (change)="applyBulkStatus()"
+        >
+          <option value="">Choose…</option>
+          <option *ngFor="let s of statusOptions" [value]="s">{{ getStatusLabel(s) }}</option>
+        </select>
+      </div>
+      <div class="bulk-control">
+        <label class="bulk-control-label" for="bulkDriver">Assign driver</label>
+        <select
+          id="bulkDriver"
+          [(ngModel)]="bulkDriverToApply"
+          [disabled]="bulkActionInFlight"
+          (change)="applyBulkDriver()"
+        >
+          <option value="">Choose…</option>
+          <option *ngFor="let d of drivers" [value]="d.id">{{ d.name }}</option>
+        </select>
+      </div>
+      <div class="bulk-control">
+        <label class="bulk-control-label" for="bulkTruck">Assign truck</label>
+        <select
+          id="bulkTruck"
+          [(ngModel)]="bulkTruckToApply"
+          [disabled]="bulkActionInFlight"
+          (change)="applyBulkTruck()"
+        >
+          <option value="">Choose…</option>
+          <option *ngFor="let t of trucks" [value]="t.id">{{ t.label }}</option>
+        </select>
+      </div>
+      <button
+        type="button"
+        class="btn btn-secondary"
+        (click)="bulkApproveSelectedDrafts()"
+        [disabled]="bulkActionInFlight || !selectedDraftIds.length"
+        title="Approve only DRAFT rows in the selection"
+      >
+        <span class="material-symbols-outlined">task_alt</span>
+        Approve drafts
+      </button>
+      <button
+        type="button"
+        class="btn btn-secondary"
+        (click)="bulkDeleteSelectedDrafts()"
+        [disabled]="bulkActionInFlight || !selectedDraftIds.length"
+        title="Delete only DRAFT rows in the selection"
+      >
+        <span class="material-symbols-outlined">delete</span>
+        Delete drafts
+      </button>
+      <button
+        type="button"
+        class="btn btn-secondary"
+        (click)="exportSelectedToCsv()"
+        [disabled]="bulkActionInFlight"
+      >
+        <span class="material-symbols-outlined">download</span>
+        Export CSV
+      </button>
+    </div>
+  </div>
+
+  <div class="table-card" [attr.data-view-mode]="viewMode" [hidden]="viewMode !== 'table'" id="loads-view-table">
+    <!-- FN-821: shimmer skeleton while a list fetch is in flight. -->
+    <app-loads-loading-skeleton
+      *ngIf="loading"
+      class="loads-skeleton-slot"
+      [columns]="skeletonColumns"
+      [showSelect]="!isDriverRole"
+      [rowCount]="10"
+    ></app-loads-loading-skeleton>
+
+    <ng-container *ngIf="!loading">
+    <div class="loads-table-container">
+    <table class="table table--header">
+      <!-- FN-1059: widths in px, sourced from columnWidths so user-resize is
+           reflected here and in table--body below. select stays at a fixed
+           36px to play well with the px-based fixed layout. -->
       <colgroup>
-        <col style="width: 6%">   <!-- Load # -->
-        <col style="width: 7%">   <!-- Date -->
-        <col style="width: 8%">   <!-- Driver -->
-        <col style="width: 12%">  <!-- Broker -->
-        <col style="width: 7%">   <!-- PO # -->
-        <col style="width: 11%">  <!-- Pickup -->
-        <col style="width: 11%">  <!-- Delivery -->
-        <col style="width: 5%">   <!-- Rate -->
-        <col style="width: 8%">   <!-- Completed -->
-        <col style="width: 6%">   <!-- Status -->
-        <col style="width: 6%">   <!-- Billing -->
-        <col style="width: 8%">   <!-- Attachments -->
-        <col style="width: 5%">   <!-- Actions -->
+        <col *ngIf="!isDriverRole" style="width: 36px"><!-- FN-768 select -->
+        <col *ngIf="isColVisible('load_number')" [style.width.px]="getColWidth('load_number')">
+        <col *ngIf="isColVisible('pickup_date')" [style.width.px]="getColWidth('pickup_date')">
+        <col *ngIf="isColVisible('driver')" [style.width.px]="getColWidth('driver')">
+        <col *ngIf="isColVisible('broker')" [style.width.px]="getColWidth('broker')">
+        <col *ngIf="isColVisible('po_number')" [style.width.px]="getColWidth('po_number')">
+        <col *ngIf="isColVisible('pickup')" [style.width.px]="getColWidth('pickup')">
+        <col *ngIf="isColVisible('delivery')" [style.width.px]="getColWidth('delivery')">
+        <col *ngIf="isColVisible('rate')" [style.width.px]="getColWidth('rate')">
+        <col *ngIf="isColVisible('completed_date')" [style.width.px]="getColWidth('completed_date')">
+        <col *ngIf="isColVisible('status')" [style.width.px]="getColWidth('status')">
+        <col *ngIf="isColVisible('billing')" [style.width.px]="getColWidth('billing')">
+        <col *ngIf="isColVisible('notes')" [style.width.px]="getColWidth('notes')">
+        <col *ngIf="isColVisible('attachments')" [style.width.px]="getColWidth('attachments')">
+        <col *ngIf="isColVisible('actions')" [style.width.px]="getColWidth('actions')">
       </colgroup>
       <thead>
         <tr>
-          <th (click)="toggleSort('load_number')">Load #</th>
-          <th (click)="toggleSort('pickup_date')">Pickup Date</th>
-          <th>Driver</th>
-          <th>Broker</th>
-          <th>PO #</th>
-          <th>Pickup</th>
-          <th>Delivery</th>
-          <th (click)="toggleSort('rate')">Rate</th>
-          <th (click)="toggleSort('completed_date')">Completed</th>
-          <th>Status</th>
-          <th>Billing</th>
-          <th>Attachments</th>
-          <th>Actions</th>
+          <th *ngIf="!isDriverRole" class="col-select">
+            <input
+              type="checkbox"
+              aria-label="Select all loads on this page"
+              [checked]="allVisibleSelected"
+              [indeterminate]="someVisibleSelected"
+              (change)="toggleSelectAll()"
+            />
+          </th>
+          <th *ngIf="isColVisible('load_number')"
+              [appResizableColumn]="'load_number'"
+              [currentWidth]="getColWidth('load_number')"
+              [minWidth]="COL_WIDTH_MIN_PX"
+              [maxWidth]="COL_WIDTH_MAX_PX"
+              (widthChange)="onColumnWidthChange('load_number', $event)"
+              (click)="toggleSort('load_number')">Load #</th>
+          <th *ngIf="isColVisible('pickup_date')"
+              [appResizableColumn]="'pickup_date'"
+              [currentWidth]="getColWidth('pickup_date')"
+              [minWidth]="COL_WIDTH_MIN_PX"
+              [maxWidth]="COL_WIDTH_MAX_PX"
+              (widthChange)="onColumnWidthChange('pickup_date', $event)"
+              (click)="toggleSort('pickup_date')">Pickup Date</th>
+          <th *ngIf="isColVisible('driver')"
+              [appResizableColumn]="'driver'"
+              [currentWidth]="getColWidth('driver')"
+              [minWidth]="COL_WIDTH_MIN_PX"
+              [maxWidth]="COL_WIDTH_MAX_PX"
+              (widthChange)="onColumnWidthChange('driver', $event)">Driver</th>
+          <th *ngIf="isColVisible('broker')"
+              [appResizableColumn]="'broker'"
+              [currentWidth]="getColWidth('broker')"
+              [minWidth]="COL_WIDTH_MIN_PX"
+              [maxWidth]="COL_WIDTH_MAX_PX"
+              (widthChange)="onColumnWidthChange('broker', $event)">Broker</th>
+          <th *ngIf="isColVisible('po_number')"
+              [appResizableColumn]="'po_number'"
+              [currentWidth]="getColWidth('po_number')"
+              [minWidth]="COL_WIDTH_MIN_PX"
+              [maxWidth]="COL_WIDTH_MAX_PX"
+              (widthChange)="onColumnWidthChange('po_number', $event)">PO #</th>
+          <th *ngIf="isColVisible('pickup')"
+              [appResizableColumn]="'pickup'"
+              [currentWidth]="getColWidth('pickup')"
+              [minWidth]="COL_WIDTH_MIN_PX"
+              [maxWidth]="COL_WIDTH_MAX_PX"
+              (widthChange)="onColumnWidthChange('pickup', $event)">Pickup</th>
+          <th *ngIf="isColVisible('delivery')"
+              [appResizableColumn]="'delivery'"
+              [currentWidth]="getColWidth('delivery')"
+              [minWidth]="COL_WIDTH_MIN_PX"
+              [maxWidth]="COL_WIDTH_MAX_PX"
+              (widthChange)="onColumnWidthChange('delivery', $event)">Delivery</th>
+          <th *ngIf="isColVisible('rate')"
+              class="th-rate"
+              [appResizableColumn]="'rate'"
+              [currentWidth]="getColWidth('rate')"
+              [minWidth]="COL_WIDTH_MIN_PX"
+              [maxWidth]="COL_WIDTH_MAX_PX"
+              (widthChange)="onColumnWidthChange('rate', $event)"
+              (click)="toggleSort('rate')">Rate</th>
+          <th *ngIf="isColVisible('completed_date')"
+              [appResizableColumn]="'completed_date'"
+              [currentWidth]="getColWidth('completed_date')"
+              [minWidth]="COL_WIDTH_MIN_PX"
+              [maxWidth]="COL_WIDTH_MAX_PX"
+              (widthChange)="onColumnWidthChange('completed_date', $event)"
+              (click)="toggleSort('completed_date')">Completed</th>
+          <th *ngIf="isColVisible('status')"
+              [appResizableColumn]="'status'"
+              [currentWidth]="getColWidth('status')"
+              [minWidth]="COL_WIDTH_MIN_PX"
+              [maxWidth]="COL_WIDTH_MAX_PX"
+              (widthChange)="onColumnWidthChange('status', $event)">Status</th>
+          <th *ngIf="isColVisible('billing')"
+              [appResizableColumn]="'billing'"
+              [currentWidth]="getColWidth('billing')"
+              [minWidth]="COL_WIDTH_MIN_PX"
+              [maxWidth]="COL_WIDTH_MAX_PX"
+              (widthChange)="onColumnWidthChange('billing', $event)">Billing</th>
+          <th *ngIf="isColVisible('notes')"
+              [appResizableColumn]="'notes'"
+              [currentWidth]="getColWidth('notes')"
+              [minWidth]="COL_WIDTH_MIN_PX"
+              [maxWidth]="COL_WIDTH_MAX_PX"
+              (widthChange)="onColumnWidthChange('notes', $event)">Notes</th>
+          <th *ngIf="isColVisible('attachments')"
+              [appResizableColumn]="'attachments'"
+              [currentWidth]="getColWidth('attachments')"
+              [minWidth]="COL_WIDTH_MIN_PX"
+              [maxWidth]="COL_WIDTH_MAX_PX"
+              (widthChange)="onColumnWidthChange('attachments', $event)">Attachments</th>
+          <th *ngIf="isColVisible('actions')"
+              [appResizableColumn]="'actions'"
+              [currentWidth]="getColWidth('actions')"
+              [minWidth]="COL_WIDTH_MIN_PX"
+              [maxWidth]="COL_WIDTH_MAX_PX"
+              (widthChange)="onColumnWidthChange('actions', $event)">Actions</th>
         </tr>
         <tr class="header-filters">
-          <!-- Load # / search -->
-          <th>
+          <th *ngIf="!isDriverRole"></th><!-- FN-768: no filter on select col -->
+          <th *ngIf="isColVisible('load_number')">
             <input
               type="text"
               placeholder="Search load # / broker / driver"
               (input)="onSearch($any($event.target).value)"
             />
           </th>
-          <!-- Date (pickup or completed) -->
-          <th>
+          <th *ngIf="isColVisible('pickup_date')">
             <app-inline-date-filter
               [(value)]="headerFilters.date"
             ></app-inline-date-filter>
           </th>
-          <!-- Driver -->
-          <th>
+          <th *ngIf="isColVisible('driver')">
             <input
               type="text"
               placeholder="Driver"
               [(ngModel)]="headerFilters.driver"
             />
           </th>
-          <!-- Broker -->
-          <th>
+          <th *ngIf="isColVisible('broker')">
             <input
               type="text"
               placeholder="Broker"
               [(ngModel)]="headerFilters.broker"
             />
           </th>
-          <!-- PO # -->
-          <th>
+          <th *ngIf="isColVisible('po_number')">
             <input
               type="text"
               placeholder="PO #"
               [(ngModel)]="headerFilters.po"
             />
           </th>
-          <!-- Pickup -->
-          <th>
+          <th *ngIf="isColVisible('pickup')">
             <input
               type="text"
               placeholder="Pickup"
               [(ngModel)]="headerFilters.pickup"
             />
           </th>
-          <!-- Delivery -->
-          <th>
+          <th *ngIf="isColVisible('delivery')">
             <input
               type="text"
               placeholder="Delivery"
               [(ngModel)]="headerFilters.delivery"
             />
           </th>
-          <!-- Rate -->
-          <th>
+          <th *ngIf="isColVisible('rate')">
             <input
               type="text"
               placeholder="Rate"
               [(ngModel)]="headerFilters.rate"
             />
           </th>
-          <!-- Completed -->
-          <th>
+          <th *ngIf="isColVisible('completed_date')">
             <app-inline-date-filter
               [(value)]="headerFilters.completed"
             ></app-inline-date-filter>
           </th>
-          <!-- Status -->
-          <th>
+          <th *ngIf="isColVisible('status')">
             <input
               type="text"
               placeholder="Status"
               [(ngModel)]="headerFilters.status"
             />
           </th>
-          <!-- Billing -->
-          <th>
+          <th *ngIf="isColVisible('billing')">
             <input
               type="text"
               placeholder="Billing"
               [(ngModel)]="headerFilters.billingStatus"
             />
           </th>
-          <!-- Attachments -->
-          <th>
+          <th *ngIf="isColVisible('notes')"></th>
+          <th *ngIf="isColVisible('attachments')">
             <input
               type="text"
               placeholder="Attach."
               [(ngModel)]="headerFilters.attachmentType"
             />
           </th>
-          <!-- Actions -->
-          <th></th>
+          <th *ngIf="isColVisible('actions')"></th>
         </tr>
       </thead>
-      <tbody>
-        <tr *ngFor="let load of filteredLoads" [ngClass]="rowClass(load)">
-          <td [title]="load.load_number || ''">
-            <a class="link" (click)="openEdit(load)">{{ load.load_number }}</a>
+    </table>
+
+    <!-- FN-766: virtualized body; shares colgroup widths with the header table. -->
+    <!-- FN-767: column visibility applied to <col> and <td> so hidden columns collapse end-to-end. -->
+    <!-- FN-821: itemSize tracks the active density mode so the viewport math stays accurate. -->
+    <cdk-virtual-scroll-viewport
+      [itemSize]="rowHeightPx"
+      minBufferPx="400"
+      maxBufferPx="800"
+      class="loads-viewport"
+      [class.loads-viewport--filter-pulse]="filterPulseActive"
+      *ngIf="filteredLoads.length > 0 && !loadError"
+    >
+      <table class="table table--body">
+        <!-- FN-1059: widths must mirror table--header above so the two
+             tables stay aligned while resizing. -->
+        <colgroup>
+          <col *ngIf="!isDriverRole" style="width: 36px"><!-- FN-768 select -->
+          <col *ngIf="isColVisible('load_number')" [style.width.px]="getColWidth('load_number')">
+          <col *ngIf="isColVisible('pickup_date')" [style.width.px]="getColWidth('pickup_date')">
+          <col *ngIf="isColVisible('driver')" [style.width.px]="getColWidth('driver')">
+          <col *ngIf="isColVisible('broker')" [style.width.px]="getColWidth('broker')">
+          <col *ngIf="isColVisible('po_number')" [style.width.px]="getColWidth('po_number')">
+          <col *ngIf="isColVisible('pickup')" [style.width.px]="getColWidth('pickup')">
+          <col *ngIf="isColVisible('delivery')" [style.width.px]="getColWidth('delivery')">
+          <col *ngIf="isColVisible('rate')" [style.width.px]="getColWidth('rate')">
+          <col *ngIf="isColVisible('completed_date')" [style.width.px]="getColWidth('completed_date')">
+          <col *ngIf="isColVisible('status')" [style.width.px]="getColWidth('status')">
+          <col *ngIf="isColVisible('billing')" [style.width.px]="getColWidth('billing')">
+          <col *ngIf="isColVisible('notes')" [style.width.px]="getColWidth('notes')">
+          <col *ngIf="isColVisible('attachments')" [style.width.px]="getColWidth('attachments')">
+          <col *ngIf="isColVisible('actions')" [style.width.px]="getColWidth('actions')">
+        </colgroup>
+        <tbody>
+        <tr *cdkVirtualFor="let load of filteredLoads; trackBy: trackByLoadId" [ngClass]="rowClass(load)" [class.row-selected]="isSelected(load)" (click)="onRowClick(load, $event)">
+          <td *ngIf="!isDriverRole" class="col-select" (click)="$event.stopPropagation()">
+            <input
+              type="checkbox"
+              [attr.aria-label]="'Select load ' + (load.load_number || load.id)"
+              [checked]="isSelected(load)"
+              (change)="toggleRowSelect(load, $event)"
+              (click)="$event.stopPropagation()"
+            />
           </td>
-          <td [title]="formatDateLocal(load.pickup_date) || '--'">{{ formatDateLocal(load.pickup_date) || '--' }}</td>
-          <td [title]="load.driver_name || '--'">{{ load.driver_name || '--' }}</td>
-          <td [title]="load.broker_name || '--'">{{ load.broker_name || '--' }}</td>
-          <td [title]="load.po_number || '--'">{{ load.po_number || '--' }}</td>
-          <td [title]="(load.pickup_city || '--') + ', ' + (load.pickup_state || '')">{{ load.pickup_city || '--' }}, {{ load.pickup_state || '' }}</td>
-          <td [title]="(load.delivery_city || '--') + ', ' + (load.delivery_state || '')">{{ load.delivery_city || '--' }}, {{ load.delivery_state || '' }}</td>
-          <td [title]="'$' + ((load.rate != null ? load.rate : 0) | number:'1.2-2')">${{ (load.rate != null ? load.rate : 0) | number:'1.2-2' }}</td>
-          <td [title]="load.delivery_date ? (load.delivery_date | date:'yyyy-MM-dd') : '--'">{{ load.delivery_date ? (load.delivery_date | date:'yyyy-MM-dd') : '--' }}</td>
-          <td [title]="load.status || ''"><app-status-pill [status]="load.status"></app-status-pill></td>
-          <td [title]="load.billing_status || ''"><app-status-pill [status]="load.billing_status"></app-status-pill></td>
-          <td>
-            <div class="attachment-chips">
-              <app-attachment-chip
-                *ngFor="let type of (load.attachment_types || [])"
-                [type]="type"
-                class="attachment-chip--download"
-                role="button"
-                tabindex="0"
-                [title]="'Download ' + type"
-                (click)="downloadAttachmentByType(load, type); $event.stopPropagation()"
-                (keydown.enter)="downloadAttachmentByType(load, type); $event.stopPropagation()"
-              ></app-attachment-chip>
+          <td *ngIf="isColVisible('load_number')" [title]="load.load_number || ''">
+            <!-- FN-1063: load-number opens the side drawer in view mode (was: openEdit modal). -->
+            <a class="link" (click)="openLoadDrawer(load.id)">{{ load.load_number }}</a>
+            <!-- FN-818: AI extraction sparkle — marks loads sourced from AI/email pipelines. -->
+            <app-ai-sparkle
+              *ngIf="isAiExtractedSource(load)"
+              class="row-ai-sparkle"
+              [confidence]="getOverallConfidence(load)"
+              [tooltip]="getSparkleTooltip(load)"
+              (sparkleClick)="onRowSparkleClick(load, $event)"
+            ></app-ai-sparkle>
+            <!-- FN-746: needs_review badge -->
+            <span
+              *ngIf="load.needs_review"
+              class="review-badge"
+              title="Needs review"
+            >
+              <span class="material-symbols-outlined">warning</span>
+            </span>
+            <!-- FN-762: email-sourced load badge -->
+            <span
+              *ngIf="load.source === 'email'"
+              class="email-source-badge"
+              title="Created from a forwarded email"
+            >
+              <span class="material-symbols-outlined">alternate_email</span>
+              Email
+            </span>
+          </td>
+          <td *ngIf="isColVisible('pickup_date')" class="cell-num" [title]="formatDateLocal(load.pickup_date) || '--'">{{ formatDateLocal(load.pickup_date) || '--' }}</td>
+          <!-- FN-806: Driver hover preview — position (from LoadDetail) + HOS
+               placeholder; lazy-fetched on hover via prefetchLoadPreview(load). -->
+          <td *ngIf="isColVisible('driver')" class="preview-cell">
+            <app-hover-popover
+              [content]="driverPreviewTpl"
+              [showDelay]="200"
+              [hideDelay]="120"
+              [disabled]="!load.driver_name"
+              [maxWidth]="260"
+            >
+              <span
+                class="preview-trigger"
+                (mouseenter)="prefetchLoadPreview(load)"
+                (focusin)="prefetchLoadPreview(load)"
+                [title]="load.driver_name || '--'"
+              >{{ load.driver_name || '--' }}</span>
+            </app-hover-popover>
+          </td>
+          <!-- FN-806: Broker hover preview — payment terms + credit score from
+               BrokerOption (looked up by broker_id after LoadDetail resolves). -->
+          <td *ngIf="isColVisible('broker')" class="preview-cell">
+            <app-hover-popover
+              [content]="brokerPreviewTpl"
+              [showDelay]="200"
+              [hideDelay]="120"
+              [disabled]="!load.broker_name"
+              [maxWidth]="280"
+            >
+              <span
+                class="preview-trigger"
+                (mouseenter)="prefetchLoadPreview(load)"
+                (focusin)="prefetchLoadPreview(load)"
+                [title]="load.broker_name || '--'"
+              >{{ load.broker_name || '--' }}</span>
+            </app-hover-popover>
+          </td>
+          <td *ngIf="isColVisible('po_number')" [title]="load.po_number || '--'">{{ load.po_number || '--' }}</td>
+          <td *ngIf="isColVisible('pickup')" [title]="(load.pickup_city || '--') + ', ' + (load.pickup_state || '')">{{ load.pickup_city || '--' }}, {{ load.pickup_state || '' }}</td>
+          <td *ngIf="isColVisible('delivery')" [title]="(load.delivery_city || '--') + ', ' + (load.delivery_state || '')">{{ load.delivery_city || '--' }}, {{ load.delivery_state || '' }}</td>
+          <td *ngIf="isColVisible('rate')" class="cell-num cell-rate" [title]="'$' + ((load.rate != null ? load.rate : 0) | number:'1.2-2')">${{ (load.rate != null ? load.rate : 0) | number:'1.2-2' }}</td>
+          <td *ngIf="isColVisible('completed_date')" class="cell-num" [title]="load.delivery_date ? (load.delivery_date | date:'yyyy-MM-dd') : '--'">{{ load.delivery_date ? (load.delivery_date | date:'yyyy-MM-dd') : '--' }}</td>
+          <!-- FN-767/FN-805/FN-854: Inline status change — click pill to open
+               a CDK Overlay dropdown (portaled to body so the cdk-virtual-scroll
+               viewport's overflow:auto doesn't clip it). Menu shows only valid
+               next transitions for the current status. -->
+          <td *ngIf="isColVisible('status')" [title]="load.status || ''" class="status-cell">
+            <div class="status-inline" (click)="$event.stopPropagation()">
+              <button
+                #statusTrigger="cdkOverlayOrigin"
+                cdkOverlayOrigin
+                type="button"
+                class="status-inline__trigger"
+                (click)="openStatusMenu(load.id, $event)"
+                [attr.aria-expanded]="statusMenuLoadId === load.id"
+                [attr.aria-label]="'Change status (current: ' + (load.status || 'none') + ')'"
+              >
+                <app-status-pill [status]="load.status"></app-status-pill>
+                <!-- FN-813: pulsing indicator + live ETA countdown for in-transit loads -->
+                <span class="in-transit-dot" *ngIf="isInTransit(load)" aria-hidden="true"></span>
+                <span class="in-transit-eta" *ngIf="isInTransit(load) && etaLabel(load)">
+                  {{ etaLabel(load) }}
+                </span>
+                <span
+                  class="material-symbols-outlined status-inline__chevron"
+                  *ngIf="getValidStatusTransitions(load).length > 0"
+                >expand_more</span>
+              </button>
+              <ng-template
+                cdkConnectedOverlay
+                [cdkConnectedOverlayOrigin]="statusTrigger"
+                [cdkConnectedOverlayOpen]="statusMenuLoadId === load.id && getValidStatusTransitions(load).length > 0"
+                [cdkConnectedOverlayPositions]="inlineMenuPositions"
+                [cdkConnectedOverlayScrollStrategy]="inlineMenuScrollStrategy"
+                [cdkConnectedOverlayPanelClass]="'loads-inline-menu-panel'"
+                (overlayOutsideClick)="closeStatusMenu()"
+                (detach)="closeStatusMenu()"
+              >
+                <div class="loads-inline-menu" (click)="$event.stopPropagation()">
+                  <button
+                    type="button"
+                    class="loads-inline-menu__option"
+                    *ngFor="let s of getValidStatusTransitions(load)"
+                    (click)="changeLoadStatus(load, s, $event)"
+                  >
+                    {{ getStatusLabel(s) }}
+                  </button>
+                </div>
+              </ng-template>
+            </div>
+            <!-- FN-818: AI confidence chip — surfaces on DRAFT/NEW rows that have ai_metadata. -->
+            <app-confidence-badge
+              *ngIf="shouldShowConfidenceBadge(load)"
+              class="row-confidence-badge"
+              [confidence]="getOverallConfidence(load)"
+              [tooltip]="getSparkleTooltip(load)"
+              (chipClick)="onConfidenceBadgeClick(load, $event)"
+            ></app-confidence-badge>
+          </td>
+          <!-- FN-805/FN-854: Inline billing change — same CDK Overlay pattern. -->
+          <td *ngIf="isColVisible('billing')" [title]="load.billing_status || ''" class="billing-cell">
+            <div class="status-inline" (click)="$event.stopPropagation()">
+              <button
+                #billingTrigger="cdkOverlayOrigin"
+                cdkOverlayOrigin
+                type="button"
+                class="status-inline__trigger"
+                (click)="openBillingMenu(load.id, $event)"
+                [attr.aria-expanded]="billingMenuLoadId === load.id"
+                [attr.aria-label]="'Change billing status (current: ' + (load.billing_status || 'none') + ')'"
+              >
+                <app-status-pill [status]="load.billing_status"></app-status-pill>
+                <span
+                  class="material-symbols-outlined status-inline__chevron"
+                  *ngIf="getValidBillingTransitions(load).length > 0"
+                >expand_more</span>
+              </button>
+              <ng-template
+                cdkConnectedOverlay
+                [cdkConnectedOverlayOrigin]="billingTrigger"
+                [cdkConnectedOverlayOpen]="billingMenuLoadId === load.id && getValidBillingTransitions(load).length > 0"
+                [cdkConnectedOverlayPositions]="inlineMenuPositions"
+                [cdkConnectedOverlayScrollStrategy]="inlineMenuScrollStrategy"
+                [cdkConnectedOverlayPanelClass]="'loads-inline-menu-panel'"
+                (overlayOutsideClick)="closeBillingMenu()"
+                (detach)="closeBillingMenu()"
+              >
+                <div class="loads-inline-menu" (click)="$event.stopPropagation()">
+                  <button
+                    type="button"
+                    class="loads-inline-menu__option"
+                    *ngFor="let b of getValidBillingTransitions(load)"
+                    (click)="changeLoadBilling(load, b, $event)"
+                  >
+                    {{ getBillingLabel(b) }}
+                  </button>
+                </div>
+              </ng-template>
             </div>
           </td>
-          <td>
-            <div class="dropdown actions-dropdown" (click)="$event.stopPropagation()">
-              <button
-                class="actions-trigger"
-                type="button"
-                (click)="actionsOpenLoadId = actionsOpenLoadId === load.id ? null : load.id"
+          <!-- FN-805: Inline notes edit — Esc cancels, Enter/blur saves. -->
+          <td *ngIf="isColVisible('notes')" class="notes-cell" (click)="$event.stopPropagation()">
+            <ng-container *ngIf="editingNotesLoadId === load.id; else notesDisplay">
+              <textarea
+                #notesInlineEditor
+                class="notes-inline__textarea"
+                rows="2"
+                [(ngModel)]="editingNotesDraft"
+                [ngModelOptions]="{standalone: true}"
+                (keydown.escape)="cancelNotesEdit($event)"
+                (keydown.enter)="saveNotesEdit(load, $event)"
+                (blur)="saveNotesEdit(load)"
+                (click)="$event.stopPropagation()"
+                aria-label="Edit notes"
+              ></textarea>
+            </ng-container>
+            <ng-template #notesDisplay>
+              <!-- FN-806: Hover preview shows full notes when truncated. -->
+              <app-hover-popover
+                [text]="load.notes"
+                [showDelay]="200"
+                [hideDelay]="120"
+                [disabled]="!load.notes"
+                [maxWidth]="320"
               >
-                <span class="material-symbols-outlined">more_vert</span>
-              </button>
-              <div class="dropdown-menu actions-menu" *ngIf="actionsOpenLoadId === load.id">
-                <button type="button" class="actions-menu-item" (click)="openEdit(load); actionsOpenLoadId = null">
-                  <span class="material-symbols-outlined">edit</span>
-                  <span>Edit Load</span>
-                </button>
-                <button type="button" class="actions-menu-item" (click)="copyLoad(load); actionsOpenLoadId = null">
-                  <span class="material-symbols-outlined">content_copy</span>
-                  <span>Copy Load</span>
-                </button>
-                <button type="button" class="actions-menu-item" (click)="openEditAndShowMap(load); actionsOpenLoadId = null">
-                  <span class="material-symbols-outlined">map</span>
-                  <span>Show on Map</span>
-                </button>
                 <button
                   type="button"
-                  class="actions-menu-item actions-menu-item-danger"
-                  *ngIf="canDeleteLoad(load)"
-                  (click)="deleteLoadFromTable(load); actionsOpenLoadId = null"
-                >
-                  <span class="material-symbols-outlined">delete</span>
-                  <span>Delete Load</span>
-                </button>
-                <ng-container *ngIf="isDraftLoad(load)">
-                  <button type="button" class="actions-menu-item actions-menu-item-success" (click)="approveDraftLoad(load); actionsOpenLoadId = null">
-                    <span class="material-symbols-outlined">check_circle</span>
-                    <span>Approve</span>
-                  </button>
-                </ng-container>
+                  class="notes-inline__trigger"
+                  [class.notes-inline__trigger--empty]="!load.notes"
+                  (click)="openNotesEditor(load, $event)"
+                  [attr.aria-label]="load.notes ? 'Edit notes' : 'Add notes'"
+                >{{ load.notes || '—' }}</button>
+              </app-hover-popover>
+            </ng-template>
+          </td>
+          <!-- FN-806: Attachments hover preview — file list with overflow +N,
+               lazy-fetched via prefetchLoadPreview(load). -->
+          <td *ngIf="isColVisible('attachments')" class="preview-cell">
+            <app-hover-popover
+              [content]="attachmentsPreviewTpl"
+              [showDelay]="200"
+              [hideDelay]="120"
+              [disabled]="!(load.attachment_types && load.attachment_types.length)"
+              [maxWidth]="300"
+            >
+              <div
+                class="attachment-chips preview-trigger"
+                (mouseenter)="prefetchLoadPreview(load)"
+              >
+                <app-attachment-chip
+                  *ngFor="let type of (load.attachment_types || [])"
+                  [type]="type"
+                  class="attachment-chip--download"
+                  role="button"
+                  tabindex="0"
+                  [title]="'Download ' + type"
+                  (click)="downloadAttachmentByType(load, type); $event.stopPropagation()"
+                  (keydown.enter)="downloadAttachmentByType(load, type); $event.stopPropagation()"
+                ></app-attachment-chip>
               </div>
+            </app-hover-popover>
+          </td>
+          <!-- FN-805: Row-hover toolbar replaces the ⋮ dropdown. -->
+          <td *ngIf="isColVisible('actions')" class="actions-cell">
+            <div class="row-toolbar" (click)="$event.stopPropagation()">
+              <button
+                type="button"
+                class="row-toolbar__btn"
+                (click)="openLoadDrawer(load.id)"
+                title="View"
+                aria-label="View load"
+              >
+                <span class="material-symbols-outlined">visibility</span>
+              </button>
+              <button
+                type="button"
+                class="row-toolbar__btn"
+                (click)="openLoadDrawer(load.id, false, 'edit')"
+                title="Edit"
+                aria-label="Edit load"
+              >
+                <span class="material-symbols-outlined">edit</span>
+              </button>
+              <button
+                type="button"
+                class="row-toolbar__btn"
+                *appHasPermission="'loads.create'"
+                (click)="cloneLoad(load)"
+                title="Clone"
+                aria-label="Clone load"
+              >
+                <span class="material-symbols-outlined">file_copy</span>
+              </button>
+              <button
+                type="button"
+                class="row-toolbar__btn"
+                (click)="openEditAndShowMap(load)"
+                title="Show on map"
+                aria-label="Show load on map"
+              >
+                <span class="material-symbols-outlined">map</span>
+              </button>
+              <button
+                type="button"
+                class="row-toolbar__btn"
+                (click)="dispatchInfoToDriver()"
+                title="Dispatch info"
+                aria-label="Dispatch info to driver"
+              >
+                <span class="material-symbols-outlined">local_shipping</span>
+              </button>
+              <button
+                type="button"
+                class="row-toolbar__btn row-toolbar__btn--danger"
+                *ngIf="canDeleteLoad(load)"
+                (click)="deleteLoadFromTable(load)"
+                title="Delete"
+                aria-label="Delete load"
+              >
+                <span class="material-symbols-outlined">delete</span>
+              </button>
             </div>
           </td>
         </tr>
-        <tr *ngIf="loads.length === 0">
-          <td colspan="14" class="empty">No loads found.</td>
-        </tr>
-      </tbody>
-    </table>
-    <div *ngIf="loading" class="loading">Loading loads...</div>
+        </tbody>
+      </table>
+    </cdk-virtual-scroll-viewport>
+
+    <app-loads-empty-state
+      *ngIf="filteredLoads.length === 0 || loadError"
+      [mode]="emptyStateMode"
+      [smartFilterLabel]="activeSmartFilterLabel"
+      [errorDetail]="loadErrorDetail"
+      (clearFilters)="onEmptyStateClearFilters()"
+      (createLoad)="onEmptyStateCreateLoad()"
+      (importFromPdf)="onEmptyStateImportFromPdf()"
+      (retry)="onEmptyStateRetry()"
+    ></app-loads-empty-state>
+    <!-- FN-821: hidden file picker driving the empty-state "Import from PDF" CTA. -->
+    <input
+      #emptyStateBulkInput
+      type="file"
+      multiple
+      accept="application/pdf"
+      class="loads-empty-hidden-input"
+      (change)="onEmptyStateBulkPdfsChange($event)"
+    />
+    </div>
+    </ng-container>
   </div>
 
-  <div class="pagination">
+  <!-- FN-1353: Cards view — hybrid row layout sharing the same data path. -->
+  <section
+    class="loads-cards-view"
+    *ngIf="viewMode === 'cards'"
+    id="loads-view-cards"
+    aria-label="Loads cards view"
+  >
+    <app-loads-loading-skeleton
+      *ngIf="loading"
+      class="loads-skeleton-slot"
+      [columns]="skeletonColumns"
+      [showSelect]="!isDriverRole"
+      [rowCount]="10"
+    ></app-loads-loading-skeleton>
+
+    <ng-container *ngIf="!loading">
+      <div class="loads-cards-grid" *ngIf="filteredLoads.length > 0; else cardsEmpty">
+        <article
+          *ngFor="let load of filteredLoads; trackBy: trackByLoadId"
+          class="loads-card"
+          [class.loads-card--attention]="isRowAttention(load)"
+          (click)="onRowClick(load, $event)"
+        >
+          <header class="loads-card__primary">
+            <span class="loads-card__load-number">#{{ load.load_number }}</span>
+            <app-driver-chip class="loads-card__driver" [name]="load.driver_name"></app-driver-chip>
+            <app-route-cell
+              class="loads-card__route"
+              [pickup]="{ city: load.pickup_city, state: load.pickup_state }"
+              [delivery]="{ city: load.delivery_city, state: load.delivery_state }"
+            ></app-route-cell>
+            <span class="loads-card__rate">
+              {{ load.rate != null ? (load.rate | currency:'USD':'symbol':'1.0-2') : '—' }}
+            </span>
+            <app-pipeline-pill
+              class="loads-card__pipeline"
+              [loadStatus]="load.status"
+              [billingStatus]="load.billing_status"
+            ></app-pipeline-pill>
+          </header>
+
+          <footer class="loads-card__secondary">
+            <span class="loads-card__meta">
+              <span class="loads-card__meta-label">Pickup</span>
+              <span class="loads-card__meta-value">{{ load.pickup_date || '—' }}</span>
+            </span>
+            <span class="loads-card__meta">
+              <span class="loads-card__meta-label">Completed</span>
+              <span class="loads-card__meta-value">{{ load.completed_date || '—' }}</span>
+            </span>
+            <span class="loads-card__meta">
+              <span class="loads-card__meta-label">PO #</span>
+              <span class="loads-card__meta-value">{{ load.po_number || '—' }}</span>
+            </span>
+            <span class="loads-card__meta">
+              <span class="loads-card__meta-label">Attachments</span>
+              <span class="loads-card__meta-value">{{ load.attachment_count || 0 }}</span>
+            </span>
+            <app-actions-menu
+              class="loads-card__actions"
+              [loadId]="load.id"
+              (open)="onCardOpen($event)"
+              (edit)="onCardEdit($event)"
+              (clone)="onCardClone($event)"
+              (viewOnMap)="onCardViewOnMap($event)"
+              (trackDriver)="onCardTrackDriver($event)"
+              (copyLink)="onCardCopyLink($event)"
+            ></app-actions-menu>
+          </footer>
+        </article>
+      </div>
+
+      <ng-template #cardsEmpty>
+        <app-loads-empty-state
+          [mode]="emptyStateMode"
+          [smartFilterLabel]="activeSmartFilterLabel"
+          [errorDetail]="loadErrorDetail"
+          (clearFilters)="onEmptyStateClearFilters()"
+          (createLoad)="onEmptyStateCreateLoad()"
+          (importFromPdf)="onEmptyStateImportFromPdf()"
+          (retry)="onEmptyStateRetry()"
+        ></app-loads-empty-state>
+      </ng-template>
+    </ng-container>
+  </section>
+
+  <!-- FN-1353: Kanban view — visual grouping by pipeline status. Read-only,
+       no drag-to-update. Each tile has the same Open/overflow actions. -->
+  <section
+    class="loads-kanban-view"
+    *ngIf="viewMode === 'kanban'"
+    id="loads-view-kanban"
+    aria-label="Loads kanban view"
+  >
+    <app-loads-loading-skeleton
+      *ngIf="loading"
+      class="loads-skeleton-slot"
+      [columns]="skeletonColumns"
+      [showSelect]="!isDriverRole"
+      [rowCount]="6"
+    ></app-loads-loading-skeleton>
+
+    <div class="loads-kanban-grid" *ngIf="!loading">
+      <div
+        class="loads-kanban-col"
+        *ngFor="let col of kanbanColumns"
+      >
+        <header class="loads-kanban-col__header">
+          <span class="loads-kanban-col__label">{{ col.label }}</span>
+          <span class="loads-kanban-col__count">{{ loadsForKanbanColumn(col.key).length }}</span>
+        </header>
+        <div class="loads-kanban-col__list">
+          <article
+            *ngFor="let load of loadsForKanbanColumn(col.key); trackBy: trackByLoadId"
+            class="loads-kanban-card"
+            [class.loads-kanban-card--attention]="isRowAttention(load)"
+            (click)="onRowClick(load, $event)"
+          >
+            <div class="loads-kanban-card__top">
+              <span class="loads-kanban-card__load-number">#{{ load.load_number }}</span>
+              <span class="loads-kanban-card__rate">
+                {{ load.rate != null ? (load.rate | currency:'USD':'symbol':'1.0-0') : '—' }}
+              </span>
+            </div>
+            <app-route-cell
+              class="loads-kanban-card__route"
+              [pickup]="{ city: load.pickup_city, state: load.pickup_state }"
+              [delivery]="{ city: load.delivery_city, state: load.delivery_state }"
+            ></app-route-cell>
+            <app-driver-chip
+              class="loads-kanban-card__driver"
+              [name]="load.driver_name"
+            ></app-driver-chip>
+            <div class="loads-kanban-card__bottom">
+              <app-pipeline-pill
+                class="loads-kanban-card__pipeline"
+                [loadStatus]="load.status"
+                [billingStatus]="load.billing_status"
+              ></app-pipeline-pill>
+              <app-actions-menu
+                class="loads-kanban-card__actions"
+                [loadId]="load.id"
+                (open)="onCardOpen($event)"
+                (edit)="onCardEdit($event)"
+                (clone)="onCardClone($event)"
+                (viewOnMap)="onCardViewOnMap($event)"
+                (trackDriver)="onCardTrackDriver($event)"
+                (copyLink)="onCardCopyLink($event)"
+              ></app-actions-menu>
+            </div>
+          </article>
+          <div *ngIf="loadsForKanbanColumn(col.key).length === 0" class="loads-kanban-col__empty">
+            No loads
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- FN-1356: appFabSafeArea reserves bottom space so the global Ask Neuron FAB shifts up clear of the paginator. -->
+  <div class="pagination" appFabSafeArea="64">
     <button
       class="pagination-btn"
       (click)="goToPage(page - 1)"
@@ -548,6 +1518,18 @@
       <span>Next</span>
       <span class="material-symbols-outlined">chevron_right</span>
     </button>
+    <!-- FN-1063: rows-per-page selector. -->
+    <label class="page-size-control">
+      <span class="page-size-control__label">Rows</span>
+      <select
+        class="page-size-control__select"
+        [ngModel]="pageSize"
+        (ngModelChange)="onPageSizeChange($event)"
+        aria-label="Rows per page"
+      >
+        <option *ngFor="let size of pageSizeOptions" [ngValue]="size">{{ size }}</option>
+      </select>
+    </label>
   </div>
 
   <!-- Manual Load Entry Modal (draft: PDF left, load details right; non-draft: single column) -->
@@ -765,6 +1747,26 @@
           <button type="button" class="trip-action-link trip-action-link--disabled" (click)="dispatchInfoToDriver()" title="Coming later">
             <span class="material-symbols-outlined trip-action-icon">send</span>
             <span>Dispatch info to driver</span>
+          </button>
+          <button
+            type="button"
+            class="trip-action-link"
+            *appHasPermission="'loads.create'"
+            (click)="cloneLoad(editingLoadDetail!)"
+            title="Duplicate this load with dates cleared"
+          >
+            <span class="material-symbols-outlined trip-action-icon">file_copy</span>
+            <span>Clone</span>
+          </button>
+          <button
+            type="button"
+            class="trip-action-link"
+            *appHasPermission="'loads.create'"
+            (click)="createReturnLoad(editingLoadDetail!)"
+            title="Create a return trip with stops reversed and rate cleared"
+          >
+            <span class="material-symbols-outlined trip-action-icon">swap_horiz</span>
+            <span>Create Return Load</span>
           </button>
         </div>
       </div>
@@ -1156,6 +2158,17 @@
             <button class="btn btn-primary" type="submit" [disabled]="creatingLoad">
               {{ creatingLoad ? (editingLoadId ? 'Saving...' : 'Creating...') : (editingLoadId ? 'Save Changes' : 'Create Load') }}
             </button>
+            <button
+              *ngIf="editingLoadId"
+              class="btn btn-secondary"
+              type="button"
+              (click)="openSaveAsTemplateModal()"
+              [disabled]="creatingLoad"
+              title="Save this load as a reusable template"
+            >
+              <span class="material-symbols-outlined">bookmark_add</span>
+              Save as Template
+            </button>
             <button class="btn btn-secondary" type="button" (click)="closeManualModal()" [disabled]="creatingLoad">Close</button>
           </ng-container>
         </div>
@@ -1484,6 +2497,64 @@
     </div>
   </div>
 
+  <!-- FN-1063: Clone Existing Load picker — search + result list. -->
+  <div class="modal-backdrop" *ngIf="showCloneLoadPickerModal" (click)="closeCloneLoadPickerModal()">
+    <div class="modal clone-picker-modal" (click)="$event.stopPropagation()" role="dialog" aria-label="Clone existing load">
+      <header class="clone-picker-modal__header">
+        <h3>
+          <span class="material-symbols-outlined">file_copy</span>
+          Clone existing load
+        </h3>
+        <button type="button" class="clone-picker-modal__close" (click)="closeCloneLoadPickerModal()" aria-label="Close">
+          <span class="material-symbols-outlined">close</span>
+        </button>
+      </header>
+      <div class="clone-picker-modal__body">
+        <p class="clone-picker-modal__hint">
+          Pick a load to clone — its stops, broker, equipment and notes carry over;
+          dates and PO are cleared. The clone opens in the side drawer for you to refine.
+        </p>
+        <div class="clone-picker-modal__search">
+          <span class="material-symbols-outlined">search</span>
+          <input
+            type="text"
+            class="clone-picker-modal__search-input"
+            placeholder="Search by load number, broker, or city…"
+            [ngModel]="cloneLoadPickerQuery"
+            (ngModelChange)="onCloneLoadPickerQueryChange($event)"
+            [disabled]="cloneLoadPickerSubmitting"
+            autofocus
+          />
+        </div>
+        <div class="clone-picker-modal__error" *ngIf="cloneLoadPickerError">{{ cloneLoadPickerError }}</div>
+        <div class="clone-picker-modal__loading" *ngIf="cloneLoadPickerLoading">Searching…</div>
+        <ul class="clone-picker-modal__results" *ngIf="!cloneLoadPickerLoading && cloneLoadPickerResults.length">
+          <li
+            *ngFor="let pickerLoad of cloneLoadPickerResults"
+            class="clone-picker-modal__result"
+            [class.is-disabled]="cloneLoadPickerSubmitting"
+            (click)="selectCloneLoadPickerLoad(pickerLoad)"
+            tabindex="0"
+            (keydown.enter)="selectCloneLoadPickerLoad(pickerLoad)"
+          >
+            <span class="clone-picker-modal__result-num">{{ pickerLoad.load_number || '—' }}</span>
+            <span class="clone-picker-modal__result-broker">{{ pickerLoad.broker_name || '' }}</span>
+            <span class="clone-picker-modal__result-route">
+              {{ pickerLoad.pickup_city || '?' }} → {{ pickerLoad.delivery_city || '?' }}
+            </span>
+            <span class="clone-picker-modal__result-status">{{ pickerLoad.status || '' }}</span>
+          </li>
+        </ul>
+        <div
+          class="clone-picker-modal__empty"
+          *ngIf="!cloneLoadPickerLoading && !cloneLoadPickerResults.length"
+        >
+          No loads found.
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- Bulk Upload Rate Confirmations modal — AI themed -->
   <div class="modal-backdrop" *ngIf="showBulkUploadModal">
     <div class="modal bulk-ai-modal" (click)="$event.stopPropagation()">
@@ -1525,17 +2596,36 @@
           </ul>
         </div>
 
+        <!-- FN-1083: replace-vs-add inline confirm prompt -->
+        <div class="bulk-ai-replace-prompt" *ngIf="bulkPendingAddFiles.length > 0">
+          <p class="bulk-ai-replace-prompt-text">
+            <span class="material-symbols-outlined">help</span>
+            You already have <strong>{{ bulkPdfFiles.length }}</strong> file(s) queued.
+            Replace them with the <strong>{{ bulkPendingAddFiles.length }}</strong> new file(s),
+            or add the new file(s) to your existing queue?
+          </p>
+          <div class="bulk-ai-replace-prompt-actions">
+            <button type="button" class="bulk-ai-btn bulk-ai-btn--ghost" (click)="confirmBulkReplace()" [disabled]="bulkUploading">
+              <span class="material-symbols-outlined">swap_horiz</span> Replace queue
+            </button>
+            <button type="button" class="bulk-ai-btn bulk-ai-btn--ghost" (click)="confirmBulkAdd()" [disabled]="bulkUploading">
+              <span class="material-symbols-outlined">add</span> Add to queue
+            </button>
+            <button type="button" class="btn btn-link" (click)="cancelBulkPending()" [disabled]="bulkUploading">Cancel</button>
+          </div>
+        </div>
+
         <!-- Dropzone -->
         <div
           class="bulk-ai-dropzone"
           (drop)="onBulkDrop($event)"
           (dragover)="allowDrop($event)"
-          *ngIf="bulkPdfFiles.length < 10"
+          *ngIf="bulkPdfFiles.length < 10 && bulkPendingAddFiles.length === 0"
         >
           <span class="material-symbols-outlined bulk-ai-dropzone-icon" *ngIf="bulkPdfFiles.length === 0">cloud_upload</span>
           <span class="material-symbols-outlined bulk-ai-dropzone-icon" *ngIf="bulkPdfFiles.length > 0">add_circle</span>
           <p *ngIf="bulkPdfFiles.length === 0">Drag & drop PDFs here or click to upload</p>
-          <p *ngIf="bulkPdfFiles.length > 0">Add more PDFs</p>
+          <p *ngIf="bulkPdfFiles.length > 0">Add more PDFs — you'll be asked whether to replace or add</p>
           <input #bulkFileInput type="file" accept="application/pdf" multiple (change)="onBulkFilesSelected($any($event.target).files, bulkFileInput)">
         </div>
         <p class="bulk-ai-max-notice" *ngIf="bulkPdfFiles.length >= 10">Maximum 10 files reached. Remove a file to add more.</p>
@@ -1580,6 +2670,14 @@
     </div>
   </div>
 
+  <!-- FN-745: Bulk Extraction Grid -->
+  <app-bulk-extraction-grid
+    *ngIf="showBulkExtractionGrid"
+    [files]="bulkExtractionFiles"
+    (close)="closeBulkExtractionGrid()"
+    (reviewNow)="onBulkExtractionReviewNow()">
+  </app-bulk-extraction-grid>
+
   <!-- Auto-create placeholder -->
   <div class="modal-backdrop" *ngIf="showAutoModal">
     <div class="modal ai-modal">
@@ -1592,18 +2690,48 @@
         <button class="ai-close-btn" (click)="closeAutoModal()"><span class="material-symbols-outlined">close</span></button>
       </div>
       <div class="modal-body">
-        <div class="ai-dropzone" [class.ai-dropzone--has-file]="autoPdfFile" [class.ai-dropzone--extracting]="autoExtracting">
+        <div class="ai-dropzone"
+          [class.ai-dropzone--has-file]="autoPdfFile"
+          [class.ai-dropzone--extracting]="autoExtracting"
+          [class.ai-dropzone--drag-over]="autoIsDragOver"
+          (dragover)="onAutoFileDragOver($event)"
+          (dragleave)="onAutoFileDragLeave($event)"
+          (drop)="onAutoFileDropped($event)">
           <div class="ai-dropzone-content" *ngIf="!autoPdfFile && !autoExtracting">
             <span class="material-symbols-outlined ai-dropzone-icon">cloud_upload</span>
-            <p class="ai-dropzone-text">Drag and drop your PDF here</p>
+            <p class="ai-dropzone-text">Drag and drop up to 10 PDFs here</p>
             <p class="ai-dropzone-hint">or click to browse files</p>
-            <input type="file" accept="application/pdf" (change)="onAutoFileSelected($any($event.target).files)" class="ai-dropzone-input">
+            <input type="file" accept="application/pdf" multiple (change)="onAutoFileSelected($any($event.target).files); $any($event.target).value = ''" class="ai-dropzone-input">
           </div>
-          <div class="ai-dropzone-content" *ngIf="autoPdfFile && !autoExtracting">
+          <div class="ai-dropzone-content ai-dropzone-content--has-file" *ngIf="autoPdfFile && !autoExtracting">
+            <button type="button" class="ai-clear-file-btn"
+                    (click)="clearAutoPdf()"
+                    aria-label="Remove selected file">
+              <span class="material-symbols-outlined">close</span>
+            </button>
             <span class="material-symbols-outlined ai-file-icon">description</span>
             <p class="ai-dropzone-filename">{{ autoPdfFile.name }}</p>
             <p class="ai-dropzone-hint">Ready for AI extraction</p>
-            <input type="file" accept="application/pdf" (change)="onAutoFileSelected($any($event.target).files)" class="ai-dropzone-input">
+            <div class="ai-file-actions">
+              <label for="autoReplaceInput" class="ai-file-action-link">
+                <span class="material-symbols-outlined">swap_horiz</span>
+                Replace file
+              </label>
+              <input id="autoReplaceInput" type="file" accept="application/pdf"
+                     (change)="onAutoFileSelected($any($event.target).files); $any($event.target).value = ''"
+                     class="ai-hidden-file-input">
+              <span class="ai-file-action-divider" aria-hidden="true">·</span>
+              <label for="autoAddMoreInput" class="ai-file-action-link">
+                <span class="material-symbols-outlined">add</span>
+                Add more PDFs
+              </label>
+              <input id="autoAddMoreInput" type="file" accept="application/pdf" multiple
+                     (change)="onAutoFileSelected($any($event.target).files); $any($event.target).value = ''"
+                     class="ai-hidden-file-input">
+            </div>
+            <p class="ai-dropzone-hint ai-dropzone-hint--bulk">
+              Adding more PDFs (up to 10) switches to bulk extraction
+            </p>
           </div>
           <div class="ai-dropzone-content ai-extracting-state" *ngIf="autoExtracting">
             <span class="material-symbols-outlined ai-brain-pulse">neurology</span>
@@ -1623,6 +2751,13 @@
           <span class="material-symbols-outlined">auto_awesome</span>
           {{ autoExtracting ? 'Extracting...' : 'Run Extraction' }}
         </button>
+        <!-- FN-1078: error-state escape hatch — opens the 4-step wizard with the PDF queued (no prefill). -->
+        <button class="ai-btn-secondary" type="button"
+                *ngIf="autoError && autoPdfFile && !autoExtracting"
+                (click)="continueAutoManually()">
+          <span class="material-symbols-outlined">edit_note</span>
+          Continue manually
+        </button>
         <button class="ai-btn-secondary" type="button" (click)="closeAutoModal()">Close</button>
       </div>
     </div>
@@ -1636,6 +2771,15 @@
         <button class="close" (click)="closeDetails()">×</button>
       </div>
       <div class="modal-body" *ngIf="selectedLoad">
+        <!-- FN-762: "Created from email" badge + email preview -->
+        <div
+          class="email-source-banner"
+          *ngIf="selectedLoad.source === 'email'"
+          title="This load was auto-created from a forwarded email"
+        >
+          <span class="material-symbols-outlined">alternate_email</span>
+          <span>📧 Created from email</span>
+        </div>
         <div class="detail-grid">
           <div><strong>Load #:</strong> {{ selectedLoad.load_number }}</div>
           <div><strong>Status:</strong> <app-status-pill [status]="selectedLoad.status"></app-status-pill></div>
@@ -1645,6 +2789,25 @@
           <div><strong>Rate:</strong> ${{ (selectedLoad.rate != null ? selectedLoad.rate : 0) | number:'1.2-2' }}</div>
           <div><strong>PO #:</strong> {{ selectedLoad.po_number || '--' }}</div>
           <div><strong>Notes:</strong> {{ selectedLoad.notes || '--' }}</div>
+        </div>
+
+        <!-- FN-762: Email preview panel -->
+        <div class="detail-section email-preview" *ngIf="selectedLoad.source === 'email' && selectedLoad.inbound_email">
+          <h4>
+            <span class="material-symbols-outlined">mail</span>
+            Original email
+          </h4>
+          <dl class="email-preview__meta">
+            <dt>From</dt>
+            <dd>{{ selectedLoad.inbound_email.from_email || '—' }}</dd>
+            <dt>Subject</dt>
+            <dd>{{ selectedLoad.inbound_email.subject || '—' }}</dd>
+            <dt>Received</dt>
+            <dd>{{ selectedLoad.inbound_email.received_at ? (selectedLoad.inbound_email.received_at | date:'medium') : '—' }}</dd>
+          </dl>
+          <div class="email-preview__body" *ngIf="selectedLoad.inbound_email.body_text">
+            <pre>{{ selectedLoad.inbound_email.body_text }}</pre>
+          </div>
         </div>
         <div class="detail-section" *ngIf="selectedLoad.stops && selectedLoad.stops.length">
           <h4>Stops</h4>
@@ -1672,4 +2835,155 @@
       </div>
     </div>
   </div>
+
+  <!-- ─── FN-755: Save As Template prompt ─────────────────────────────────── -->
+  <div class="modal-backdrop" *ngIf="showSaveAsTemplateModal" (click)="closeSaveAsTemplateModal()">
+    <div class="modal save-template-modal" (click)="$event.stopPropagation()">
+      <div class="modal-header">
+        <h3>Save as Template</h3>
+        <button class="close" type="button" (click)="closeSaveAsTemplateModal()">×</button>
+      </div>
+      <div class="modal-body">
+        <p class="muted">
+          Snapshot this load's broker, stops, rate, and equipment so you can reuse them later.
+          Dates and PO number are not carried over.
+        </p>
+        <label class="save-template-field">
+          Name
+          <input
+            type="text"
+            [(ngModel)]="saveAsTemplateName"
+            [ngModelOptions]="{ standalone: true }"
+            placeholder="e.g. Dallas to Chicago weekly"
+            maxlength="100"
+          />
+        </label>
+        <label class="save-template-field">
+          Description
+          <textarea
+            rows="3"
+            [(ngModel)]="saveAsTemplateDescription"
+            [ngModelOptions]="{ standalone: true }"
+            placeholder="Optional notes about this template"
+            maxlength="500"
+          ></textarea>
+        </label>
+        <div *ngIf="saveAsTemplateError" class="alert alert-error">{{ saveAsTemplateError }}</div>
+      </div>
+      <div class="modal-footer">
+        <button
+          class="btn btn-primary"
+          type="button"
+          (click)="submitSaveAsTemplate()"
+          [disabled]="saveAsTemplateSubmitting"
+        >
+          {{ saveAsTemplateSubmitting ? 'Saving…' : 'Save template' }}
+        </button>
+        <button
+          class="btn btn-secondary"
+          type="button"
+          (click)="closeSaveAsTemplateModal()"
+          [disabled]="saveAsTemplateSubmitting"
+        >
+          Cancel
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- FN-821: scroll-to-top floating button — shown after the user scrolls > 300px. -->
+  <button
+    type="button"
+    class="loads-scroll-top"
+    [class.loads-scroll-top--visible]="showScrollTop"
+    (click)="scrollToTop()"
+    title="Back to top"
+    aria-label="Scroll to top"
+    [attr.aria-hidden]="!showScrollTop"
+    [attr.tabindex]="showScrollTop ? 0 : -1"
+  >
+    <span class="material-symbols-outlined">arrow_upward</span>
+  </button>
 </div>
+
+<!-- ─── Load Creation Wizard (FN-732) ────────────────────────────────────── -->
+<app-load-wizard
+  *ngIf="showLoadWizard"
+  [title]="wizardEditMode ? 'Edit Load' : 'New Load'"
+  [activeStep]="wizardActiveStep"
+  [stepValid]="wizardStepValid"
+  [isDirty]="wizardDirty"
+  [editMode]="wizardEditMode"
+  [editLoadId]="wizardEditLoadId"
+  (activeStepChange)="wizardActiveStep = $event"
+  (save)="onWizardSave()"
+  (saveAndNew)="onWizardSaveAndNew()"
+  (cancel)="closeWizard()"
+>
+  <!-- FN-778: Real step components projected into the wizard shell's <ng-content>. -->
+  <app-step-basics
+    *ngIf="wizardActiveStep === 0"
+    [data]="wizardBasics"
+    [aiPrefilledFields]="wizardAiPrefilledFields"
+    (dataChange)="onWizardBasicsChange($event)"
+    (valid)="onWizardBasicsValid($event)"
+  ></app-step-basics>
+
+  <app-step-stops
+    *ngIf="wizardActiveStep === 1"
+    [stops]="wizardStops"
+    [rate]="wizardBasics.rate"
+    (stopsChange)="onWizardStopsChange($event)"
+    (validChange)="onWizardStopsValid($event)"
+  ></app-step-stops>
+
+  <app-wizard-step-driver
+    *ngIf="wizardActiveStep === 2"
+    [driverId]="wizardDriverId"
+    [truckId]="wizardTruckId"
+    [trailerId]="wizardTrailerId"
+    (driverIdChange)="onWizardDriverChange($event)"
+    (truckIdChange)="onWizardTruckChange($event)"
+    (trailerIdChange)="onWizardTrailerChange($event)"
+    (validChange)="onWizardDriverValid($event)"
+  ></app-wizard-step-driver>
+
+  <app-step-attachments
+    *ngIf="wizardActiveStep === 3"
+    [attachments]="wizardAttachments"
+    [aiExtractedPdf]="wizardAiExtractedPdf"
+    (attachmentsChange)="onWizardAttachmentsChange($event)"
+    (save)="onWizardSave()"
+    (saveAndNew)="onWizardSaveAndNew()"
+  ></app-step-attachments>
+</app-load-wizard>
+
+<!-- FN-862: new shell-based load wizard (alongside legacy until S10/FN-869).
+     FN-1312: `mode` and `loadId` are now bound so load-context quick-action
+     deep-links (e.g. ?action=reassign&loadId=X) can open the wizard in edit
+     mode with the load prefilled. -->
+<app-load-wizard-v2
+  *ngIf="showLoadWizardV2"
+  [mode]="loadWizardV2Mode"
+  [loadId]="loadWizardV2LoadId"
+  (created)="onLoadWizardV2Created($event)"
+  (updated)="onLoadWizardV2Updated($event)"
+  (closed)="closeLoadWizardV2()"
+></app-load-wizard-v2>
+
+<!-- FN-808: Load Detail Side Drawer ──────────────────────────────────────── -->
+<app-load-detail-drawer
+  *ngIf="drawerLoadId"
+  [loadId]="drawerLoadId"
+  [width]="drawerWidth"
+  [hasPrev]="drawerHasPrev"
+  [hasNext]="drawerHasNext"
+  [focusLowConfidence]="drawerFocusLowConfidence"
+  [initialMode]="drawerInitialMode"
+  (close)="closeLoadDrawer()"
+  (prev)="onDrawerPrev()"
+  (next)="onDrawerNext()"
+  (expand)="onDrawerExpand()"
+  (widthChange)="onDrawerWidthChange($event)"
+  (savedLoad)="onDrawerSaved()"
+></app-load-detail-drawer>

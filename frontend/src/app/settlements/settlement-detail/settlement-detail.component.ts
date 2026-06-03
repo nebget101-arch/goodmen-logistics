@@ -2,7 +2,7 @@ import { Component, OnDestroy, OnInit } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
 import { ApiService } from '../../services/api.service';
 import { ExpensePaymentCategoriesService, ExpensePaymentCategory } from '../../services/expense-payment-categories.service';
-import { Subject, forkJoin, of, takeUntil } from 'rxjs';
+import { Subject, forkJoin, of, takeUntil, switchMap, timeout } from 'rxjs';
 import { catchError } from 'rxjs/operators';
 import { OperatingEntityContextService } from '../../services/operating-entity-context.service';
 import { AiSelectOption } from '../../shared/ai-select/ai-select.component';
@@ -16,6 +16,8 @@ export class SettlementDetailComponent implements OnInit, OnDestroy {
   settlementId: string | null = null;
   loading = false;
   saving = false;
+  downloadingPdf = false;
+  emailingSettlement = false;
   error = '';
   successMessage = '';
   activeOperatingEntityName = '';
@@ -38,6 +40,12 @@ export class SettlementDetailComponent implements OnInit, OnDestroy {
   variableDeductions: any[] = [];
   manualAdjustments: any[] = [];
   scheduledDeductionWarning = '';
+
+  // V2 dual-settlement fields
+  fuelAdjustments: any[] = [];
+  tollAdjustments: any[] = [];
+  carriedBalanceAdjs: any[] = [];
+  balanceTransferAdjs: any[] = [];
 
   // Categories for dropdowns
   expenseCategories: ExpensePaymentCategory[] = [];
@@ -134,6 +142,14 @@ export class SettlementDetailComponent implements OnInit, OnDestroy {
       });
   }
 
+  private updateEmailDefaults(): void {
+    this.emailOptions = {
+      to_driver: !this.isEoSettlement(),
+      to_additional_payee: this.isEoSettlement(),
+      cc_internal: false
+    };
+  }
+
   loadCategories(): void {
     forkJoin({
       expense: this.categoriesService.getFlatCategories('expense'),
@@ -170,14 +186,42 @@ export class SettlementDetailComponent implements OnInit, OnDestroy {
     this.scheduledDeductions = [];
     this.variableDeductions = [];
     this.manualAdjustments = [];
+    this.fuelAdjustments = [];
+    this.tollAdjustments = [];
+    this.carriedBalanceAdjs = [];
+    this.balanceTransferAdjs = [];
 
-    forkJoin({
-      settlementRes: this.apiService.getSettlement(id),
-      loadsRes: this.apiService.getLoads().pipe(catchError(() => of([])))
-    }).subscribe({
+    // Do not call GET /loads (unbounded); it can hang the UI on large fleets. Use eligible-loads for this driver/period.
+    this.apiService.getSettlement(id).pipe(
+      switchMap((settlementRes) => {
+        const settlement = settlementRes?.settlement || settlementRes;
+        const driverId = settlement?.driver_id || settlementRes?.driver?.id || null;
+        const periodStart =
+          settlementRes?.period?.period_start || settlement?.period_start || '';
+        const periodEnd =
+          settlementRes?.period?.period_end || settlement?.period_end || settlement?.date || '';
+        const dateBasis = (settlement?.date_basis === 'delivery' ? 'delivery' : 'pickup') as 'pickup' | 'delivery';
+        const loads$ =
+          driverId && periodStart && periodEnd
+            ? this.apiService.getEligibleSettlementLoads(driverId, periodStart, periodEnd, dateBasis).pipe(
+                timeout(60000),
+                catchError(() => of([]))
+              )
+            : of([]);
+        return forkJoin({ settlementRes: of(settlementRes), loadsRes: loads$ });
+      })
+    ).subscribe({
       next: ({ settlementRes, loadsRes }) => {
         const settlement = settlementRes?.settlement || settlementRes;
-        this.settlement = settlement || null;
+        this.settlement = settlementRes?.settlement
+          ? {
+              ...settlementRes.settlement,
+              truck: settlementRes?.truck || null,
+              equipment_owner: settlementRes?.equipment_owner || null,
+              paired_settlement_id: settlementRes?.paired_settlement_id || null,
+              paired_settlement: settlementRes?.paired_settlement || null
+            }
+          : (settlement || null);
         this.loadItems = Array.isArray(settlementRes?.load_items) ? settlementRes.load_items : [];
         this.adjustmentItems = Array.isArray(settlementRes?.adjustment_items) ? settlementRes.adjustment_items : [];
 
@@ -213,6 +257,7 @@ export class SettlementDetailComponent implements OnInit, OnDestroy {
         });
 
         this.buildBuckets(settlementRes?.adjustment_groups || null);
+        this.updateEmailDefaults();
         const settlementPeriodEnd = this.period?.period_end || settlementRes?.period_end || this.settlement?.date || null;
         this.loadScheduledDeductionWarning(
           driverIdForFallback,
@@ -260,28 +305,35 @@ export class SettlementDetailComponent implements OnInit, OnDestroy {
   }
 
   buildBuckets(groups?: { scheduled?: any[]; variable?: any[]; manual?: any[] } | null): void {
+    const adjustments = Array.isArray(this.adjustmentItems) ? this.adjustmentItems : [];
+
     if (groups?.scheduled || groups?.variable || groups?.manual) {
       this.scheduledDeductions = Array.isArray(groups?.scheduled) ? groups.scheduled : [];
       this.variableDeductions = Array.isArray(groups?.variable) ? groups.variable : [];
       this.manualAdjustments = Array.isArray(groups?.manual) ? groups.manual : [];
-      return;
+    } else {
+      this.scheduledDeductions = adjustments.filter((a) => {
+        const source = (a.source_type || '').toLowerCase();
+        return source === 'scheduled_rule' || source === 'scheduled';
+      });
+
+      this.variableDeductions = adjustments.filter((a) => {
+        const source = (a.source_type || '').toLowerCase();
+        return (source.startsWith('imported_') || source === 'variable') &&
+          source !== 'imported_fuel' && source !== 'imported_toll';
+      });
+
+      this.manualAdjustments = adjustments.filter((a) => {
+        const source = (a.source_type || 'manual').toLowerCase();
+        return source === 'manual' || source === '';
+      });
     }
 
-    const adjustments = Array.isArray(this.adjustmentItems) ? this.adjustmentItems : [];
-    this.scheduledDeductions = adjustments.filter((a) => {
-      const source = (a.source_type || '').toLowerCase();
-      return source === 'scheduled_rule' || source === 'scheduled';
-    });
-
-    this.variableDeductions = adjustments.filter((a) => {
-      const source = (a.source_type || '').toLowerCase();
-      return source.startsWith('imported_') || source === 'variable';
-    });
-
-    this.manualAdjustments = adjustments.filter((a) => {
-      const source = (a.source_type || 'manual').toLowerCase();
-      return source === 'manual' || source === '';
-    });
+    // V2-specific buckets (always derived from raw adjustments)
+    this.fuelAdjustments = adjustments.filter((a) => (a.source_type || '').toLowerCase() === 'imported_fuel');
+    this.tollAdjustments = adjustments.filter((a) => (a.source_type || '').toLowerCase() === 'imported_toll');
+    this.carriedBalanceAdjs = adjustments.filter((a) => (a.source_type || '').toLowerCase() === 'carried_balance');
+    this.balanceTransferAdjs = adjustments.filter((a) => (a.source_type || '').toLowerCase() === 'balance_transfer');
   }
 
   isLocked(): boolean {
@@ -297,7 +349,12 @@ export class SettlementDetailComponent implements OnInit, OnDestroy {
 
   getSettlementTitle(): string {
     const period = this.getSettlementPayrollPeriodLabel();
-    return period && period !== '—' ? `Settlement ${period}` : 'Settlement';
+    const prefix = this.isEoSettlement()
+      ? 'Equipment Owner Settlement'
+      : this.isDriverSettlement()
+        ? 'Driver Settlement'
+        : 'Settlement';
+    return period && period !== '—' ? `${prefix} ${period}` : prefix;
   }
 
   getSettlementNumberDisplay(): string {
@@ -640,19 +697,19 @@ export class SettlementDetailComponent implements OnInit, OnDestroy {
   }
 
   sendEmail(): void {
-    if (!this.settlementId || this.saving) return;
-    this.saving = true;
+    if (!this.settlementId || this.emailingSettlement) return;
+    this.emailingSettlement = true;
     this.error = '';
     this.successMessage = '';
     this.apiService.sendSettlementEmail(this.settlementId, this.emailOptions).subscribe({
       next: (res: any) => {
         const count = Array.isArray(res?.recipients) ? res.recipients.length : 0;
-        this.successMessage = `Email request sent (${count} recipient${count === 1 ? '' : 's'}).`;
-        this.saving = false;
+        this.successMessage = `${this.getEmailActionLabel()} requested (${count} recipient${count === 1 ? '' : 's'}).`;
+        this.emailingSettlement = false;
       },
       error: (err) => {
         this.error = err?.error?.error || err?.message || 'Failed to send settlement email';
-        this.saving = false;
+        this.emailingSettlement = false;
       }
     });
   }
@@ -683,14 +740,14 @@ export class SettlementDetailComponent implements OnInit, OnDestroy {
   }
 
   downloadSettlementPdf(): void {
-    if (!this.settlementId || this.saving) return;
-    this.saving = true;
+    if (!this.settlementId || this.downloadingPdf) return;
+    this.downloadingPdf = true;
     this.error = '';
     this.successMessage = '';
 
     this.apiService.downloadSettlementPdfBlob(this.settlementId).subscribe({
       next: (blob: Blob) => {
-        const fileName = `${this.getSettlementNumberDisplay()}.pdf`;
+        const fileName = `${this.getSettlementExportName()}.pdf`;
         const url = window.URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
@@ -699,18 +756,174 @@ export class SettlementDetailComponent implements OnInit, OnDestroy {
         a.click();
         a.remove();
         window.URL.revokeObjectURL(url);
-        this.successMessage = 'Settlement PDF downloaded.';
-        this.saving = false;
+        this.successMessage = `${this.getPdfActionLabel()} downloaded.`;
+        this.downloadingPdf = false;
       },
       error: (err) => {
         this.error = err?.error?.error || err?.message || 'Failed to download settlement PDF';
-        this.saving = false;
+        this.downloadingPdf = false;
       }
     });
   }
 
+  isActionBusy(): boolean {
+    return this.downloadingPdf || this.emailingSettlement;
+  }
+
+  getPdfActionLabel(): string {
+    return this.isEoSettlement() ? 'Equipment Owner PDF' : 'Driver PDF';
+  }
+
+  getEmailActionLabel(): string {
+    return this.isEoSettlement() ? 'Equipment Owner settlement email' : 'Driver settlement email';
+  }
+
+  getExportButtonLabel(): string {
+    return this.downloadingPdf ? 'Exporting…' : 'Export PDF';
+  }
+
+  getEmailButtonLabel(): string {
+    return this.emailingSettlement ? 'Sending…' : 'Email Settlement';
+  }
+
+  getSettlementExportName(): string {
+    const number = this.settlement?.settlement_number || this.getSettlementNumberDisplay();
+    const type = this.isEoSettlement() ? 'equipment-owner' : 'driver';
+    return `${number}-${type}`.replace(/[^a-zA-Z0-9._-]+/g, '-');
+  }
+
+  getEmailSectionTitle(): string {
+    return this.isEoSettlement() ? 'Email equipment owner settlement' : 'Email driver settlement';
+  }
+
+  getEmailPrimaryOptionLabel(): string {
+    return this.isEoSettlement() ? 'Send to equipment owner payee' : 'Send to driver';
+  }
+
+  getEmailSecondaryOptionLabel(): string {
+    return this.isEoSettlement() ? 'Send copy to driver reference' : 'Send to equipment owner';
+  }
+
+  getEmailHelpText(): string {
+    return this.isEoSettlement()
+      ? 'Choose who should receive the equipment owner settlement report and any internal copy.'
+      : 'Choose who should receive the driver settlement report and any internal copy.';
+  }
+
   getDataSourceLabel(): string {
     return this.dataSourceMode === 'fallback' ? 'Fallback enriched payload' : 'Normalized settlement contract';
+  }
+
+  isV2Settlement(): boolean {
+    return !!(this.settlement?.settlement_type);
+  }
+
+  isEoSettlement(): boolean {
+    return (this.settlement?.settlement_type || '') === 'equipment_owner';
+  }
+
+  isDriverSettlement(): boolean {
+    return (this.settlement?.settlement_type || '') === 'driver';
+  }
+
+  getSettlementTypeLabel(): string {
+    const t = (this.settlement?.settlement_type || '').toLowerCase();
+    if (t === 'equipment_owner') return 'Equipment Owner';
+    if (t === 'driver') return 'Driver';
+    return '';
+  }
+
+  getSettlementTypeClass(): string {
+    const t = (this.settlement?.settlement_type || '').toLowerCase();
+    if (t === 'equipment_owner') return 'badge-eo';
+    if (t === 'driver') return 'badge-driver-type';
+    return '';
+  }
+
+  getTruckLabel(): string {
+    return this.settlement?.truck?.unit_number
+      || this.settlement?.truck?.plate_number
+      || this.settlement?.truck_id
+      || '—';
+  }
+
+  getEquipmentOwnerName(): string {
+    return this.settlement?.equipment_owner?.name
+      || this.settlement?.equipment_owner_name
+      || this.additionalPayee?.name
+      || this.settlement?.equipment_owner_id
+      || '—';
+  }
+
+  getPrimaryPartyLabel(): string {
+    return this.isEoSettlement() ? 'Equipment Owner payee' : 'Driver payee';
+  }
+
+  getPrimaryPartyName(): string {
+    if (this.isEoSettlement()) {
+      return this.primaryPayee?.name || this.getEquipmentOwnerName();
+    }
+    return this.primaryPayee?.name || this.getDriverName();
+  }
+
+  getSecondaryPartyLabel(): string {
+    return this.isEoSettlement() ? 'Driver reference' : 'Equipment Owner reference';
+  }
+
+  getSecondaryPartyName(): string {
+    if (this.isEoSettlement()) {
+      return this.driver?.name || this.getDriverName();
+    }
+    return this.getEquipmentOwnerName();
+  }
+
+  getCurrentPartyPayLabel(): string {
+    return this.isEoSettlement() ? 'Equipment Owner subtotal' : 'Driver pay subtotal';
+  }
+
+  getCurrentPartyPayValue(): number {
+    return this.isEoSettlement()
+      ? Number(this.settlement?.subtotal_additional_payee) || 0
+      : Number(this.settlement?.subtotal_driver_pay) || 0;
+  }
+
+  getNetPayLabel(): string {
+    return this.isEoSettlement() ? 'Equipment Owner net pay' : 'Driver net pay';
+  }
+
+  getNetPayValue(): number {
+    return this.isEoSettlement()
+      ? Number(this.settlement?.net_pay_additional_payee) || 0
+      : Number(this.settlement?.net_pay_driver) || 0;
+  }
+
+  getLoadPayColumnLabel(): string {
+    return this.isEoSettlement() ? 'Highlighted payee amount' : 'Highlighted driver amount';
+  }
+
+  hasPairedSettlement(): boolean {
+    return !!(this.settlement?.paired_settlement_id || this.settlement?.paired_settlement?.id);
+  }
+
+  getPairedSettlementLabel(): string {
+    const pairedType = (this.settlement?.paired_settlement?.settlement_type || '').toLowerCase();
+    if (pairedType === 'equipment_owner') return 'View equipment owner settlement';
+    if (pairedType === 'driver') return 'View driver settlement';
+    return 'View paired settlement';
+  }
+
+  openPairedSettlement(): void {
+    const pairedId = this.settlement?.paired_settlement?.id || this.settlement?.paired_settlement_id;
+    if (!pairedId) return;
+    this.router.navigate(['/settlements', pairedId]);
+  }
+
+  getCarriedBalance(): number {
+    return Number(this.settlement?.carried_balance) || 0;
+  }
+
+  hasNegativeNet(): boolean {
+    return this.getCarriedBalance() > 0 && Number(this.settlement?.net_pay_driver) === 0;
   }
 
   private logAdditionalPayeeDiagnostics(detail: any, payeeAssignmentRes: any | null): void {

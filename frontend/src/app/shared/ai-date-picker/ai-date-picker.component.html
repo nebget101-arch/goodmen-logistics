@@ -1,11 +1,9 @@
+<label *ngIf="label" class="ai-date-picker-label" [attr.for]="inputId || null">{{ label }}</label>
 <mat-form-field
   appearance="outline"
-  class="ai-date-picker-field"
-  [class.ai-date-picker-field--external-label]="!label"
+  class="ai-date-picker-field ai-date-picker-field--external-label"
   subscriptSizing="dynamic"
-  [floatLabel]="$any(label ? 'auto' : 'never')"
 >
-  <mat-label *ngIf="label">{{ label }}</mat-label>
   <input
     matInput
     [attr.id]="inputId || null"
@@ -19,6 +17,7 @@
     (ngModelChange)="onDateChange($event)"
     (blur)="onBlur()"
     [attr.aria-label]="ariaLabel || label || placeholder || 'Select date'"
+    [attr.aria-describedby]="ariaDescribedBy || null"
     autocomplete="off"
   />
   <mat-datepicker-toggle matSuffix [for]="picker" [disabled]="disabled"></mat-datepicker-toggle>

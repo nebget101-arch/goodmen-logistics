@@ -12,7 +12,48 @@ async function zipTableExists() {
   }
 }
 
-// GET /api/geo/route?waypoints=lon1,lat1;lon2,lat2 (proxies OSRM for browser CORS)
+/**
+ * @openapi
+ * /api/geo/route:
+ *   get:
+ *     summary: Get driving route between waypoints
+ *     description: Proxies the OSRM routing service to avoid browser CORS restrictions. Accepts semicolon-separated waypoints as lon,lat pairs and returns the full GeoJSON route geometry.
+ *     tags:
+ *       - Geo
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: waypoints
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Semicolon-separated lon,lat pairs (e.g. "-87.6298,41.8781;-73.9857,40.7484")
+ *     responses:
+ *       200:
+ *         description: Route geometry
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *                   nullable: true
+ *                   properties:
+ *                     coordinates:
+ *                       type: array
+ *                       items:
+ *                         type: array
+ *                         items:
+ *                           type: number
+ *       400:
+ *         description: Missing waypoints parameter
+ *       502:
+ *         description: OSRM service unavailable
+ */
 router.get('/route', async (req, res) => {
   const waypoints = (req.query.waypoints || '').toString().trim();
   if (!waypoints) {
@@ -32,6 +73,53 @@ router.get('/route', async (req, res) => {
   }
 });
 
+/**
+ * @openapi
+ * /api/geo/zip/{zip}:
+ *   get:
+ *     summary: Lookup city, state, and coordinates by ZIP code
+ *     description: Resolves a US ZIP code to city, state, latitude, and longitude. Uses a local zip_codes cache table when available, falling back to the Zippopotam.us API. Backfills missing lat/lon into the cache.
+ *     tags:
+ *       - Geo
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: zip
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: US ZIP code (e.g. "60601")
+ *     responses:
+ *       200:
+ *         description: ZIP code details
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     zip:
+ *                       type: string
+ *                     city:
+ *                       type: string
+ *                     state:
+ *                       type: string
+ *                     lat:
+ *                       type: number
+ *                     lon:
+ *                       type: number
+ *       400:
+ *         description: ZIP is required
+ *       404:
+ *         description: ZIP not found
+ *       500:
+ *         description: Server error
+ */
 router.get('/zip/:zip', async (req, res) => {
   const zip = (req.params.zip || '').toString().trim();
   if (!zip) {

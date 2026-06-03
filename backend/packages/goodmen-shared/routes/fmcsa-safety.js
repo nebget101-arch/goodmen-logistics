@@ -4,7 +4,7 @@
  * FMCSA Safety Module – Express router.
  * Mounted at /api/fmcsa/safety in the integrations service.
  *
- * Internal routes (FleetNeuron safety team):
+ * Internal routes (FleetNeuron safety team — read-only after FN-1451):
  *   GET    /api/fmcsa/safety/dashboard
  *   GET    /api/fmcsa/safety/carriers
  *   POST   /api/fmcsa/safety/carriers
@@ -13,44 +13,47 @@
  *   GET    /api/fmcsa/safety/carriers/:id/basic-details
  *   GET    /api/fmcsa/safety/carriers/:id/basic-details/:basicName
  *   GET    /api/fmcsa/safety/carriers/:id/basic-details/:basicName/history
- *   POST   /api/fmcsa/safety/scrape
- *   POST   /api/fmcsa/safety/scrape/basic-details
- *   POST   /api/fmcsa/safety/scrape/:carrierId
- *   POST   /api/fmcsa/safety/scrape/:carrierId/basic-details
  *   GET    /api/fmcsa/safety/jobs
  *
  * Client-facing routes (tenant-scoped):
- *   GET    /api/fmcsa/safety/my-scores
- *   GET    /api/fmcsa/safety/my-scores/:dotNumber/history
+ *   GET    /api/fmcsa/safety/my-scores                      (FN-1427 → fmcsa-reference)
+ *   GET    /api/fmcsa/safety/my-scores/:dotNumber/history   (FN-1427 → fmcsa-reference)
  *   GET    /api/fmcsa/safety/my-scores/:dotNumber/basic-details
+ *
+ * FN-474 inspection ingest / list / match (kept):
+ *   POST   /api/fmcsa/safety/inspections/ingest
+ *   GET    /api/fmcsa/safety/inspections
+ *   GET    /api/fmcsa/safety/inspections/:id
+ *   PATCH  /api/fmcsa/safety/inspections/:id/match
+ *   POST   /api/fmcsa/safety/inspections/rematch
+ *
+ * Migration history:
+ *   FN-1427 — tenant-facing reads switched to fmcsa.* via fmcsa-reference.js.
+ *   FN-1451 — SAFER scraper retired: POST /scrape* endpoints + initQueue +
+ *             fmcsa-safer-scraper.js + fmcsa-scrape-queue.js + utils/fmcsa.js
+ *             removed. Read endpoints + their backing legacy tables
+ *             (fmcsa_monitored_carriers, fmcsa_safety_snapshots,
+ *             fmcsa_basic_details*, fmcsa_scrape_jobs) deliberately kept
+ *             intact: a frontend cleanup ticket will retire the legacy
+ *             admin UI (fmcsa-dashboard / fmcsa-carriers / fmcsa-carrier-detail)
+ *             before those reads + tables get dropped.
  */
 
 const express = require('express');
 const router = express.Router();
 const knex = require('../config/knex');
 const { loadUserRbac, requirePermission, requireAnyPermission } = require('../middleware/rbac-middleware');
+const fmcsaRef = require('../services/fmcsa-reference');
 
 // RBAC middleware applied to all routes
 router.use(loadUserRbac);
 router.use(requireAnyPermission([
   'fmcsa_safety.view',
   'fmcsa_safety.manage',
-  'fmcsa_safety.scrape',
 ]));
 
 const canView = requirePermission('fmcsa_safety.view');
 const canManage = requirePermission('fmcsa_safety.manage');
-const canScrape = requirePermission('fmcsa_safety.scrape');
-
-// ─── Queue reference (set by initQueue) ──────────────────────────────────────
-let scrapeQueue = null;
-
-/**
- * Called by integrations-service on startup to inject the Bull queue instance.
- */
-function initQueue(queue) {
-  scrapeQueue = queue;
-}
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -108,6 +111,12 @@ function sendError(res, status, message) {
   return res.status(status).json({ error: message });
 }
 
+function parseJsonSafe(val) {
+  if (!val) return null;
+  if (typeof val === 'object') return val;
+  try { return JSON.parse(val); } catch { return null; }
+}
+
 const DOT_RE = /^\d{1,8}$/;
 
 /**
@@ -136,6 +145,109 @@ async function verifyCarrierAccess(req, res) {
 // ─── Score thresholds for alerts ─────────────────────────────────────────────
 const ALERT_THRESHOLD = 75; // percentile above which we flag a score
 const SCORE_INCREASE_THRESHOLD = 15; // point increase between snapshots
+
+// ─── FN-1427: BASIC name → snapshot-shape field mapping ───────────────────────
+// FMCSA SMS bulk files emit BASIC tokens like "UNSAFE_DRIVING"; the legacy
+// snapshot-shaped API exposes them as fields like "unsafe_driving_score". This
+// keeps the public contract stable while we migrate the storage layer.
+const BASIC_TO_FIELD = {
+  UNSAFE_DRIVING: 'unsafe_driving_score',
+  HOS: 'hos_compliance_score',
+  HOS_COMPLIANCE: 'hos_compliance_score',
+  VEHICLE_MAINT: 'vehicle_maintenance_score',
+  VEHICLE_MAINTENANCE: 'vehicle_maintenance_score',
+  CONTROLLED_SUBS: 'controlled_substances_score',
+  CONTROLLED_SUBSTANCES: 'controlled_substances_score',
+  DRIVER_FITNESS: 'driver_fitness_score',
+  CRASH_INDICATOR: 'crash_indicator_score',
+  HAZMAT: 'hazmat_score',
+  HAZMAT_COMPLIANCE: 'hazmat_score',
+};
+
+const SCORE_FIELDS = [
+  { key: 'unsafe_driving_score', label: 'Unsafe Driving' },
+  { key: 'hos_compliance_score', label: 'HOS Compliance' },
+  { key: 'vehicle_maintenance_score', label: 'Vehicle Maintenance' },
+  { key: 'controlled_substances_score', label: 'Controlled Substances' },
+  { key: 'driver_fitness_score', label: 'Driver Fitness' },
+  { key: 'crash_indicator_score', label: 'Crash Indicator' },
+  { key: 'hazmat_score', label: 'Hazmat' },
+];
+
+/**
+ * Build a snapshot-shaped row from fmcsa.* data for one DOT.
+ * Returned object matches the field set consumers expected from
+ * `fmcsa_safety_snapshots` so the API contract stays stable for pass 1.
+ *
+ * `safety_rating`, `safety_rating_date`, and `out_of_service_date` are not
+ * yet in the fmcsa.* schema; they're returned as null until a future importer
+ * pass adds them (tracked as an Open Item on FN-1416).
+ */
+async function buildSnapshotShape(dot) {
+  const dotInt = parseInt(dot, 10);
+  if (!Number.isFinite(dotInt)) return null;
+
+  const [carrier, scores, authorities] = await Promise.all([
+    fmcsaRef.getCarrier(dotInt),
+    fmcsaRef.getBasicScores(dotInt),
+    fmcsaRef.getCarrierAuthorities(dotInt),
+  ]);
+  if (!carrier) return null;
+
+  const snap = {
+    scraped_at: null,
+    operating_status: carrier.status || null,
+    safety_rating: null,
+    safety_rating_date: null,
+    out_of_service_date: null,
+    total_drivers: carrier.drivers ?? null,
+    total_power_units: carrier.power_units ?? null,
+    bipd_insurance_required: null,
+    bipd_insurance_on_file: null,
+    cargo_insurance_required: null,
+    cargo_insurance_on_file: null,
+    bond_insurance_required: null,
+    bond_insurance_on_file: null,
+    authority_common: null,
+    authority_contract: null,
+    authority_broker: null,
+  };
+
+  for (const field of SCORE_FIELDS) snap[field.key] = null;
+
+  let mostRecent = null;
+  for (const s of scores || []) {
+    const fieldKey = BASIC_TO_FIELD[String(s.basic).toUpperCase()];
+    if (!fieldKey) continue;
+    snap[fieldKey] = s.percentile != null ? Number(s.percentile) : null;
+    if (!mostRecent || (s.computed_at && s.computed_at > mostRecent)) {
+      mostRecent = s.computed_at;
+    }
+  }
+  snap.scraped_at = mostRecent;
+
+  for (const a of authorities || []) {
+    if (a.authority_type === 'Common') snap.authority_common = a.status;
+    else if (a.authority_type === 'Contract') snap.authority_contract = a.status;
+    else if (a.authority_type === 'Broker') snap.authority_broker = a.status;
+
+    // Insurance is a JSONB blob keyed loosely by type; surface a YES/NO if any
+    // entry exists for the given type (legacy contract was a YES/NO string).
+    const amounts = parseJsonSafe(a.insurance_amounts) || {};
+    const upperKeys = Object.keys(amounts).map((k) => String(k).toUpperCase());
+    if (snap.bipd_insurance_on_file == null && upperKeys.some((k) => k.includes('BIPD'))) {
+      snap.bipd_insurance_on_file = 'YES';
+    }
+    if (snap.cargo_insurance_on_file == null && upperKeys.some((k) => k.includes('CARGO'))) {
+      snap.cargo_insurance_on_file = 'YES';
+    }
+    if (snap.bond_insurance_on_file == null && upperKeys.some((k) => k.includes('BOND'))) {
+      snap.bond_insurance_on_file = 'YES';
+    }
+  }
+
+  return snap;
+}
 
 // ─── Internal: Dashboard ─────────────────────────────────────────────────────
 
@@ -364,89 +476,6 @@ router.get('/carriers/:id/history', canView, async (req, res) => {
   }
 });
 
-// ─── Internal: Trigger Scrape ────────────────────────────────────────────────
-
-router.post('/scrape', canScrape, async (req, res) => {
-  try {
-    if (!(await isDefaultTenant(req))) {
-      return sendError(res, 403, 'Only platform admin can trigger full scrape');
-    }
-    if (!scrapeQueue) {
-      return sendError(res, 503, 'Scrape queue not initialized');
-    }
-    const job = await scrapeQueue.enqueueFullScrape(userId(req));
-    res.status(202).json({ message: 'Scrape started', job });
-  } catch (err) {
-    console.error('[fmcsa-safety] trigger scrape error', err);
-    sendError(res, 500, 'Failed to trigger scrape');
-  }
-});
-
-// NOTE: /scrape/basic-details must be defined BEFORE /scrape/:carrierId
-// to prevent Express from matching "basic-details" as a carrierId param.
-router.post('/scrape/basic-details', canScrape, async (req, res) => {
-  try {
-    if (!(await isDefaultTenant(req))) {
-      return sendError(res, 403, 'Only platform admin can trigger full BASIC detail scrape');
-    }
-    if (!scrapeQueue) {
-      return sendError(res, 503, 'Scrape queue not initialized');
-    }
-
-    const job = await scrapeQueue.enqueueFullBasicDetailScrape(userId(req));
-    res.status(202).json({ message: 'Full BASIC detail scrape started', job });
-  } catch (err) {
-    console.error('[fmcsa-safety] trigger full basic detail scrape error', err);
-    sendError(res, 500, 'Failed to trigger full BASIC detail scrape');
-  }
-});
-
-router.post('/scrape/:carrierId', canScrape, async (req, res) => {
-  try {
-    if (!scrapeQueue) {
-      return sendError(res, 503, 'Scrape queue not initialized');
-    }
-
-    // Verify carrier exists
-    const carrier = await knex('fmcsa_monitored_carriers')
-      .where({ id: req.params.carrierId })
-      .first();
-    if (!carrier) {
-      return sendError(res, 404, 'Carrier not found');
-    }
-
-    const job = await scrapeQueue.enqueueSingleScrape(req.params.carrierId, userId(req));
-    res.status(202).json({ message: 'Single carrier scrape started', job });
-  } catch (err) {
-    console.error('[fmcsa-safety] trigger single scrape error', err);
-    sendError(res, 500, 'Failed to trigger scrape');
-  }
-});
-
-router.post('/scrape/:carrierId/basic-details', canScrape, async (req, res) => {
-  try {
-    if (!scrapeQueue) {
-      return sendError(res, 503, 'Scrape queue not initialized');
-    }
-
-    const carrier = await knex('fmcsa_monitored_carriers')
-      .where({ id: req.params.carrierId })
-      .first();
-    if (!carrier) {
-      return sendError(res, 404, 'Carrier not found');
-    }
-
-    const job = await scrapeQueue.enqueueBasicDetailScrape(
-      req.params.carrierId,
-      userId(req)
-    );
-    res.status(202).json({ message: 'BASIC detail scrape started', job });
-  } catch (err) {
-    console.error('[fmcsa-safety] trigger basic detail scrape error', err);
-    sendError(res, 500, 'Failed to trigger BASIC detail scrape');
-  }
-});
-
 // ─── Internal: BASIC Detail Data ────────────────────────────────────────────
 
 /**
@@ -656,33 +685,23 @@ router.get('/my-scores', canView, async (req, res) => {
       return res.json({ carriers: [] });
     }
 
-    const dotNumbers = entities.map((e) => e.dot_number);
+    // FN-1427: read from fmcsa.* via fmcsa-reference instead of legacy
+    // fmcsa_monitored_carriers + fmcsa_safety_snapshots tables.
+    const carriers = await Promise.all(
+      entities.map(async (e) => {
+        const carrier = await fmcsaRef.getCarrier(e.dot_number);
+        const snap = await buildSnapshotShape(e.dot_number);
+        return {
+          id: carrier ? `dot-${carrier.dot}` : `entity-${e.id}`,
+          dot_number: e.dot_number,
+          mc_number: carrier?.mc_number || e.mc_number || null,
+          legal_name: carrier?.legal_name || e.legal_name || e.name || null,
+          ...(snap || {}),
+        };
+      })
+    );
 
-    // Get latest snapshots for these DOT numbers
-    const carriers = await knex('fmcsa_monitored_carriers as mc')
-      .leftJoin(
-        knex('fmcsa_safety_snapshots')
-          .distinctOn('monitored_carrier_id')
-          .orderBy('monitored_carrier_id')
-          .orderBy('scraped_at', 'desc')
-          .as('s'),
-        'mc.id', 's.monitored_carrier_id'
-      )
-      .whereIn('mc.dot_number', dotNumbers)
-      .select(
-        'mc.id', 'mc.dot_number', 'mc.mc_number', 'mc.legal_name',
-        's.scraped_at', 's.unsafe_driving_score', 's.hos_compliance_score',
-        's.vehicle_maintenance_score', 's.controlled_substances_score',
-        's.driver_fitness_score', 's.crash_indicator_score', 's.hazmat_score',
-        's.operating_status', 's.safety_rating', 's.total_drivers', 's.total_power_units',
-        's.bipd_insurance_required', 's.bipd_insurance_on_file',
-        's.cargo_insurance_required', 's.cargo_insurance_on_file',
-        's.bond_insurance_required', 's.bond_insurance_on_file',
-        's.authority_common', 's.authority_contract', 's.authority_broker',
-        's.safety_rating_date', 's.out_of_service_date'
-      )
-      .orderBy('mc.legal_name');
-
+    carriers.sort((a, b) => (a.legal_name || '').localeCompare(b.legal_name || ''));
     res.json({ carriers });
   } catch (err) {
     console.error('[fmcsa-safety] my-scores error', err);
@@ -710,28 +729,39 @@ router.get('/my-scores/:dotNumber/history', canView, async (req, res) => {
       return sendError(res, 403, 'DOT number not associated with your tenant');
     }
 
-    const carrier = await knex('fmcsa_monitored_carriers')
-      .where({ dot_number: dotNumber })
-      .first();
-    if (!carrier) {
-      return res.json({ snapshots: [], total: 0 });
-    }
-
+    // FN-1427: read from fmcsa.basic_scores via fmcsa-reference. Each computed_at
+    // becomes one snapshot-shaped row aggregating all BASICs for that timestamp.
     const limit = Math.min(parseInt(req.query.limit) || 30, 100);
     const offset = parseInt(req.query.offset) || 0;
 
-    const snapshots = await knex('fmcsa_safety_snapshots')
-      .where({ monitored_carrier_id: carrier.id })
-      .orderBy('scraped_at', 'desc')
-      .limit(limit)
-      .offset(offset)
-      .select('*');
+    const allScores = await fmcsaRef.getBasicScores(dotNumber, { latest: false });
+    if (!allScores.length) return res.json({ snapshots: [], total: 0, limit, offset });
 
-    const [{ count }] = await knex('fmcsa_safety_snapshots')
-      .where({ monitored_carrier_id: carrier.id })
-      .count('id as count');
+    // Group scores by computed_at into snapshot-shaped rows.
+    const byTs = new Map();
+    for (const s of allScores) {
+      const tsKey = s.computed_at instanceof Date
+        ? s.computed_at.toISOString()
+        : String(s.computed_at);
+      let snap = byTs.get(tsKey);
+      if (!snap) {
+        snap = { scraped_at: s.computed_at };
+        for (const f of SCORE_FIELDS) snap[f.key] = null;
+        byTs.set(tsKey, snap);
+      }
+      const fieldKey = BASIC_TO_FIELD[String(s.basic).toUpperCase()];
+      if (fieldKey) snap[fieldKey] = s.percentile != null ? Number(s.percentile) : null;
+    }
 
-    res.json({ snapshots, total: parseInt(count), limit, offset });
+    const snapshots = [...byTs.values()].sort((a, b) => {
+      const at = a.scraped_at ? new Date(a.scraped_at).getTime() : 0;
+      const bt = b.scraped_at ? new Date(b.scraped_at).getTime() : 0;
+      return bt - at;
+    });
+
+    const total = snapshots.length;
+    const page = snapshots.slice(offset, offset + limit);
+    res.json({ snapshots: page, total, limit, offset });
   } catch (err) {
     console.error('[fmcsa-safety] my-scores history error', err);
     sendError(res, 500, 'Failed to load score history');
@@ -898,21 +928,81 @@ router.post('/inspections/ingest', requireRole(['admin', 'safety']), async (req,
 });
 
 // GET /inspections — List inspections with filters
+// Deduplicates by report_number (same inspection appears per BASIC category)
 router.get('/inspections', requireRole(['admin', 'safety', 'dispatcher']), async (req, res) => {
   try {
     const { carrier_id, match_status, date_from, date_to, limit = 50, offset = 0 } = req.query;
 
-    let q = knex('fmcsa_inspection_history').orderBy('inspection_date', 'desc');
-    if (carrier_id) q = q.where('carrier_id', carrier_id);
-    if (match_status) q = q.where('match_status', match_status);
-    if (date_from) q = q.where('inspection_date', '>=', date_from);
-    if (date_to) q = q.where('inspection_date', '<=', date_to);
+    // Build WHERE clause params for dedup query
+    const conditions = [];
+    const params = [];
+    if (carrier_id) { conditions.push('h.carrier_id = ?'); params.push(carrier_id); }
+    if (match_status) { conditions.push('h.match_status = ?'); params.push(match_status); }
+    if (date_from) { conditions.push('h.inspection_date >= ?'); params.push(date_from); }
+    if (date_to) { conditions.push('h.inspection_date <= ?'); params.push(date_to); }
+    const whereClause = conditions.length ? 'AND ' + conditions.join(' AND ') : '';
 
-    const countQuery = q.clone().clearOrder().count('* as total').first();
-    const rows = await q.limit(Number(limit)).offset(Number(offset));
-    const { total } = await countQuery;
+    // Deduplicate: pick one row per report_number using DISTINCT ON
+    const paginatedRows = await knex.raw(`
+      SELECT * FROM (
+        SELECT DISTINCT ON (h.report_number)
+          h.*,
+          d.level,
+          d.vehicles AS detail_vehicles,
+          d.violations AS detail_violations
+        FROM fmcsa_inspection_history h
+        LEFT JOIN fmcsa_inspection_details d ON h.report_number = d.report_number
+        WHERE 1=1 ${whereClause}
+        ORDER BY h.report_number, h.created_at DESC
+      ) AS deduped
+      ORDER BY inspection_date DESC
+      LIMIT ? OFFSET ?
+    `, [...params, Number(limit), Number(offset)]);
 
-    res.json({ rows, total: Number(total) });
+    let countQ = knex('fmcsa_inspection_history').countDistinct('report_number as total');
+    if (carrier_id) countQ = countQ.where('carrier_id', carrier_id);
+    if (match_status) countQ = countQ.where('match_status', match_status);
+    if (date_from) countQ = countQ.where('inspection_date', '>=', date_from);
+    if (date_to) countQ = countQ.where('inspection_date', '<=', date_to);
+    const countResult = await countQ.first();
+
+    const rows = paginatedRows.rows || [];
+    const total = Number(countResult?.total || 0);
+
+    // Enrich rows with computed fields from detail data
+    const enriched = rows.map(row => {
+      const violations = parseJsonSafe(row.detail_violations) || parseJsonSafe(row.violations) || [];
+      const vehicles = parseJsonSafe(row.detail_vehicles) || [];
+      const truck = vehicles.find(v => /truck/i.test(v.type)) || vehicles[0];
+
+      // Format date as YYYY-MM-DD to avoid timezone shift in the browser
+      let dateStr = null;
+      if (row.inspection_date) {
+        const d = new Date(row.inspection_date);
+        dateStr = d.toISOString().split('T')[0];
+      }
+
+      return {
+        ...row,
+        inspection_date: dateStr,
+        level: row.level || null,
+        violation_count: violations.length,
+        vehicle_display: truck
+          ? `${truck.plate_number || ''} ${truck.make || ''}`.trim() || null
+          : row.plate_number || null,
+        vehicle_vin: truck?.vin || null,
+        plate_raw: truck?.plate_number || row.plate_number || null,
+        vin_raw: truck?.vin || null,
+        driver_name_raw: row.driver_name || null,
+        oos_vehicle: row.vehicle_oos || violations.some(v => v.oos === 'Y' && /truck|trailer/i.test(v.unit || '')),
+        oos_driver: row.driver_oos || violations.some(v => v.oos === 'Y' && /driver/i.test(v.unit || '')),
+        // Clean up join artifacts
+        detail_vehicles: undefined,
+        detail_violations: undefined,
+      };
+    });
+
+    res.json({ rows: enriched, total });
   } catch (err) {
     dtLogger.error('fmcsa_inspections_list_error', err);
     sendError(res, 500, 'Failed to list inspections');
@@ -993,6 +1083,4 @@ router.post('/inspections/rematch', requireRole(['admin', 'safety']), async (req
   }
 });
 
-// Export router and initQueue
-router.initQueue = initQueue;
 module.exports = router;

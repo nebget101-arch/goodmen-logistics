@@ -1703,3 +1703,47 @@ input[type='date'].form-input {
   }
 }
 
+/* === FN-534: Address Autocomplete Dropdown === */
+.address-autocomplete-wrapper {
+  position: relative;
+}
+
+.address-suggestions {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  z-index: 100;
+  max-height: 220px;
+  overflow-y: auto;
+  background: rgba(15, 23, 42, 0.98);
+  border: 1px solid rgba(51, 65, 85, 0.8);
+  border-top: none;
+  border-radius: 0 0 8px 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+}
+
+.address-suggestion-item {
+  display: block;
+  width: 100%;
+  padding: 10px 14px;
+  border: none;
+  background: transparent;
+  color: #e2e8f0;
+  font-size: 0.875rem;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.address-suggestion-item:hover,
+.address-suggestion-item:focus {
+  background: rgba(56, 189, 248, 0.12);
+  color: #67e8f9;
+  outline: none;
+}
+
+.address-suggestion-item + .address-suggestion-item {
+  border-top: 1px solid rgba(51, 65, 85, 0.4);
+}
+

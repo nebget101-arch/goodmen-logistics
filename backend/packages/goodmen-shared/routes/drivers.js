@@ -4,6 +4,11 @@ const { query, getClient } = require('../internal/db');
 const { transformRows, transformRow, toSnakeCase } = require('../utils/case-converter');
 const dtLogger = require('../utils/logger');
 const { syncTollDeviceDrivers } = require('../services/toll-device-driver-sync');
+const {
+  hasDriverCompensationUpdate,
+  pickLatestEquipmentOwnerPercentage,
+  resolveCompensationProfileEffectiveStartDate
+} = require('../services/driver-compensation-profile-sync');
 const authMiddleware = require('../middleware/auth-middleware');
 const tenantContextMiddleware = require('../middleware/tenant-context-middleware');
 const { loadUserRbac } = require('../middleware/rbac-middleware');
@@ -145,31 +150,273 @@ async function findDriverByCdl(client, state, number) {
   return result.rows[0] || null;
 }
 
+// FN-1303: shape-check ids before they reach SQL so a static path mistake
+// (e.g. `/api/drivers/risk`) returns 404 instead of crashing the UUID cast.
+const DRIVER_UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+// FN-1303: parse `?limit=N` for the briefing risk-top routes. Default 1,
+// clamp to [1, 25], reject anything non-numeric so callers get 400, not a
+// silent fallback that masks a coding bug in the aggregator.
+function parseRiskTopLimit(raw) {
+  if (raw === undefined || raw === null || raw === '') return 1;
+  const trimmed = String(raw).trim();
+  if (!/^-?\d+$/.test(trimmed)) return null;
+  const n = parseInt(trimmed, 10);
+  if (Number.isNaN(n)) return null;
+  return Math.max(1, Math.min(25, n));
+}
+
+/**
+ * @openapi
+ * /api/drivers/risk/top:
+ *   get:
+ *     summary: Top-N drivers by composite risk score (FN-1303)
+ *     description: >
+ *       Returns the highest-risk drivers for the current tenant using the
+ *       latest `driver_risk_scores` row per driver (FN-479 scoring engine).
+ *       Used by the Daily AI Briefing aggregator. Tenant-scoped via
+ *       `req.context.tenantId`.
+ *     tags:
+ *       - Drivers
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           minimum: 1
+ *           maximum: 25
+ *         description: Number of drivers to return (default 1, max 25)
+ *     responses:
+ *       200:
+ *         description: Top-risk driver list
+ *       400:
+ *         description: Invalid limit
+ *       500:
+ *         description: Server error
+ */
+router.get('/risk/top', async (req, res) => {
+  const limit = parseRiskTopLimit(req.query.limit);
+  if (limit === null) {
+    return res.status(400).json({ success: false, error: 'Invalid limit; expected positive integer' });
+  }
+
+  const tenantId = req.context?.tenantId || null;
+
+  const sql = `
+    SELECT
+      drs.driver_id,
+      drs.score,
+      drs.category_scores,
+      d.first_name,
+      d.last_name
+    FROM (
+      SELECT DISTINCT ON (driver_id)
+        driver_id, tenant_id, score, category_scores, calculated_at
+      FROM driver_risk_scores
+      WHERE (tenant_id = $1 OR $1::uuid IS NULL)
+      ORDER BY driver_id, calculated_at DESC
+    ) drs
+    JOIN drivers d ON d.id = drs.driver_id
+    WHERE (d.tenant_id = $1 OR $1::uuid IS NULL)
+    ORDER BY drs.score DESC NULLS LAST, drs.calculated_at DESC
+    LIMIT $2
+  `;
+
+  try {
+    const result = await query(sql, [tenantId, limit]);
+    const data = result.rows.map((row) => {
+      let topFactor = null;
+      const cats = row.category_scores;
+      const parsed = (typeof cats === 'string') ? safeParseJson(cats) : (cats || null);
+      if (parsed && typeof parsed === 'object') {
+        let bestKey = null;
+        let bestVal = -Infinity;
+        for (const [k, v] of Object.entries(parsed)) {
+          const num = Number(v);
+          if (Number.isFinite(num) && num > bestVal) {
+            bestVal = num;
+            bestKey = k;
+          }
+        }
+        if (bestKey && bestVal > 0) topFactor = bestKey;
+      }
+      return {
+        driverId: row.driver_id,
+        name: [row.first_name, row.last_name].filter(Boolean).join(' ').trim() || null,
+        riskScore: Number(row.score) || 0,
+        topFactor
+      };
+    });
+    return res.json({ success: true, data });
+  } catch (error) {
+    // Graceful degrade: if driver_risk_scores hasn't been migrated yet, return
+    // an empty list so the briefing aggregator's upstreamErrors stays clean.
+    const code = error?.code ? String(error.code) : '';
+    const message = error?.message ? String(error.message) : '';
+    if (code === '42P01' || message.includes('does not exist')) {
+      dtLogger.warn?.('drivers_risk_top_table_missing', { message });
+      return res.json({ success: true, data: [] });
+    }
+    dtLogger.error('drivers_risk_top_failed', error);
+    return res.status(500).json({ success: false, error: 'Failed to fetch top driver risk' });
+  }
+});
+
+function safeParseJson(s) {
+  try { return JSON.parse(s); } catch { return null; }
+}
+
+// FN-1309: parse `?limit=N` for the Smart Alerts upstream routes. Default 20,
+// clamp to [1, 100], reject anything non-numeric so callers get 400, not a
+// silent fallback that masks a coding bug in the aggregator.
+function parseAlertsTopLimit(raw) {
+  if (raw === undefined || raw === null || raw === '') return 20;
+  const trimmed = String(raw).trim();
+  if (!/^-?\d+$/.test(trimmed)) return null;
+  const n = parseInt(trimmed, 10);
+  if (Number.isNaN(n)) return null;
+  return Math.max(1, Math.min(100, n));
+}
+
+/**
+ * @openapi
+ * /api/drivers/fatigue/top:
+ *   get:
+ *     summary: Top-N drivers by fatigue score (FN-1309)
+ *     description: >
+ *       Heuristic ranking of drivers most likely to be fatigued, derived from
+ *       the latest hos_records row per driver. There is no dedicated fatigue
+ *       table; computing this inline keeps the endpoint synchronous and
+ *       cheap. Used by the Smart Alerts aggregator (FN-1161). Tenant-scoped
+ *       via `req.context.tenantId`.
+ *     tags:
+ *       - Drivers
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           minimum: 1
+ *           maximum: 100
+ *         description: Number of drivers to return (default 20, max 100)
+ *     responses:
+ *       200:
+ *         description: Top-fatigue driver list
+ *       400:
+ *         description: Invalid limit
+ *       500:
+ *         description: Server error
+ */
+// FN-1309: fatigue heuristic. Latest hos_records per driver provides
+// `on_duty_hours` and `driving_hours` for the most recent shift. We score
+// fatigue as a 70/30 weighted blend of duty-hour and drive-hour saturation
+// against the federal 14h/11h caps, scaled to 0-100. The 70/30 split is
+// deliberate: hours-on-duty correlates more strongly with fatigue research
+// than drive-only minutes (cumulative cognitive load vs. wheel time). When
+// `hos_records` is absent on a partial dev schema we degrade to `[]` so the
+// aggregator's `upstreamErrors` stays clean.
+router.get('/fatigue/top', async (req, res) => {
+  const limit = parseAlertsTopLimit(req.query.limit);
+  if (limit === null) {
+    return res.status(400).json({ success: false, error: 'Invalid limit; expected positive integer' });
+  }
+
+  const tenantId = req.context?.tenantId || null;
+
+  const sql = `
+    WITH latest AS (
+      SELECT DISTINCT ON (hr.driver_id)
+        hr.driver_id, hr.record_date, hr.driving_hours, hr.on_duty_hours
+      FROM hos_records hr
+      JOIN drivers d ON hr.driver_id = d.id
+      WHERE (d.tenant_id = $1 OR $1::uuid IS NULL)
+      ORDER BY hr.driver_id, hr.record_date DESC
+    )
+    SELECT
+      l.driver_id,
+      d.first_name,
+      d.last_name,
+      COALESCE(l.on_duty_hours, 0)::numeric AS on_duty_hours,
+      COALESCE(l.driving_hours, 0)::numeric AS driving_hours,
+      LEAST(
+        100,
+        ROUND(
+          (COALESCE(l.on_duty_hours, 0) / 14.0) * 70
+          + (COALESCE(l.driving_hours, 0) / 11.0) * 30
+        )
+      )::int AS fatigue_score
+    FROM latest l
+    JOIN drivers d ON d.id = l.driver_id
+    WHERE COALESCE(l.on_duty_hours, 0) > 0 OR COALESCE(l.driving_hours, 0) > 0
+    ORDER BY fatigue_score DESC, l.record_date DESC
+    LIMIT $2
+  `;
+
+  try {
+    const result = await query(sql, [tenantId, limit]);
+    const data = result.rows.map((row) => {
+      const driverName = [row.first_name, row.last_name].filter(Boolean).join(' ').trim() || null;
+      return {
+        driverId: row.driver_id,
+        driverName,
+        fatigueScore: Number(row.fatigue_score) || 0,
+        consecutiveDutyHours: Number(row.on_duty_hours) || 0
+      };
+    });
+    return res.json(data);
+  } catch (error) {
+    const code = error?.code ? String(error.code) : '';
+    const message = error?.message ? String(error.message) : '';
+    if (code === '42P01' || message.includes('does not exist')) {
+      dtLogger.warn?.('drivers_fatigue_top_table_missing', { message });
+      return res.json([]);
+    }
+    dtLogger.error('drivers_fatigue_top_failed', error);
+    return res.status(500).json({ success: false, error: 'Failed to fetch top driver fatigue' });
+  }
+});
+
 /**
  * @openapi
  * /api/drivers:
  *   get:
- *     summary: List drivers
+ *     summary: List all drivers
+ *     description: Retrieves all drivers for the tenant. Supports view=dispatch (with vehicle assignments), view=dqf (DQF completeness), and optional status filter. Per 49 CFR Part 391 — Qualifications of Drivers.
  *     tags:
  *       - Drivers
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: view
+ *         schema:
+ *           type: string
+ *           enum: [dispatch, dqf]
+ *         description: View mode — dispatch includes vehicle info, dqf includes compliance data
+ *       - in: query
+ *         name: status
+ *         schema:
+ *           type: string
+ *         description: Filter drivers by status (e.g. active, pending, applicant)
  *     responses:
  *       200:
- *         description: Drivers returned
- *   post:
- *     summary: Create driver
- *     tags:
- *       - Drivers
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             description: Driver payload
- *             additionalProperties: true
- *     responses:
- *       201:
- *         description: Driver created
+ *         description: Array of driver objects (shape varies by view)
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 type: object
+ *       403:
+ *         description: Forbidden — insufficient permission (DQF view requires dqf.view or admin role)
+ *       401:
+ *         description: Unauthorized
+ *       500:
+ *         description: Server error
  */
 // GET all drivers (supports view=dispatch|dqf and optional status filter)
 router.get('/', async (req, res) => {
@@ -244,8 +491,11 @@ router.get('/', async (req, res) => {
         SELECT
           d.*,
           oe.name AS operating_entity_name,
+          concat_ws(' ', d.first_name, d.last_name) AS driver_name,
           t.unit_number AS truck_unit_number,
-          tr.unit_number AS trailer_unit_number
+          t.license_plate AS truck_plate_number,
+          tr.unit_number AS trailer_unit_number,
+          tr.license_plate AS trailer_plate_number
         FROM drivers d
         LEFT JOIN operating_entities oe ON oe.id = d.operating_entity_id
         LEFT JOIN ${vehicleSource} t ON t.id = d.truck_id
@@ -255,8 +505,11 @@ router.get('/', async (req, res) => {
         SELECT
           d.*,
           oe.name AS operating_entity_name,
+          concat_ws(' ', d.first_name, d.last_name) AS driver_name,
           NULL AS truck_unit_number,
-          NULL AS trailer_unit_number
+          NULL AS truck_plate_number,
+          NULL AS trailer_unit_number,
+          NULL AS trailer_plate_number
         FROM drivers d
         LEFT JOIN operating_entities oe ON oe.id = d.operating_entity_id
       `;
@@ -274,8 +527,36 @@ router.get('/', async (req, res) => {
       result = await query(sql, params);
     } else {
       // Legacy/default view – keep existing behaviour for backward compatibility
+      const vehicleSource = await resolveVehicleSource();
+      const hasVehicles = vehicleSource !== 'none';
       const params = [];
-      let sql = 'SELECT d.*, oe.name AS operating_entity_name FROM drivers d LEFT JOIN operating_entities oe ON oe.id = d.operating_entity_id';
+      let sql = hasVehicles
+        ? `
+        SELECT
+          d.*,
+          oe.name AS operating_entity_name,
+          concat_ws(' ', d.first_name, d.last_name) AS driver_name,
+          t.unit_number AS truck_unit_number,
+          t.license_plate AS truck_plate_number,
+          tr.unit_number AS trailer_unit_number,
+          tr.license_plate AS trailer_plate_number
+        FROM drivers d
+        LEFT JOIN operating_entities oe ON oe.id = d.operating_entity_id
+        LEFT JOIN ${vehicleSource} t ON t.id = d.truck_id
+        LEFT JOIN ${vehicleSource} tr ON tr.id = d.trailer_id
+      `
+        : `
+        SELECT
+          d.*,
+          oe.name AS operating_entity_name,
+          concat_ws(' ', d.first_name, d.last_name) AS driver_name,
+          NULL AS truck_unit_number,
+          NULL AS truck_plate_number,
+          NULL AS trailer_unit_number,
+          NULL AS trailer_plate_number
+        FROM drivers d
+        LEFT JOIN operating_entities oe ON oe.id = d.operating_entity_id
+      `;
       if (hasStatus) {
         params.push(req.context?.tenantId || null);
         params.push(status);
@@ -308,6 +589,56 @@ router.get('/', async (req, res) => {
   }
 });
 
+/**
+ * @openapi
+ * /api/drivers/{id}:
+ *   get:
+ *     summary: Get driver by ID
+ *     description: Retrieves a single driver with operating entity, payee assignment, expense responsibility, and compensation profile details. Per 49 CFR Part 391 — Qualifications of Drivers.
+ *     tags:
+ *       - Drivers
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: Driver ID
+ *     responses:
+ *       200:
+ *         description: Driver object with payee, expense, and compensation details
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 id:
+ *                   type: integer
+ *                 firstName:
+ *                   type: string
+ *                 lastName:
+ *                   type: string
+ *                 truckId:
+ *                   type: integer
+ *                   nullable: true
+ *                 trailerId:
+ *                   type: integer
+ *                   nullable: true
+ *                 primaryPayeeId:
+ *                   type: integer
+ *                   nullable: true
+ *                 equipmentOwnerPercentage:
+ *                   type: number
+ *                   nullable: true
+ *       404:
+ *         description: Driver not found
+ *       401:
+ *         description: Unauthorized
+ *       500:
+ *         description: Server error
+ */
 // GET driver by ID (simple query only so the request never hangs on JOINs or missing tables)
 router.get('/:id', async (req, res) => {
   const startTime = Date.now();
@@ -352,22 +683,47 @@ router.get('/:id', async (req, res) => {
     );
 
     const expenseResponsibilityResult = await query(
+      // FN-569: ORDER BY created_at DESC as tiebreaker — ensures most-recently saved
+      // row is returned when multiple rows share the same effective_start_date.
       `SELECT *
        FROM expense_responsibility_profiles
        WHERE driver_id = $1
          AND effective_start_date <= $2
          AND (effective_end_date IS NULL OR effective_end_date >= $2)
-       ORDER BY effective_start_date DESC
+       ORDER BY effective_start_date DESC, created_at DESC
        LIMIT 1`,
+      [driverId, asOf]
+    );
+
+    // FN-566: Fetch active compensation profile to return equipment_owner_percentage.
+    // The drivers table stores pay_basis/pay_rate/pay_percentage but NOT
+    // equipment_owner_percentage — that lives only on driver_compensation_profiles.
+    // Use status = 'active' with date-range guard (same pattern as settlement-service.js).
+    const compensationProfileResult = await query(
+      `SELECT percentage_rate, equipment_owner_percentage, profile_type, pay_model, status, effective_start_date, created_at
+       FROM driver_compensation_profiles
+       WHERE driver_id = $1
+         AND effective_start_date <= $2
+       ORDER BY
+         CASE WHEN status = 'active' THEN 0 ELSE 1 END,
+         effective_start_date DESC,
+         created_at DESC`,
       [driverId, asOf]
     );
 
     const driver = transformRow(result.rows[0]);
     const assignment = payeeAssignmentResult.rows[0] || null;
     const expense = expenseResponsibilityResult.rows[0] || null;
+    const equipmentOwnerPercentage = pickLatestEquipmentOwnerPercentage(compensationProfileResult.rows);
 
     const response = {
       ...driver,
+      // FN-539: truck_id and trailer_id are already included via SELECT d.* + transformRow()
+      // (snake_case → camelCase) as truckId / trailerId. Explicitly surfaced here so the
+      // contract is obvious to callers (e.g. load edit modal auto-fill in FN-538).
+      truckId: driver.truckId || null,
+      trailerId: driver.trailerId || null,
+
       // Payee assignment details (for edit form population)
       primaryPayeeId: assignment?.primary_payee_id || null,
       primaryPayee: assignment?.primary_payee_name || null,
@@ -383,7 +739,11 @@ router.get('/:id', async (req, res) => {
       eldResponsibility: expense?.eld_responsibility || null,
       trailerRentResponsibility: expense?.trailer_rent_responsibility || null,
       tollResponsibility: expense?.toll_responsibility || null,
-      repairsResponsibility: expense?.repairs_responsibility || null
+      repairsResponsibility: expense?.repairs_responsibility || null,
+
+      // FN-566: Compensation profile fields — equipment_owner_percentage is not on the
+      // drivers table; it must be read from the active driver_compensation_profiles record.
+      equipmentOwnerPercentage
     };
 
     dtLogger.trackDatabase('SELECT', 'drivers', duration, true, { driverId });
@@ -398,6 +758,47 @@ router.get('/:id', async (req, res) => {
   }
 });
 
+/**
+ * @openapi
+ * /api/drivers/zip-lookup/{zipCode}:
+ *   get:
+ *     summary: Look up city and state by ZIP code
+ *     description: Proxies a request to the Zippopotam.us API to resolve a US ZIP code into city and state.
+ *     tags:
+ *       - Drivers
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: zipCode
+ *         required: true
+ *         schema:
+ *           type: string
+ *           pattern: '^\d{5}(-\d{4})?$'
+ *         description: US ZIP code (5 digits or ZIP+4)
+ *     responses:
+ *       200:
+ *         description: ZIP code resolved
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 zipCode:
+ *                   type: string
+ *                 city:
+ *                   type: string
+ *                 state:
+ *                   type: string
+ *       400:
+ *         description: Invalid zip code format
+ *       404:
+ *         description: Zip code not found
+ *       401:
+ *         description: Unauthorized
+ *       500:
+ *         description: Zip code lookup failed
+ */
 // GET zip code lookup (Zippopotam.us - free, no API key)
 router.get('/zip-lookup/:zipCode', async (req, res) => {
   try {
@@ -426,6 +827,100 @@ router.get('/zip-lookup/:zipCode', async (req, res) => {
   }
 });
 
+/**
+ * @openapi
+ * /api/drivers:
+ *   post:
+ *     summary: Create a new driver
+ *     description: Creates a new driver record with CDL license, compliance, and optional compensation profile. Checks for duplicate CDL. Per 49 CFR Part 391 — Qualifications of Drivers.
+ *     tags:
+ *       - Drivers
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - cdlNumber
+ *               - cdlState
+ *             properties:
+ *               firstName:
+ *                 type: string
+ *               lastName:
+ *                 type: string
+ *               email:
+ *                 type: string
+ *               phone:
+ *                 type: string
+ *               cdlNumber:
+ *                 type: string
+ *               cdlState:
+ *                 type: string
+ *               cdlClass:
+ *                 type: string
+ *               endorsements:
+ *                 type: array
+ *                 items:
+ *                   type: string
+ *               cdlExpiry:
+ *                 type: string
+ *                 format: date
+ *               medicalCertExpiry:
+ *                 type: string
+ *                 format: date
+ *               hireDate:
+ *                 type: string
+ *                 format: date
+ *               streetAddress:
+ *                 type: string
+ *               city:
+ *                 type: string
+ *               state:
+ *                 type: string
+ *               zipCode:
+ *                 type: string
+ *               dateOfBirth:
+ *                 type: string
+ *                 format: date
+ *               clearinghouseStatus:
+ *                 type: string
+ *               driverType:
+ *                 type: string
+ *                 enum: [company, owner_operator]
+ *               payBasis:
+ *                 type: string
+ *               payRate:
+ *                 type: number
+ *               payPercentage:
+ *                 type: number
+ *               equipmentOwnerPercentage:
+ *                 type: number
+ *               terminationDate:
+ *                 type: string
+ *                 format: date
+ *               truckId:
+ *                 type: integer
+ *               trailerId:
+ *                 type: integer
+ *               coDriverId:
+ *                 type: integer
+ *     responses:
+ *       201:
+ *         description: Driver created successfully
+ *       400:
+ *         description: CDL state and number required, or invalid compensation values
+ *       403:
+ *         description: Forbidden — insufficient permission or missing operating entity context
+ *       409:
+ *         description: Driver already exists for this CDL number and state
+ *       401:
+ *         description: Unauthorized
+ *       500:
+ *         description: Server error
+ */
 // POST create new driver
 router.post('/', async (req, res) => {
   if (!canWriteDrivers(req)) {
@@ -457,6 +952,7 @@ router.post('/', async (req, res) => {
       payBasis,
       payRate,
       payPercentage,
+      equipmentOwnerPercentage,
       terminationDate,
       truckId,
       trailerId,
@@ -625,10 +1121,10 @@ router.post('/', async (req, res) => {
       ]
     );
 
-    // Auto-create compensation profile if pay info provided
-    if (payBasis || payRate || payPercentage) {
+    // Auto-create compensation profile when any compensation field is explicitly supplied.
+    if (hasDriverCompensationUpdate(req.body)) {
       const payBasisLower = (payBasis || '').toString().toLowerCase();
-      const profileType = (driverType || '').toString().toLowerCase() === 'owner_operator' ? 'owner_operator' : 'company_driver';
+      const profileType = (driverType || '').toString().toLowerCase() === 'owner_operator' ? 'owner_operator' : 'driver';
       let payModel = 'per_mile';
       let centsPerMile = null;
       let percentageRate = null;
@@ -649,7 +1145,25 @@ router.post('/', async (req, res) => {
         flatPerLoadAmount = payRate;
       }
 
-      const effectiveStart = hireDate || new Date().toISOString().slice(0, 10);
+      // FN-555: Validate percentage_rate + equipment_owner_percentage <= 100
+      const eoPct = equipmentOwnerPercentage != null ? Number(equipmentOwnerPercentage) : null;
+      if (eoPct != null) {
+        if (!Number.isFinite(eoPct) || eoPct < 0 || eoPct > 100) {
+          await client.query('ROLLBACK');
+          return res.status(400).json({ message: 'equipment_owner_percentage must be between 0 and 100' });
+        }
+        const pctRate = Number(percentageRate) || 0;
+        if (pctRate + eoPct > 100) {
+          await client.query('ROLLBACK');
+          return res.status(400).json({ message: 'percentage_rate + equipment_owner_percentage cannot exceed 100' });
+        }
+      }
+
+      const effectiveStart = resolveCompensationProfileEffectiveStartDate(
+        'create',
+        { hire_date: hireDate },
+        new Date().toISOString().slice(0, 10)
+      );
       await client.query(
         `INSERT INTO driver_compensation_profiles (
           driver_id,
@@ -659,13 +1173,14 @@ router.post('/', async (req, res) => {
           cents_per_mile,
           flat_weekly_amount,
           flat_per_load_amount,
+          equipment_owner_percentage,
           expense_sharing_enabled,
           effective_start_date,
           effective_end_date,
           status,
           notes
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, false, $8, NULL, 'active', 'Auto-created from driver save')`,
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, false, $9, NULL, 'active', 'Auto-created from driver save')`,
         [
           driverId,
           profileType,
@@ -674,6 +1189,7 @@ router.post('/', async (req, res) => {
           centsPerMile,
           flatWeeklyAmount,
           flatPerLoadAmount,
+          eoPct,
           effectiveStart
         ]
       );
@@ -735,6 +1251,47 @@ router.post('/', async (req, res) => {
   }
 });
 
+/**
+ * @openapi
+ * /api/drivers/{id}:
+ *   put:
+ *     summary: Update a driver
+ *     description: Updates driver fields, CDL license, compliance records, and auto-syncs compensation profile. Per 49 CFR Part 391 — Qualifications of Drivers.
+ *     tags:
+ *       - Drivers
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: Driver ID
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             description: Partial driver fields to update (camelCase keys)
+ *             additionalProperties: true
+ *     responses:
+ *       200:
+ *         description: Updated driver object
+ *       400:
+ *         description: No fields to update, or invalid compensation values
+ *       403:
+ *         description: Forbidden — insufficient permission
+ *       404:
+ *         description: Driver not found
+ *       409:
+ *         description: Driver already exists for this CDL number and state
+ *       401:
+ *         description: Unauthorized
+ *       500:
+ *         description: Server error
+ */
 // PUT update driver
 router.put('/:id', async (req, res) => {
   if (!canWriteDrivers(req)) {
@@ -907,12 +1464,12 @@ router.put('/:id', async (req, res) => {
       values
     );
 
-    // Auto-sync compensation profile if pay fields updated
-    const hasPayUpdate = body.payBasis || body.pay_basis || body.payRate || body.pay_rate || body.payPercentage || body.pay_percentage;
+    // Auto-sync compensation profile when any compensation field is explicitly updated.
+    const hasPayUpdate = hasDriverCompensationUpdate(body);
     if (hasPayUpdate && result.rows.length > 0) {
       const updatedDriver = result.rows[0];
       const payBasisLower = (updatedDriver.pay_basis || '').toString().toLowerCase();
-      const profileType = (updatedDriver.driver_type || '').toString().toLowerCase() === 'owner_operator' ? 'owner_operator' : 'company_driver';
+      const profileType = (updatedDriver.driver_type || '').toString().toLowerCase() === 'owner_operator' ? 'owner_operator' : 'driver';
       let payModel = 'per_mile';
       let centsPerMile = null;
       let percentageRate = null;
@@ -933,18 +1490,56 @@ router.put('/:id', async (req, res) => {
         flatPerLoadAmount = updatedDriver.pay_rate;
       }
 
-      // Close any existing active profile and create new one
+      // FN-555: Validate percentage_rate + equipment_owner_percentage <= 100
+      // FN-566: Read existing active profile's EO% BEFORE superseding it, so we can
+      // preserve the value if the frontend didn't explicitly send one (timing/null issue).
       const today = new Date().toISOString().slice(0, 10);
+      const existingProfileResult = await client.query(
+        `SELECT equipment_owner_percentage
+         FROM driver_compensation_profiles
+         WHERE driver_id = $1
+           AND status = 'active'
+           AND effective_start_date <= $2
+           AND (effective_end_date IS NULL OR effective_end_date >= $2)
+         ORDER BY effective_start_date DESC, created_at DESC
+         LIMIT 1`,
+        [req.params.id, today]
+      );
+      const existingEoPct = existingProfileResult.rows[0]?.equipment_owner_percentage != null
+        ? Number(existingProfileResult.rows[0].equipment_owner_percentage)
+        : null;
+
+      const rawEoPct = body.equipmentOwnerPercentage ?? body.equipment_owner_percentage;
+      // Use the explicitly-sent value; fall back to the existing profile value to avoid wiping it
+      const eoPct = rawEoPct != null ? Number(rawEoPct) : existingEoPct;
+      if (eoPct != null) {
+        if (!Number.isFinite(eoPct) || eoPct < 0 || eoPct > 100) {
+          await client.query('ROLLBACK');
+          return res.status(400).json({ message: 'equipment_owner_percentage must be between 0 and 100' });
+        }
+        const pctRate = Number(percentageRate) || 0;
+        if (pctRate + eoPct > 100) {
+          await client.query('ROLLBACK');
+          return res.status(400).json({ message: 'percentage_rate + equipment_owner_percentage cannot exceed 100' });
+        }
+      }
+
+      // Close overlapping active profiles before creating the latest snapshot row.
       await client.query(
         `UPDATE driver_compensation_profiles
          SET effective_end_date = $1, status = 'superseded', updated_at = NOW()
          WHERE driver_id = $2
            AND status = 'active'
-           AND effective_end_date IS NULL`,
+           AND effective_start_date <= $1
+           AND (effective_end_date IS NULL OR effective_end_date >= $1)`,
         [today, req.params.id]
       );
 
-      const effectiveStart = updatedDriver.hire_date || today;
+      const effectiveStart = resolveCompensationProfileEffectiveStartDate(
+        'update',
+        updatedDriver,
+        today
+      );
       await client.query(
         `INSERT INTO driver_compensation_profiles (
           driver_id,
@@ -954,13 +1549,14 @@ router.put('/:id', async (req, res) => {
           cents_per_mile,
           flat_weekly_amount,
           flat_per_load_amount,
+          equipment_owner_percentage,
           expense_sharing_enabled,
           effective_start_date,
           effective_end_date,
           status,
           notes
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, false, $8, NULL, 'active', 'Auto-synced from driver update')`,
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, false, $9, NULL, 'active', 'Auto-synced from driver update')`,
         [
           req.params.id,
           profileType,
@@ -969,6 +1565,7 @@ router.put('/:id', async (req, res) => {
           centsPerMile,
           flatWeeklyAmount,
           flatPerLoadAmount,
+          eoPct,
           effectiveStart
         ]
       );
@@ -1018,6 +1615,42 @@ router.put('/:id', async (req, res) => {
   }
 });
 
+/**
+ * @openapi
+ * /api/drivers/{id}:
+ *   delete:
+ *     summary: Delete a driver
+ *     description: Permanently deletes a driver record. Per 49 CFR Part 391 — Qualifications of Drivers.
+ *     tags:
+ *       - Drivers
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: Driver ID
+ *     responses:
+ *       200:
+ *         description: Driver deleted successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *       403:
+ *         description: Forbidden — insufficient permission
+ *       404:
+ *         description: Driver not found
+ *       401:
+ *         description: Unauthorized
+ *       500:
+ *         description: Server error
+ */
 // DELETE driver
 router.delete('/:id', async (req, res) => {
   if (!canWriteDrivers(req)) {
@@ -1036,6 +1669,30 @@ router.delete('/:id', async (req, res) => {
   }
 });
 
+/**
+ * @openapi
+ * /api/drivers/compliance/issues:
+ *   get:
+ *     summary: Get drivers with compliance issues
+ *     description: Returns drivers with upcoming medical cert or CDL expiry (within 30 days), low DQF completeness, or non-eligible clearinghouse status. Per 49 CFR Part 391 — Qualifications of Drivers.
+ *     tags:
+ *       - Drivers
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Array of drivers with compliance issues
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 type: object
+ *       401:
+ *         description: Unauthorized
+ *       500:
+ *         description: Server error
+ */
 // GET drivers with compliance issues
 router.get('/compliance/issues', (req, res) => {
   const issues = drivers.filter(d => {

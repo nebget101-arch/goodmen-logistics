@@ -1,0 +1,145 @@
+<section
+  class="ask-bar"
+  role="region"
+  aria-labelledby="ask-bar-heading"
+  [attr.aria-busy]="loading ? 'true' : 'false'"
+>
+  <h2 id="ask-bar-heading" class="sr-only">Ask FleetNeuron</h2>
+
+  <form class="ask-bar__form" (ngSubmit)="submit()" autocomplete="off">
+    <div class="ask-bar__field">
+      <span class="ask-bar__pill" aria-hidden="true">Ask</span>
+      <input
+        #askInput
+        type="text"
+        class="ask-bar__input"
+        name="prompt"
+        [(ngModel)]="prompt"
+        [disabled]="loading"
+        placeholder="Ask FleetNeuron — e.g. “Which loads are at risk today?”"
+        aria-label="Ask FleetNeuron a fleet question"
+        aria-describedby="ask-bar-shortcut"
+        autocomplete="off"
+        spellcheck="false"
+        maxlength="1000"
+      />
+      <span id="ask-bar-shortcut" class="ask-bar__shortcut" aria-hidden="true">/</span>
+    </div>
+    <button
+      type="submit"
+      class="ask-bar__submit"
+      [disabled]="!prompt.trim() || loading"
+      [attr.aria-label]="loading ? 'Submitting question' : 'Ask FleetNeuron'"
+    >
+      <span *ngIf="!loading">Ask</span>
+      <span *ngIf="loading" class="ask-bar__submit-spinner" aria-hidden="true">↻</span>
+      <span *ngIf="loading">Asking…</span>
+    </button>
+  </form>
+
+  <p class="ask-bar__live sr-only" role="status" aria-live="polite">{{ announceMessage }}</p>
+
+  <div *ngIf="loading" class="ask-bar__skeleton" aria-hidden="true">
+    <div class="ask-bar__skeleton-row"></div>
+    <div class="ask-bar__skeleton-row ask-bar__skeleton-row--short"></div>
+  </div>
+
+  <div
+    *ngIf="!loading && errorMessage"
+    class="ask-bar__error"
+    role="alert"
+  >
+    <span class="ask-bar__error-icon" aria-hidden="true">⚠</span>
+    <div>
+      <p class="ask-bar__error-headline">{{ errorMessage }}</p>
+      <button
+        type="button"
+        class="ask-bar__error-retry"
+        (click)="retry()"
+      >Try again</button>
+    </div>
+  </div>
+
+  <div
+    *ngIf="!loading && response && !errorMessage"
+    class="ask-bar__results"
+  >
+    <header class="ask-bar__results-header">
+      <p class="ask-bar__results-prompt">
+        <span class="ask-bar__results-label">You asked</span>
+        <span class="ask-bar__results-prompt-text">{{ lastSubmittedPrompt }}</span>
+      </p>
+      <button
+        type="button"
+        class="ask-bar__results-close"
+        (click)="closeResults()"
+        aria-label="Close FleetNeuron answer"
+      >
+        <span aria-hidden="true">×</span>
+      </button>
+    </header>
+
+    <div class="ask-bar__intent" aria-hidden="true">
+      <span class="ask-bar__intent-pill" [attr.data-intent]="response.intent">{{ intentLabel(response.intent) }}</span>
+    </div>
+
+    <article
+      class="ask-bar__card"
+      [attr.data-kind]="response.answer.kind"
+    >
+      <h3 *ngIf="response.answer.headline" class="ask-bar__card-headline">{{ response.answer.headline }}</h3>
+
+      <ng-container *ngIf="asTextAnswer(response.answer) as textAnswer">
+        <p class="ask-bar__card-text">{{ textAnswer.detail }}</p>
+      </ng-container>
+
+      <ng-container *ngIf="asMetricAnswer(response.answer) as metricAnswer">
+        <p class="ask-bar__card-metric-value">{{ metricAnswer.value }}</p>
+        <p
+          *ngIf="metricAnswer.detail as detail"
+          class="ask-bar__card-metric-sub"
+        >{{ detail }}</p>
+      </ng-container>
+
+      <ng-container *ngIf="asTableAnswer(response.answer) as tableAnswer">
+        <p
+          *ngIf="tableAnswer.detail as detail"
+          class="ask-bar__card-text"
+        >{{ detail }}</p>
+        <div class="ask-bar__table-wrap">
+          <table class="ask-bar__table">
+            <thead>
+              <tr>
+                <th *ngFor="let col of tableAnswer.columns">{{ col }}</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr *ngFor="let row of tableAnswer.rows">
+                <td *ngFor="let cell of row">{{ cell ?? '—' }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </ng-container>
+
+      <ng-container *ngIf="asChartAnswer(response.answer) as chartAnswer">
+        <p
+          *ngIf="chartAnswer.detail as detail"
+          class="ask-bar__card-text"
+        >{{ detail }}</p>
+        <ul class="ask-bar__chart" role="list">
+          <li *ngFor="let s of chartAnswer.series" class="ask-bar__chart-row">
+            <span class="ask-bar__chart-label">{{ s.label }}</span>
+            <span class="ask-bar__chart-bar" aria-hidden="true">
+              <span
+                class="ask-bar__chart-bar-fill"
+                [style.width]="chartBarWidth(chartAnswer, s.value)"
+              ></span>
+            </span>
+            <span class="ask-bar__chart-value">{{ s.value }}</span>
+          </li>
+        </ul>
+      </ng-container>
+    </article>
+  </div>
+</section>

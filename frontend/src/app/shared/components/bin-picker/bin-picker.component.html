@@ -1,0 +1,157 @@
+<!-- FN-704 — Reusable bin picker -->
+
+<!-- Optional label -->
+<label *ngIf="label" class="bp-label">{{ label }}</label>
+
+<!-- ── Loading ─────────────────────────────────────────────────────────────── -->
+<div *ngIf="loading" class="bp-loading">
+  <span class="bp-spinner"></span>
+  <span class="bp-loading-text">Loading bins…</span>
+</div>
+
+<!-- ── Load error ──────────────────────────────────────────────────────────── -->
+<div *ngIf="loadError" class="bp-error">
+  <span class="bp-error-icon">⚠</span> {{ loadError }}
+</div>
+
+<!-- ── Fallback: no bins configured ───────────────────────────────────────── -->
+<ng-container *ngIf="!loading && !loadError && showFallback">
+  <input
+    type="text"
+    class="bp-text-input"
+    [placeholder]="placeholder"
+    [value]="textValue"
+    [disabled]="disabled"
+    (input)="onTextInput($event)"
+  />
+  <p class="bp-fallback-note">
+    No bins configured for this location.
+    Add bins in <strong>Admin → Locations</strong>.
+  </p>
+</ng-container>
+
+<!-- ── Dropdown picker ────────────────────────────────────────────────────── -->
+<ng-container *ngIf="!loading && !loadError && !showFallback">
+  <select
+    class="bp-select"
+    [disabled]="disabled"
+    [value]="selectValue"
+    (change)="onSelectChange($event)"
+  >
+    <!-- Placeholder / clear option -->
+    <option value="">{{ placeholder }}</option>
+
+    <!-- Inline create sentinel (shown only when allowCreate is true) -->
+    <option *ngIf="allowCreate" value="__create__" class="bp-create-option">
+      + Create new bin…
+    </option>
+
+    <!-- Bin options -->
+    <option
+      *ngFor="let bin of bins"
+      [value]="bin.id"
+      [disabled]="!bin.active"
+    >{{ formatBin(bin) }}{{ !bin.active ? ' (inactive)' : '' }}</option>
+  </select>
+</ng-container>
+
+<!-- ── Inline create dialog ───────────────────────────────────────────────── -->
+<div
+  *ngIf="showCreateDialog"
+  class="bp-backdrop"
+  (click)="onDialogBackdropClick($event)"
+>
+  <div class="bp-dialog" role="dialog" aria-modal="true" aria-labelledby="bp-dialog-title">
+
+    <div class="bp-dialog-header">
+      <span id="bp-dialog-title" class="bp-dialog-title">Create New Bin</span>
+      <button type="button" class="bp-dialog-close" (click)="closeCreateDialog()" aria-label="Close">✕</button>
+    </div>
+
+    <div class="bp-dialog-body">
+
+      <!-- Bin Code (required) -->
+      <div class="bp-field">
+        <label class="bp-field-label" for="bp-bin-code">
+          Bin Code <span class="bp-required">*</span>
+        </label>
+        <input
+          id="bp-bin-code"
+          type="text"
+          class="bp-input"
+          [(ngModel)]="createForm.bin_code"
+          placeholder="e.g. A-01"
+          maxlength="50"
+          [disabled]="creating"
+        />
+      </div>
+
+      <!-- Bin Name -->
+      <div class="bp-field">
+        <label class="bp-field-label" for="bp-bin-name">Bin Name</label>
+        <input
+          id="bp-bin-name"
+          type="text"
+          class="bp-input"
+          [(ngModel)]="createForm.bin_name"
+          placeholder="e.g. Shelf A, Row 1"
+          maxlength="100"
+          [disabled]="creating"
+        />
+      </div>
+
+      <!-- Bin Type -->
+      <div class="bp-field">
+        <label class="bp-field-label" for="bp-bin-type">Bin Type</label>
+        <select
+          id="bp-bin-type"
+          class="bp-select"
+          [(ngModel)]="createForm.bin_type"
+          [disabled]="creating"
+        >
+          <option value="">— Select type —</option>
+          <option *ngFor="let opt of binTypeOptions" [value]="opt.value">{{ opt.label }}</option>
+        </select>
+      </div>
+
+      <!-- Zone -->
+      <div class="bp-field">
+        <label class="bp-field-label" for="bp-zone">Zone</label>
+        <input
+          id="bp-zone"
+          type="text"
+          class="bp-input"
+          [(ngModel)]="createForm.zone"
+          placeholder="e.g. Zone B"
+          maxlength="50"
+          [disabled]="creating"
+        />
+      </div>
+
+      <!-- Create error -->
+      <div *ngIf="createError" class="bp-create-error">
+        <span class="bp-error-icon">⚠</span> {{ createError }}
+      </div>
+
+    </div><!-- /.bp-dialog-body -->
+
+    <div class="bp-dialog-footer">
+      <button
+        type="button"
+        class="bp-btn bp-btn-cancel"
+        (click)="closeCreateDialog()"
+        [disabled]="creating"
+      >Cancel</button>
+      <button
+        type="button"
+        class="bp-btn bp-btn-save"
+        (click)="saveNewBin()"
+        [disabled]="creating || !createForm.bin_code.trim()"
+      >
+        <span *ngIf="creating" class="bp-spinner bp-spinner-sm"></span>
+        {{ creating ? 'Saving…' : 'Save Bin' }}
+      </button>
+    </div>
+
+  </div><!-- /.bp-dialog -->
+</div><!-- /.bp-backdrop -->

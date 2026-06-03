@@ -130,6 +130,41 @@ function buildSeatPurchaseEligibility(tenant) {
   return { canPurchase: true, reason: null };
 }
 
+/**
+ * @openapi
+ * /api/billing/seat-usage:
+ *   get:
+ *     summary: Get seat usage and purchase eligibility
+ *     description: Returns current seat counts (included, extra paid, active users, effective limit) and whether the tenant can purchase additional seats via Stripe.
+ *     tags:
+ *       - Billing
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Seat usage details
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean }
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     planId: { type: string }
+ *                     includedUsers: { type: integer, nullable: true }
+ *                     extraPaidSeats: { type: integer }
+ *                     effectiveSeatLimit: { type: integer, nullable: true }
+ *                     activeUsers: { type: integer }
+ *                     additionalUserPriceUsd: { type: number, nullable: true }
+ *                     canPurchaseExtraSeat: { type: boolean }
+ *                     purchaseBlockedReason: { type: string, nullable: true }
+ *       403:
+ *         description: Tenant context missing
+ *       404:
+ *         description: Tenant not found
+ */
 router.get('/seat-usage', async (req, res) => {
   try {
     const tenant = await getTenantForRequest(req);
@@ -163,6 +198,41 @@ router.get('/seat-usage', async (req, res) => {
   }
 });
 
+/**
+ * @openapi
+ * /api/billing/extra-seats/purchase:
+ *   post:
+ *     summary: Purchase additional user seats
+ *     description: Adds extra seat quantity to the tenant Stripe subscription. Requires an active subscription and payment method. Syncs the extra_paid_seats column after purchase.
+ *     tags:
+ *       - Billing
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               quantity: { type: integer, minimum: 1, maximum: 100, default: 1 }
+ *     responses:
+ *       200:
+ *         description: Extra seats purchased
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean }
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     extraPaidSeats: { type: integer }
+ *                     quantityAdded: { type: integer }
+ *       400:
+ *         description: Unable to purchase (missing subscription, payment method, or plan config)
+ */
 router.post('/extra-seats/purchase', async (req, res) => {
   try {
     const tenant = await getTenantForRequest(req);
@@ -200,6 +270,32 @@ router.post('/extra-seats/purchase', async (req, res) => {
   }
 });
 
+/**
+ * @openapi
+ * /api/billing/setup-intent:
+ *   post:
+ *     summary: Create a Stripe SetupIntent for saving a payment method
+ *     description: Creates a Stripe SetupIntent for the tenant Stripe customer. Returns a client_secret for confirming the setup on the frontend with Stripe.js.
+ *     tags:
+ *       - Billing
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: SetupIntent created
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean }
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     clientSecret: { type: string, description: Stripe SetupIntent client_secret }
+ *       400:
+ *         description: Stripe customer not initialized for this tenant
+ */
 router.post('/setup-intent', async (req, res) => {
   try {
     const tenant = await getTenantForRequest(req);
@@ -225,6 +321,41 @@ router.post('/setup-intent', async (req, res) => {
   }
 });
 
+/**
+ * @openapi
+ * /api/billing/payment-method/confirm:
+ *   post:
+ *     summary: Confirm and attach a payment method to the tenant
+ *     description: Attaches a Stripe PaymentMethod to the tenant Stripe customer and stores its ID on the tenant record. Call this after the frontend confirms a SetupIntent.
+ *     tags:
+ *       - Billing
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [paymentMethodId]
+ *             properties:
+ *               paymentMethodId: { type: string, description: Stripe PaymentMethod ID (e.g. pm_xxx) }
+ *     responses:
+ *       200:
+ *         description: Payment method attached
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean }
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     paymentMethodId: { type: string }
+ *       400:
+ *         description: Missing paymentMethodId or Stripe customer not initialized
+ */
 router.post('/payment-method/confirm', async (req, res) => {
   try {
     const tenant = await getTenantForRequest(req);
@@ -254,6 +385,34 @@ router.post('/payment-method/confirm', async (req, res) => {
   }
 });
 
+/**
+ * @openapi
+ * /api/billing/payment-method:
+ *   get:
+ *     summary: Get the tenant saved payment method
+ *     description: Returns card brand, last4, and expiration for the tenant saved Stripe payment method, or hasCard=false if none is on file.
+ *     tags:
+ *       - Billing
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Payment method details or empty indicator
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean }
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     hasCard: { type: boolean }
+ *                     brand: { type: string }
+ *                     last4: { type: string }
+ *                     expMonth: { type: integer }
+ *                     expYear: { type: integer }
+ */
 router.get('/payment-method', async (req, res) => {
   try {
     const tenant = await getTenantForRequest(req);
@@ -280,6 +439,30 @@ router.get('/payment-method', async (req, res) => {
   }
 });
 
+/**
+ * @openapi
+ * /api/billing/payment-method:
+ *   delete:
+ *     summary: Remove the tenant saved payment method
+ *     description: Detaches the Stripe PaymentMethod from the customer and clears the reference on the tenant record.
+ *     tags:
+ *       - Billing
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Payment method removed
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean }
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     hasCard: { type: boolean, example: false }
+ */
 router.delete('/payment-method', async (req, res) => {
   try {
     const tenant = await getTenantForRequest(req);
@@ -302,6 +485,36 @@ router.delete('/payment-method', async (req, res) => {
   }
 });
 
+/**
+ * @openapi
+ * /api/billing/trial-status:
+ *   get:
+ *     summary: Get trial status for the current tenant
+ *     description: Returns the tenant trial lifecycle status including days remaining, plan details, and monthly plan amount.
+ *     tags:
+ *       - Billing
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Trial status details
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean }
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     trialStatus: { type: string }
+ *                     trialStart: { type: string, format: date-time, nullable: true }
+ *                     trialEnd: { type: string, format: date-time, nullable: true }
+ *                     daysRemaining: { type: integer }
+ *                     planId: { type: string, nullable: true }
+ *                     planName: { type: string, nullable: true }
+ *                     planAmount: { type: number, nullable: true }
+ */
 router.get('/trial-status', async (req, res) => {
   try {
     const tenant = await getTenantForRequest(req);

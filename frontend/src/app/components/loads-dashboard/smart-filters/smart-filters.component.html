@@ -1,0 +1,28 @@
+<div class="smart-filters" role="group" aria-label="Smart filters">
+  <button
+    type="button"
+    *ngFor="let chip of chips; trackBy: trackByKey"
+    class="smart-filter-chip"
+    [class.smart-filter-chip--active]="isActive(chip.key)"
+    [attr.aria-pressed]="isActive(chip.key)"
+    [title]="chip.title"
+    (click)="onToggle(chip.key)"
+  >
+    <span class="material-symbols-outlined" aria-hidden="true">{{ chip.icon }}</span>
+    <span class="smart-filter-chip__label">{{ chip.label }}</span>
+    <span class="smart-filter-chip__count" [class.smart-filter-chip__count--zero]="countFor(chip.key) === 0">
+      {{ countFor(chip.key) }}
+    </span>
+  </button>
+
+  <button
+    type="button"
+    class="smart-filter-clear"
+    *ngIf="hasActive"
+    (click)="onClearAll()"
+    title="Clear all smart filters"
+  >
+    <span class="material-symbols-outlined" aria-hidden="true">close</span>
+    Clear smart filters
+  </button>
+</div>

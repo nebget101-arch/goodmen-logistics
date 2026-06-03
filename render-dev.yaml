@@ -225,6 +225,8 @@ services:
         value: auto
       - key: R2_SIGNED_URL_EXPIRES_SECONDS
         value: 900
+      - key: AI_SERVICE_URL
+        value: https://fleetneuron-ai-service-dev.onrender.com
       - key: NODE_ENV
         value: production
       - key: PORT
@@ -400,6 +402,79 @@ services:
         value: 10010
       - key: AI_SERVICE_PORT
         value: 10010
+
+  # ── SigNoz Observability Stack (Dev) ───────────────────────────
+  # Self-hosted SigNoz: ClickHouse + OTel Collector + Dashboard
+  # See infra/signoz/README.md for full documentation
+
+  - type: pserv
+    name: signoz-clickhouse-dev
+    runtime: docker
+    branch: dev
+    dockerfilePath: infra/signoz/Dockerfile.clickhouse
+    dockerContext: .
+    plan: standard
+    disk:
+      name: clickhouse-data-dev
+      mountPath: /var/lib/clickhouse
+      sizeGB: 10
+    envVars:
+      - key: CLICKHOUSE_USER
+        value: default
+      - key: CLICKHOUSE_PASSWORD
+        sync: false
+
+  - type: web
+    name: signoz-otel-collector-dev
+    runtime: docker
+    branch: dev
+    dockerfilePath: infra/signoz/Dockerfile.otel-collector
+    dockerContext: .
+    plan: starter
+    envVars:
+      - key: CLICKHOUSE_HOST
+        fromService:
+          type: pserv
+          name: signoz-clickhouse-dev
+          property: host
+      - key: CLICKHOUSE_PORT
+        value: "9000"
+      - key: CLICKHOUSE_DB
+        value: signoz
+      - key: CLICKHOUSE_USER
+        value: default
+      - key: CLICKHOUSE_PASSWORD
+        sync: false
+
+  - type: web
+    name: signoz-dashboard-dev
+    runtime: docker
+    branch: dev
+    dockerfilePath: infra/signoz/Dockerfile.query-service
+    dockerContext: .
+    plan: starter
+    disk:
+      name: signoz-dashboard-data
+      mountPath: /var/lib/signoz
+      sizeGB: 1
+    envVars:
+      - key: ClickHouseUrl
+        value: tcp://signoz-clickhouse-dev:9000/
+      - key: CLICKHOUSE_HOST
+        fromService:
+          type: pserv
+          name: signoz-clickhouse-dev
+          property: host
+      - key: CLICKHOUSE_PORT
+        value: "9000"
+      - key: SIGNOZ_TELEMETRY_ENABLED
+        value: "false"
+      - key: CLICKHOUSE_DB
+        value: signoz
+      - key: CLICKHOUSE_USER
+        value: default
+      - key: CLICKHOUSE_PASSWORD
+        sync: false
 
 databases:
   - name: safetyapp-dev-db

@@ -41,24 +41,14 @@
       </ul>
     </nav>
     <div class="sidebar-actions">
-      <div
-        class="company-switcher"
-        *ngIf="isLoggedIn() && operatingEntityContext.snapshot.isLoaded && operatingEntityContext.snapshot.accessibleOperatingEntities.length > 0"
-      >
-        <label for="globalCompanySwitcher" class="company-switcher-label">Company</label>
-        <app-ai-select
-          inputId="globalCompanySwitcher"
-          class="company-switcher-select"
-          [options]="operatingEntityOptions"
-          [ngModel]="operatingEntityContext.snapshot.selectedOperatingEntityId || ''"
-          (ngModelChange)="onOperatingEntityChange($event)"
-        ></app-ai-select>
-      </div>
-
-      <div class="company-switcher company-switcher-loading" *ngIf="isLoggedIn() && !operatingEntityContext.snapshot.isLoaded">
-        <span class="company-switcher-label">Company</span>
-        <span class="company-switcher-value">Loading…</span>
-      </div>
+      <app-company-switcher
+        *ngIf="isLoggedIn()"
+        [entities]="companySwitcherEntities"
+        [selectedEntityId]="operatingEntityContext.snapshot.selectedOperatingEntityId"
+        [showAllEntities]="companySwitcherShowAll"
+        [loading]="!operatingEntityContext.snapshot.isLoaded"
+        (entitySelected)="onOperatingEntityChange($event)"
+      ></app-company-switcher>
 
       <div class="user-menu-wrap" (click)="$event.stopPropagation()" (keydown)="$event.stopPropagation()">
         <button type="button" class="user-menu-btn" (click)="toggleUserMenu()" aria-label="User menu" [attr.aria-expanded]="userMenuOpen">
@@ -84,6 +74,21 @@
               <span class="material-symbols-outlined">approval</span> Trial Requests Admin
             </a>
           </ng-container>
+          <ng-container *ngIf="canSeeAdminMenuLink('/admin/locations', adminMenuPermissions)">
+            <a routerLink="/admin/locations" (click)="closeUserMenu(); closeSidebar()" class="user-dropdown-item">
+              <span class="material-symbols-outlined">location_on</span> Locations Admin
+            </a>
+          </ng-container>
+          <ng-container *ngIf="canSeeAdminMenuLink('/admin/inbound-email', adminMenuPermissions)">
+            <a routerLink="/admin/inbound-email" (click)="closeUserMenu(); closeSidebar()" class="user-dropdown-item">
+              <span class="material-symbols-outlined">alternate_email</span> Inbound Email
+            </a>
+          </ng-container>
+          <ng-container *ngIf="canSeeFmcsaImportsAdmin()">
+            <a routerLink="/admin/fmcsa-imports" (click)="closeUserMenu(); closeSidebar()" class="user-dropdown-item">
+              <span class="material-symbols-outlined">cloud_download</span> FMCSA Imports
+            </a>
+          </ng-container>
           <button type="button" (click)="logout(); closeUserMenu()" class="user-dropdown-item user-dropdown-logout">
             <span class="material-symbols-outlined">logout</span> Logout
           </button>
@@ -103,18 +108,15 @@
         <span class="brand-tagline">AI fleet intelligence</span>
       </div>
 
-      <div
+      <app-company-switcher
         class="mobile-company-switcher"
-        *ngIf="operatingEntityContext.snapshot.isLoaded && operatingEntityContext.snapshot.accessibleOperatingEntities.length > 0"
-      >
-        <app-ai-select
-          class="company-switcher-select"
-          [options]="operatingEntityOptionsMobile"
-          [ngModel]="operatingEntityContext.snapshot.selectedOperatingEntityId || ''"
-          (ngModelChange)="onOperatingEntityChange($event)"
-          ariaLabel="Select company"
-        ></app-ai-select>
-      </div>
+        [entities]="companySwitcherEntities"
+        [selectedEntityId]="operatingEntityContext.snapshot.selectedOperatingEntityId"
+        [showAllEntities]="companySwitcherShowAll"
+        [loading]="!operatingEntityContext.snapshot.isLoaded"
+        [compact]="true"
+        (entitySelected)="onOperatingEntityChange($event)"
+      ></app-company-switcher>
 
       <div class="user-menu-wrap mobile-user-menu" (click)="$event.stopPropagation()" (keydown)="$event.stopPropagation()">
         <button type="button" class="user-menu-btn user-menu-btn-mobile" (click)="toggleUserMenu()" aria-label="User menu" [attr.aria-expanded]="userMenuOpen">
@@ -139,6 +141,21 @@
               <span class="material-symbols-outlined">approval</span> Trial Requests Admin
             </a>
           </ng-container>
+          <ng-container *ngIf="canSeeAdminMenuLink('/admin/locations', adminMenuPermissions)">
+            <a routerLink="/admin/locations" (click)="closeUserMenu(); closeSidebar()" class="user-dropdown-item">
+              <span class="material-symbols-outlined">location_on</span> Locations Admin
+            </a>
+          </ng-container>
+          <ng-container *ngIf="canSeeAdminMenuLink('/admin/inbound-email', adminMenuPermissions)">
+            <a routerLink="/admin/inbound-email" (click)="closeUserMenu(); closeSidebar()" class="user-dropdown-item">
+              <span class="material-symbols-outlined">alternate_email</span> Inbound Email
+            </a>
+          </ng-container>
+          <ng-container *ngIf="canSeeFmcsaImportsAdmin()">
+            <a routerLink="/admin/fmcsa-imports" (click)="closeUserMenu(); closeSidebar()" class="user-dropdown-item">
+              <span class="material-symbols-outlined">cloud_download</span> FMCSA Imports
+            </a>
+          </ng-container>
           <button type="button" (click)="logout(); closeUserMenu()" class="user-dropdown-item user-dropdown-logout">
             <span class="material-symbols-outlined">logout</span> Logout
           </button>
@@ -158,16 +175,43 @@
     <app-trial-banner *ngIf="shouldRenderProtectedShell()"></app-trial-banner>
     <router-outlet></router-outlet>
 
-    <button
-      class="ai-chat-launcher"
-      type="button"
-        *ngIf="shouldRenderProtectedShell()"
-      (click)="toggleAiChat()"
-      aria-label="Open Ask Neuron assistant"
-    >
-      <span class="material-symbols-outlined">psychology_alt</span>
-      <span class="ai-chat-launcher-label">Ask Neuron</span>
-    </button>
+    <ng-container *ngIf="shouldRenderProtectedShell()">
+      <!-- FN-1356: Default pill — click opens chat; × collapses to the orb. -->
+      <div
+        class="ai-chat-launcher ai-chat-launcher--pill"
+        *ngIf="aiLauncherState === 'default'"
+      >
+        <button
+          class="ai-chat-launcher__main"
+          type="button"
+          (click)="toggleAiChat()"
+          [attr.aria-expanded]="aiChatOpen"
+          aria-label="Open Ask Neuron assistant"
+        >
+          <span class="material-symbols-outlined">psychology_alt</span>
+          <span class="ai-chat-launcher-label">Ask Neuron</span>
+        </button>
+        <button
+          class="ai-chat-launcher__minimize"
+          type="button"
+          (click)="minimizeAiLauncher($event)"
+          aria-label="Minimize Ask Neuron launcher"
+          title="Minimize"
+        >
+          <span aria-hidden="true">×</span>
+        </button>
+      </div>
+      <!-- FN-1356: Minimized orb — click expands back to the pill (does not open chat). -->
+      <button
+        class="ai-chat-launcher ai-chat-launcher--orb"
+        type="button"
+        *ngIf="aiLauncherState === 'minimized'"
+        (click)="expandAiLauncher()"
+        aria-label="Expand Ask Neuron launcher"
+      >
+        <span class="material-symbols-outlined">psychology_alt</span>
+      </button>
+    </ng-container>
 
     <section class="ai-chat-panel" *ngIf="aiChatOpen && shouldRenderProtectedShell()">
       <header class="ai-chat-header">
@@ -241,6 +285,18 @@
       </div>
     </footer>
   </main>
+
+  <!-- FN-765: Keyboard shortcuts help overlay — rendered at app root so it works on every view -->
+  <app-keyboard-shortcuts-help></app-keyboard-shortcuts-help>
+
+  <!-- FN-802: Cmd+K command palette — rendered at app root so it works on every view -->
+  <app-command-palette></app-command-palette>
+
+  <!-- FN-1644: Toast notifications host — rendered at app root so toasts appear on every view -->
+  <app-toast-host></app-toast-host>
+
+  <!-- FN-1179: Drill-down explanation panel — opened from any [appAiExplainable] trigger -->
+  <app-explain-panel></app-explain-panel>
 
   <!-- Send Packet modal - rendered at app root so it always displays above content -->
   <div

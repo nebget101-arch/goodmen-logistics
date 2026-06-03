@@ -1,11 +1,22 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, ElementRef, HostListener, OnDestroy, OnInit } from '@angular/core';
 import { ActivatedRoute } from '@angular/router';
+import { HttpClient } from '@angular/common/http';
+import { Subject, Subscription, of } from 'rxjs';
+import { debounceTime, switchMap, catchError, filter } from 'rxjs/operators';
 import { ApiService } from '../../services/api.service';
 import { ConsentService } from '../../services/consent.service';
 import { SeoService } from '../../services/seo.service';
 import { SEO_PUBLIC } from '../../services/seo-public-presets';
+import { environment } from '../../../environments/environment';
 import { EmployerHistoryData } from './employer-history-tiered/employer-history-tiered.component';
 import { DisqualificationData } from './disqualification-history/disqualification-history.component';
+
+interface AddressSuggestion {
+  street: string;
+  city: string;
+  state: string;
+  zip: string;
+}
 
 export interface PreviousAddress {
   street?: string;
@@ -202,7 +213,7 @@ export interface ConsentKeyConfig {
   templateUrl: './onboarding-packet.component.html',
   styleUrls: ['./onboarding-packet.component.css']
 })
-export class OnboardingPacketComponent implements OnInit {
+export class OnboardingPacketComponent implements OnInit, OnDestroy {
   packetId: string | null;
   token: string | null;
 
@@ -244,6 +255,7 @@ export class OnboardingPacketComponent implements OnInit {
 
   ssnRaw = '';
   ssnMasked = true;
+  ssnFocused = false;
   totalResidencyYears = 0;
   needMoreAddresses = false;
   totalEmployerYears = 0;
@@ -286,6 +298,12 @@ export class OnboardingPacketComponent implements OnInit {
   // FN-269: File preview state — file is selected but not yet uploaded
   pendingFiles: Map<string, { file: File; previewUrl: string | null }> = new Map();
 
+  // FN-534: Address autocomplete state
+  addressSuggestions: { [key: string]: AddressSuggestion[] } = {};
+  activeAutocompleteKey: string | null = null;
+  private addressInput$ = new Subject<{ key: string; query: string }>();
+  private autocompleteSub?: Subscription;
+
   get requiredDocsCount(): number {
     return this.documentTypes.filter(d => d.required).length;
   }
@@ -302,7 +320,9 @@ export class OnboardingPacketComponent implements OnInit {
     private route: ActivatedRoute,
     private apiService: ApiService,
     private consentService: ConsentService,
-    private seo: SeoService
+    private seo: SeoService,
+    private http: HttpClient,
+    private elRef: ElementRef
   ) {
     this.packetId = this.route.snapshot.paramMap.get('packetId');
     this.token = this.route.snapshot.queryParamMap.get('token');
@@ -312,6 +332,24 @@ export class OnboardingPacketComponent implements OnInit {
     const path = this.packetId ? `/onboard/${this.packetId}` : SEO_PUBLIC.driverOnboarding.path;
     this.seo.apply({ ...SEO_PUBLIC.driverOnboarding, path });
     this.loadPacket();
+
+    // FN-534: Address autocomplete pipeline
+    this.autocompleteSub = this.addressInput$.pipe(
+      debounceTime(300),
+      filter(({ query }) => query.length >= 3),
+      switchMap(({ key, query }) =>
+        this.http.get<{ success: boolean; data: AddressSuggestion[] }>(`${environment.apiUrl}/address/autocomplete`, { params: { q: query } }).pipe(
+          catchError(() => of({ success: false, data: [] as AddressSuggestion[] }))
+        ).pipe(
+          switchMap(response => {
+            const results = response.data || [];
+            this.addressSuggestions = { ...this.addressSuggestions, [key]: results };
+            this.activeAutocompleteKey = results.length > 0 ? key : null;
+            return of(null);
+          })
+        )
+      )
+    ).subscribe();
   }
 
   loadPacket(): void {
@@ -328,6 +366,7 @@ export class OnboardingPacketComponent implements OnInit {
         this.hydrateFromSections();
         this.loadConsentStatuses();
         this.loadUploadedDocuments();
+        this.prefillLicenseFromDriver();
       },
       error: (err) => {
         this.loading = false;
@@ -505,6 +544,9 @@ export class OnboardingPacketComponent implements OnInit {
     this.reviewMode = false;
   }
 
+  // FN-524: tracks the auto-navigation timer so we can cancel it if needed
+  private autoNavTimer: ReturnType<typeof setTimeout> | null = null;
+
   submitEmploymentApplication(): void {
     if (!this.packetId || !this.token) return;
     this.saving = true;
@@ -517,7 +559,10 @@ export class OnboardingPacketComponent implements OnInit {
           this.saving = false;
           this.submittedEmployment = true;
           this.reviewMode = false;
-          this.saveSuccess = 'Employment application submitted successfully. Your DQF employment checklist item will be updated automatically.';
+          // FN-536: Store applicant data in session so consent forms can prefill capture fields
+          this.storeSessionDataForConsentForms();
+          // FN-524: Show success message then auto-navigate to consent forms after 2.5 s
+          this.saveSuccess = 'Application submitted successfully! Taking you to consent forms…';
           const idx = this.sections.findIndex((s) => s.section_key === 'employment_application');
           if (idx >= 0) {
             this.sections = this.sections.map((s, i) =>
@@ -526,12 +571,37 @@ export class OnboardingPacketComponent implements OnInit {
           } else {
             this.sections = [...this.sections, { section_key: 'employment_application', status: 'completed', completed_at: new Date().toISOString() }];
           }
+          // FN-524: Auto-navigate to consent_forms after 2.5 s; fallback to showing success state
+          this.autoNavTimer = setTimeout(() => {
+            this.autoNavTimer = null;
+            this.setStep('consent_forms');
+          }, 2500);
         },
         error: (err) => {
           this.saving = false;
           this.errorMessage = err?.error?.message || 'Failed to save employment application.';
         }
       });
+  }
+
+  /** FN-536: Write applicant data to sessionStorage so consent-form can prefill capture fields */
+  private storeSessionDataForConsentForms(): void {
+    try {
+      const emp = this.employment;
+      const firstLicense = (emp.licenses && emp.licenses.length > 0) ? emp.licenses[0] : {};
+
+      const sessionData = {
+        fullName: [emp.firstName, emp.middleName, emp.lastName].filter(Boolean).join(' '),
+        dateOfBirth: emp.dateOfBirth || '',
+        ssnLast4: (this.ssnRaw || emp.ssn || '').slice(-4),
+        driversLicenseNumber: firstLicense.licenseNumber || emp.licenseNumber || '',
+        stateOfIssue: firstLicense.state || emp.licenseState || ''
+      };
+
+      sessionStorage.setItem('fn_onboarding_applicant', JSON.stringify(sessionData));
+    } catch {
+      // Silently ignore if sessionStorage is unavailable
+    }
   }
 
   // FN-270: Track submission state
@@ -665,18 +735,31 @@ export class OnboardingPacketComponent implements OnInit {
   // === SSN Masking ===
   onSsnInput(event: Event): void {
     const input = event.target as HTMLInputElement;
-    const digits = input.value.replace(/\D/g, '').slice(0, 9);
+    // Strip everything except digits
+    const digits = input.value.replace(/[^\d]/g, '').slice(0, 9);
     this.ssnRaw = digits;
     this.employment.ssn = digits;
 
-    // Auto-format with dashes and restore cursor position
-    const formatted = this.formatSsnWithDashes(digits);
-    const cursorPos = input.selectionStart || 0;
-    const prevLen = input.value.length;
-    input.value = this.ssnMasked ? this.getMaskedSsn(digits) : formatted;
-    const newLen = input.value.length;
-    const adjustedPos = cursorPos + (newLen - prevLen);
-    input.setSelectionRange(adjustedPos, adjustedPos);
+    // While focused: always show plain formatted digits (never mask)
+    const display = this.formatSsnWithDashes(digits);
+    input.value = display;
+    input.setSelectionRange(display.length, display.length);
+  }
+
+  onSsnFocus(event: Event): void {
+    this.ssnFocused = true;
+    const input = event.target as HTMLInputElement;
+    // On focus: show plain digits so user can type freely
+    const display = this.formatSsnWithDashes(this.ssnRaw);
+    input.value = display;
+    input.setSelectionRange(display.length, display.length);
+  }
+
+  onSsnBlur(event: Event): void {
+    this.ssnFocused = false;
+    const input = event.target as HTMLInputElement;
+    // On blur: show masked version if masking is on
+    input.value = this.getSsnDisplay();
   }
 
   toggleSsnVisibility(): void {
@@ -685,7 +768,7 @@ export class OnboardingPacketComponent implements OnInit {
 
   getSsnDisplay(): string {
     if (!this.ssnRaw) return '';
-    return this.ssnMasked
+    return (this.ssnMasked && !this.ssnFocused)
       ? this.getMaskedSsn(this.ssnRaw)
       : this.formatSsnWithDashes(this.ssnRaw);
   }
@@ -805,4 +888,115 @@ export class OnboardingPacketComponent implements OnInit {
   }
 
   removeLicense(i: number): void { this.employment.licenses?.splice(i, 1); }
+
+  // === FN-533: License Prefill (public endpoint) ===
+  private prefillLicenseFromDriver(): void {
+    if (!this.packetId || !this.token) return;
+
+    const publicBase = environment.apiUrl.replace(/\/api\/?$/, '/public/onboarding');
+    this.http.get<{ licenseNumber?: string; licenseState?: string }>(
+      `${publicBase}/${this.packetId}/license`,
+      { params: { token: this.token } }
+    ).subscribe({
+      next: (data) => {
+        if (!data) return;
+        const licenses = this.employment.licenses;
+        if (!licenses || licenses.length === 0) return;
+        const first = licenses[0];
+
+        // Only patch if the field is currently empty (don't override user input)
+        if (data.licenseNumber && !first.licenseNumber) {
+          first.licenseNumber = data.licenseNumber;
+        }
+        if (data.licenseState && !first.state) {
+          first.state = data.licenseState;
+        }
+      },
+      error: () => {
+        // Silently skip — section remains blank for manual entry
+      }
+    });
+  }
+
+  // === FN-534: Address Autocomplete ===
+  @HostListener('document:click', ['$event'])
+  onDocumentClick(event: Event): void {
+    if (!this.elRef.nativeElement.contains(event.target)) {
+      this.dismissAutocomplete();
+    }
+  }
+
+  onAddressInput(key: string, event: Event): void {
+    const query = (event.target as HTMLInputElement).value;
+    if (query.length < 3) {
+      this.addressSuggestions = { ...this.addressSuggestions, [key]: [] };
+      if (this.activeAutocompleteKey === key) this.activeAutocompleteKey = null;
+      return;
+    }
+    this.addressInput$.next({ key, query });
+  }
+
+  selectAddressSuggestion(
+    key: string,
+    suggestion: AddressSuggestion,
+    target: { street: string; city: string; state: string; zip: string },
+    fieldMap: { street: string; city: string; state: string; zip: string }
+  ): void {
+    (target as Record<string, string>)[fieldMap.street] = suggestion.street;
+    (target as Record<string, string>)[fieldMap.city] = suggestion.city;
+    (target as Record<string, string>)[fieldMap.state] = suggestion.state;
+    (target as Record<string, string>)[fieldMap.zip] = suggestion.zip;
+    this.addressSuggestions = { ...this.addressSuggestions, [key]: [] };
+    this.activeAutocompleteKey = null;
+  }
+
+  selectCurrentAddressSuggestion(suggestion: AddressSuggestion): void {
+    this.employment.addressStreet = suggestion.street;
+    this.employment.addressCity = suggestion.city;
+    this.employment.addressState = suggestion.state;
+    this.employment.addressZip = suggestion.zip;
+    this.addressSuggestions = { ...this.addressSuggestions, currentAddress: [] };
+    this.activeAutocompleteKey = null;
+  }
+
+  selectPreviousAddressSuggestion(suggestion: AddressSuggestion, addr: PreviousAddress): void {
+    addr.street = suggestion.street;
+    addr.city = suggestion.city;
+    addr.state = suggestion.state;
+    addr.zip = suggestion.zip;
+    this.addressSuggestions = {};
+    this.activeAutocompleteKey = null;
+  }
+
+  selectEmployerAddressSuggestion(suggestion: AddressSuggestion, emp: EmployerEntry): void {
+    emp.streetAddress = suggestion.street;
+    emp.city = suggestion.city;
+    emp.state = suggestion.state;
+    emp.zipCode = suggestion.zip;
+    this.addressSuggestions = {};
+    this.activeAutocompleteKey = null;
+  }
+
+  onAddressKeydown(key: string, event: KeyboardEvent): void {
+    if (event.key === 'Escape') {
+      this.addressSuggestions = { ...this.addressSuggestions, [key]: [] };
+      this.activeAutocompleteKey = null;
+    }
+  }
+
+  dismissAutocomplete(): void {
+    this.activeAutocompleteKey = null;
+    this.addressSuggestions = {};
+  }
+
+  // FN-524: Cancel auto-navigation timer on destroy to avoid memory leaks
+  ngOnDestroy(): void {
+    if (this.autoNavTimer !== null) {
+      clearTimeout(this.autoNavTimer);
+      this.autoNavTimer = null;
+    }
+    if (this.autocompleteSub) {
+      this.autocompleteSub.unsubscribe();
+    }
+  }
 }

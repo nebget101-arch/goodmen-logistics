@@ -1,14 +1,16 @@
 import { NgModule } from '@angular/core';
 import { RouterModule, Routes } from '@angular/router';
+// FN-1636 — dev-only primitives showcase
+import { DashboardPrimitivesComponent } from './dev/dashboard-primitives/dashboard-primitives.component';
+// FN-1644 — dev-only Roadside primitives sandbox
+import { RoadsidePrimitivesComponent } from './components/dev/roadside-primitives/roadside-primitives.component';
 import { DashboardComponent } from './components/dashboard/dashboard.component';
 import { DriversComponent } from './components/drivers/drivers.component';
 import { DispatchDriversComponent } from './components/dispatch-drivers/dispatch-drivers.component';
+import { DriverEditComponent } from './components/driver-edit/driver-edit.component';
 import { VehiclesComponent } from './components/vehicles/vehicles.component';
 import { HosComponent } from './components/hos/hos.component';
-import { MaintenanceComponent } from './components/maintenance/maintenance.component';
-import { WorkOrderComponent } from './components/work-order/work-order.component';
 import { LoadsComponent } from './components/loads/loads.component';
-import { LoadsDashboardComponent } from './components/loads-dashboard/loads-dashboard.component';
 import { DispatchBoardComponent } from './components/dispatch-board/dispatch-board.component';
 import { AuditComponent } from './components/audit/audit.component';
 import { LoginComponent } from './components/login/login.component';
@@ -21,25 +23,29 @@ import { UserCreateComponent } from './components/user-create/user-create.compon
 import { UsersAdminComponent } from './components/users-admin/users-admin.component';
 import { ProfileComponent } from './components/profile/profile.component';
 import { PartsCatalogComponent } from './components/parts-catalog/parts-catalog.component';
-import { BarcodeManagementComponent } from './components/barcode-management/barcode-management.component';
-import { WarehouseReceivingComponent } from './components/warehouse-receiving/warehouse-receiving.component';
+// FN-1549: warehouse-receiving, onboarding-packet, employment-application,
+// trial-requests-admin, and fmcsa-imports are lazy-loaded via loadChildren
+// below — see their feature modules.
 import { InventoryTransfersComponent } from './components/inventory-transfers/inventory-transfers.component';
 import { DirectSalesComponent } from './components/direct-sales/direct-sales.component';
 import { InventoryReportsComponent } from './components/inventory-reports/inventory-reports.component';
-import { OnboardingPacketComponent } from './components/onboarding-packet/onboarding-packet.component';
-import { EmploymentApplicationComponent } from './onboarding/employment-application/employment-application.component';
 import { PrivacyPolicyComponent } from './components/privacy-policy/privacy-policy.component';
 import { TermsComponent } from './components/terms/terms.component';
 import { CommunicationPreferencesComponent } from './components/communication-preferences/communication-preferences.component';
 import { MultiMcAdminComponent } from './components/multi-mc-admin/multi-mc-admin.component';
-import { TrialRequestsAdminComponent } from './components/trial-requests-admin/trial-requests-admin.component';
+import { InboundEmailSettingsComponent } from './components/admin/inbound-email-settings/inbound-email-settings.component';
 import { RoadsideBoardComponent } from './components/roadside-board/roadside-board.component';
 import { PublicRoadsideComponent } from './components/public-roadside/public-roadside.component';
 import { EmployerResponseComponent } from './public/components/employer-response/employer-response.component';
 import { PERMISSIONS } from './models/access-control.model';
-import { InternalTrialAdminGuard } from './guards/internal-trial-admin.guard';
+// FN-1549: InternalTrialAdminGuard / InternalTenantGuard now applied inside
+// the lazy admin route modules (trial-requests-admin, fmcsa-imports).
 import { BillingAdminGuard } from './guards/billing-admin.guard';
 import { BillingComponent } from './billing/billing.component';
+import { IdleTruckAlertsComponent } from './components/idle-truck-alerts/idle-truck-alerts.component';
+import { LocationsListComponent } from './components/locations-admin/locations-list/locations-list.component';
+import { AutoReplenishmentComponent } from './components/auto-replenishment/auto-replenishment.component';
+import { environment } from '../environments/environment';
 
 const routes: Routes = [
   { path: '', redirectTo: '/home', pathMatch: 'full' },
@@ -72,6 +78,7 @@ const routes: Routes = [
   { path: 'dashboard', component: DashboardComponent, canActivate: [AuthGuard, PlanGuard], data: { planPath: '/dashboard' } },
   { path: 'drivers', component: DispatchDriversComponent, canActivate: [AuthGuard, PlanGuard], data: { planPath: '/drivers' } },
   { path: 'drivers/dqf', component: DriversComponent, canActivate: [AuthGuard, PlanGuard], data: { planPath: '/drivers/dqf' } },
+  { path: 'drivers/:id/edit', component: DriverEditComponent, canActivate: [AuthGuard, PlanGuard], data: { planPath: '/drivers' } },
   {
     path: 'vehicles',
     component: VehiclesComponent,
@@ -93,34 +100,28 @@ const routes: Routes = [
     }
   },
   { path: 'hos', component: HosComponent, canActivate: [AuthGuard, PlanGuard], data: { planPath: '/hos' } },
+  // FN-770: lazy-load heavy routes to keep initial bundle under budget.
   {
     path: 'maintenance',
-    component: MaintenanceComponent,
-    canActivate: [AuthGuard, PlanGuard, PermissionGuard],
-    data: {
-      planPath: '/maintenance',
-      anyPermission: [PERMISSIONS.MAINTENANCE_VIEW, PERMISSIONS.WORK_ORDERS_VIEW]
-    }
+    loadChildren: () => import('./components/maintenance/maintenance.module').then(m => m.MaintenanceModule)
   },
   {
     path: 'work-order',
-    component: WorkOrderComponent,
-    canActivate: [AuthGuard, PlanGuard, PermissionGuard],
-    data: {
-      planPath: '/work-order',
-      anyPermission: [PERMISSIONS.WORK_ORDERS_VIEW, PERMISSIONS.WORK_ORDERS_CREATE, PERMISSIONS.WORK_ORDERS_EDIT]
-    }
+    loadChildren: () => import('./components/work-order/work-order.module').then(m => m.WorkOrderModule)
   },
   {
-    path: 'work-order/:id',
-    component: WorkOrderComponent,
-    canActivate: [AuthGuard, PlanGuard, PermissionGuard],
-    data: {
-      planPath: '/work-order',
-      anyPermission: [PERMISSIONS.WORK_ORDERS_VIEW, PERMISSIONS.WORK_ORDERS_EDIT]
-    }
+    // FN-1594: spreadsheet import wizard. Registered before the lazy `loads`
+    // route so `/loads/import` resolves to this module rather than falling
+    // through to LoadsDashboardModule's children.
+    path: 'loads/import',
+    loadChildren: () => import('./loads/loads-import-wizard/loads-import.module').then(m => m.LoadsImportModule),
+    canActivate: [AuthGuard, PlanGuard],
+    data: { planPath: '/loads' }
   },
-  { path: 'loads', component: LoadsDashboardComponent, canActivate: [AuthGuard, PlanGuard], data: { planPath: '/loads' } },
+  {
+    path: 'loads',
+    loadChildren: () => import('./components/loads-dashboard/loads-dashboard.module').then(m => m.LoadsDashboardModule)
+  },
   { path: 'dispatch-board', component: DispatchBoardComponent, canActivate: [AuthGuard, PlanGuard], data: { planPath: '/dispatch-board' } },
   {
     path: 'roadside',
@@ -130,15 +131,28 @@ const routes: Routes = [
   },
   { path: 'audit', component: AuditComponent, canActivate: [AuthGuard, PlanGuard], data: { planPath: '/audit' } },
   { path: 'parts', component: PartsCatalogComponent, canActivate: [AuthGuard, PlanGuard], data: { planPath: '/parts' } },
-  { path: 'barcodes', component: BarcodeManagementComponent, canActivate: [AuthGuard, PlanGuard], data: { planPath: '/barcodes' } },
-  { path: 'receiving', component: WarehouseReceivingComponent, canActivate: [AuthGuard, PlanGuard], data: { planPath: '/receiving' } },
+  {
+    path: 'barcodes',
+    loadChildren: () => import('./components/barcode-management/barcode-management.module').then(m => m.BarcodeManagementModule)
+  },
+  {
+    path: 'receiving',
+    loadChildren: () => import('./components/warehouse-receiving/warehouse-receiving.module').then(m => m.WarehouseReceivingModule)
+  },
   { path: 'inventory-transfers', component: InventoryTransfersComponent, canActivate: [AuthGuard, PlanGuard], data: { planPath: '/inventory-transfers' } },
   { path: 'direct-sales', component: DirectSalesComponent, canActivate: [AuthGuard, PlanGuard], data: { planPath: '/direct-sales' } },
   { path: 'inventory-reports', component: InventoryReportsComponent, canActivate: [AuthGuard, PlanGuard], data: { planPath: '/inventory-reports' } },
-  // Employment application standalone route
-  { path: 'employment-application', component: EmploymentApplicationComponent },
-  // Public driver onboarding packet link (no AuthGuard)
-  { path: 'onboard/:packetId', component: OnboardingPacketComponent },
+  { path: 'reports/auto-replenishment', component: AutoReplenishmentComponent, canActivate: [AuthGuard, PlanGuard], data: { planPath: '/inventory-reports' } },
+  // Employment application standalone route (lazy — FN-1549)
+  {
+    path: 'employment-application',
+    loadChildren: () => import('./onboarding/employment-application/employment-application.module').then(m => m.EmploymentApplicationModule)
+  },
+  // Public driver onboarding packet link (no AuthGuard, lazy — FN-1549)
+  {
+    path: 'onboard/:packetId',
+    loadChildren: () => import('./components/onboarding-packet/onboarding-packet.module').then(m => m.OnboardingPacketModule)
+  },
   { path: 'roadside/:callId', component: PublicRoadsideComponent },
   // Public employer investigation response (no AuthGuard — token-validated)
   { path: 'employer-response/:tokenId', component: EmployerResponseComponent },
@@ -220,6 +234,12 @@ const routes: Routes = [
     }
   },
   { path: 'reports', loadChildren: () => import('./reports/reports.module').then(m => m.ReportsModule) },
+  {
+    path: 'idle-truck-alerts',
+    component: IdleTruckAlertsComponent,
+    canActivate: [AuthGuard, PlanGuard, PermissionGuard],
+    data: { planPath: '/settlements', anyPermission: [PERMISSIONS.SETTLEMENTS_VIEW, PERMISSIONS.SETTLEMENTS_EDIT] }
+  },
   { path: 'profile', component: ProfileComponent, canActivate: [AuthGuard] },
   { path: 'billing', component: BillingComponent, canActivate: [AuthGuard, BillingAdminGuard] },
   {
@@ -237,15 +257,49 @@ const routes: Routes = [
   },
   {
     path: 'admin/trial-requests',
-    component: TrialRequestsAdminComponent,
-    canActivate: [AuthGuard, InternalTrialAdminGuard]
+    loadChildren: () => import('./components/trial-requests-admin/trial-requests-admin.module').then(m => m.TrialRequestsAdminModule)
   },
+  {
+    path: 'admin/locations',
+    component: LocationsListComponent,
+    canActivate: [AuthGuard, PermissionGuard],
+    data: { anyPermission: [PERMISSIONS.LOCATIONS_MANAGE, PERMISSIONS.LOCATIONS_VIEW] }
+  },
+  {
+    path: 'admin/inbound-email',
+    component: InboundEmailSettingsComponent,
+    canActivate: [AuthGuard, PermissionGuard],
+    data: { anyPermission: [PERMISSIONS.ROLES_MANAGE, PERMISSIONS.ACCESS_ADMIN, PERMISSIONS.USERS_EDIT] }
+  },
+  {
+    path: 'admin/fmcsa-imports',
+    loadChildren: () => import('./components/admin/fmcsa-imports/fmcsa-imports.module').then(m => m.FmcsaImportsAdminModule)
+  },
+  // FN-1326 — dev-only severity-system preview. Excluded from production builds
+  // so the route does not ship to customers; lazy-loaded so it adds zero bundle
+  // weight unless explicitly visited in dev.
+  ...(environment.production
+    ? []
+    : [{
+        path: 'dev/severity-preview',
+        loadComponent: () =>
+          import('./dev/severity-preview/severity-preview.component')
+            .then(m => m.SeverityPreviewComponent)
+      }]),
   { path: 'login', component: LoginComponent },
   { path: 'forgot-password', component: ForgotPasswordComponent },
   { path: 'reset-password', component: ResetPasswordComponent },
   { path: 'privacy', component: PrivacyPolicyComponent },
   { path: 'terms', component: TermsComponent },
-  { path: 'communication-preferences', component: CommunicationPreferencesComponent }
+  { path: 'communication-preferences', component: CommunicationPreferencesComponent },
+  // FN-1636 — dev-only primitives showcase; excluded from production builds.
+  ...(environment.production
+    ? []
+    : [{ path: 'dev/dashboard-primitives', component: DashboardPrimitivesComponent }]),
+  // FN-1644 — dev-only Roadside primitives sandbox; excluded from production builds.
+  ...(environment.production
+    ? []
+    : [{ path: 'dev/roadside-primitives', component: RoadsidePrimitivesComponent }])
 ];
 
 @NgModule({

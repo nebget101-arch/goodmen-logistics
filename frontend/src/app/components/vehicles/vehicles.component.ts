@@ -1,9 +1,10 @@
 import { Component, OnInit, OnDestroy } from '@angular/core';
 import { ActivatedRoute } from '@angular/router';
 import { ApiService } from '../../services/api.service';
-import { debounceTime, Subject, Subscription } from 'rxjs';
+import { debounceTime, forkJoin, Subject, Subscription } from 'rxjs';
 import { PermissionHelperService } from '../../services/permission-helper.service';
 import { PERMISSIONS } from '../../models/access-control.model';
+import { environment } from '../../../environments/environment';
 
 interface Vehicle {
   id: string;
@@ -23,10 +24,46 @@ interface Vehicle {
   registration_expiry?: string;
   vehicle_type?: string;
   company_owned?: boolean;
+  equipment_owner_id?: string | null;
+  equipment_owner_name?: string | null;
+  trailer_details?: any;
 }
 
 type SortField = 'unit_number' | 'inspection_expiry';
 type SortOrder = 'asc' | 'desc';
+type Ownership = 'company' | 'oo' | 'leased';
+type OwnershipFilter = 'all' | Ownership;
+type DetailTab = 'overview' | 'maintenance';
+
+interface MaintenanceInvoice {
+  id: string;
+  number: string | null;
+  status: string | null;
+  amount_due: number | null;
+  pdf_url: string;
+}
+
+interface MaintenanceRow {
+  work_order_id: string;
+  work_order_number: string | null;
+  type: string | null;
+  status: string | null;
+  title: string | null;
+  request_date: string | null;
+  completion_date: string | null;
+  shop_location_name: string | null;
+  labor_total: number | null;
+  parts_total: number | null;
+  grand_total: number | null;
+  invoice?: MaintenanceInvoice | null;
+}
+
+interface MaintenanceMeta {
+  page: number;
+  pageSize: number;
+  total: number;
+  lifetime_spend: number;
+}
 
 @Component({
   selector: 'app-vehicles',
@@ -46,9 +83,21 @@ export class VehiclesComponent implements OnInit, OnDestroy {
   // Search and filter state
   searchQuery = '';
   selectedStatus = 'all';
+  selectedOwnership: OwnershipFilter = 'all';
   presetFilter: 'maintenance-due' | null = null;
   private searchSubject = new Subject<string>();
   private searchSubscription: Subscription | null = null;
+
+  // Driver lookup for trailer rows (assigned_driver_id → display name)
+  private driverByTrailerId = new Map<string, string>();
+
+  // Ownership filter chip-set options
+  ownershipOptions: { value: OwnershipFilter; label: string }[] = [
+    { value: 'all', label: 'All' },
+    { value: 'company', label: 'Company' },
+    { value: 'oo', label: 'OO' },
+    { value: 'leased', label: 'Leased' }
+  ];
 
   // Sort state
   sortField: SortField = 'unit_number';
@@ -57,6 +106,16 @@ export class VehiclesComponent implements OnInit, OnDestroy {
   selectedVehicleDetails: Vehicle | null = null;
   showVehicleDetails = false;
   sortOrder: SortOrder = 'asc';
+
+  // Detail-drawer tabs (FN-1390 — Maintenance History)
+  activeDetailTab: DetailTab = 'overview';
+  maintenanceHistoryLoading = false;
+  maintenanceHistoryError = '';
+  maintenanceHistoryLoaded = false;
+  maintenanceRows: MaintenanceRow[] = [];
+  maintenanceMeta: MaintenanceMeta = { page: 1, pageSize: 25, total: 0, lifetime_spend: 0 };
+  maintenancePage = 1;
+  readonly maintenancePageSize = 25;
 
   equipmentSafetyLoading = false;
   equipmentSafetyError = '';
@@ -147,13 +206,14 @@ export class VehiclesComponent implements OnInit, OnDestroy {
   loadVehicles(): void {
     this.loading = true;
     this.error = null;
-    
-    this.apiService.getVehicles().subscribe({
-      next: (data) => {
-        console.log('API returned:', data?.length, 'vehicles');
-        // All vehicles from API are company-owned
+
+    forkJoin({
+      vehicles: this.apiService.getVehicles(),
+      drivers: this.apiService.getDrivers()
+    }).subscribe({
+      next: ({ vehicles, drivers }) => {
         // Sanitize nullable string fields to prevent .slice()/.toLowerCase() crashes
-        this.allVehicles = (data || []).map((v: Vehicle) => ({
+        this.allVehicles = (vehicles || []).map((v: Vehicle) => ({
           ...v,
           unit_number: v.unit_number || '',
           vin: v.vin || '',
@@ -163,8 +223,19 @@ export class VehiclesComponent implements OnInit, OnDestroy {
           state: v.state || '',
           status: v.status || 'in-service',
         }));
-        console.log('Processing:', this.allVehicles.length, 'vehicles');
-        console.log('First vehicle:', this.allVehicles[0]);
+
+        // Build trailer-id → driver-name map for trailer-row "Driver" display
+        this.driverByTrailerId.clear();
+        const driverList = Array.isArray(drivers?.data)
+          ? drivers.data
+          : (Array.isArray(drivers) ? drivers : []);
+        for (const d of driverList) {
+          const trailerId = d?.trailer_id || d?.trailerId;
+          if (!trailerId) continue;
+          const name = `${d?.first_name || ''} ${d?.last_name || ''}`.trim();
+          if (name) this.driverByTrailerId.set(String(trailerId), name);
+        }
+
         this.applyFiltersAndSort();
         this.loading = false;
       },
@@ -201,8 +272,7 @@ export class VehiclesComponent implements OnInit, OnDestroy {
   applyFiltersAndSort(): void {
     let result = [...this.allVehicles];
 
-    // Filter to company-owned equipment and selected type
-    result = result.filter(vehicle => vehicle.company_owned !== false);
+    // Filter to selected vehicle type (truck vs trailer); ownership filter handled below
     result = result.filter(vehicle => this.normalizeVehicleType(vehicle.vehicle_type) === this.vehicleType);
 
     // Apply search filter
@@ -231,6 +301,11 @@ export class VehiclesComponent implements OnInit, OnDestroy {
     // Apply status filter
     if (this.selectedStatus !== 'all') {
       result = result.filter(vehicle => this.normalizeStatus(vehicle.status) === this.selectedStatus);
+    }
+
+    // Apply ownership filter
+    if (this.selectedOwnership !== 'all') {
+      result = result.filter(vehicle => this.getOwnership(vehicle) === this.selectedOwnership);
     }
 
     // Apply sorting
@@ -299,12 +374,58 @@ export class VehiclesComponent implements OnInit, OnDestroy {
   clearFilters(): void {
     this.searchQuery = '';
     this.selectedStatus = 'all';
+    this.selectedOwnership = 'all';
     this.presetFilter = null;
     this.sortField = 'unit_number';
     this.sortOrder = 'asc';
     this.currentPage = 1;
     this.itemsPerPage = 100;
     this.applyFiltersAndSort();
+  }
+
+  onOwnershipChange(value: OwnershipFilter): void {
+    this.selectedOwnership = value;
+    this.applyFiltersAndSort();
+  }
+
+  /** Derive ownership classification from existing vehicle fields. */
+  getOwnership(vehicle: Vehicle): Ownership {
+    const trailerOwnership = (vehicle.trailer_details?.ownership || '').toString().trim().toLowerCase();
+    if (trailerOwnership === 'leased') return 'leased';
+    if (vehicle.company_owned === false) return 'oo';
+    return 'company';
+  }
+
+  getOwnershipLabel(vehicle: Vehicle): string {
+    const o = this.getOwnership(vehicle);
+    if (o === 'oo') return 'OO';
+    if (o === 'leased') return 'LEASED';
+    return 'COMPANY';
+  }
+
+  getOwnershipChipClass(vehicle: Vehicle): string {
+    return `chip-ownership chip-ownership--${this.getOwnership(vehicle)}`;
+  }
+
+  /** Trailer-only: combined "code — label" string from trailer_details. */
+  getTrailerType(vehicle: Vehicle): string {
+    const code = (vehicle.trailer_details?.trailer_type_code || '').toString().trim();
+    const label = (vehicle.trailer_details?.trailer_type_label || '').toString().trim();
+    if (code && label) return `${code} — ${label}`;
+    return code || label || '';
+  }
+
+  /** Trailer-only: assigned driver display name (looked up via drivers index). */
+  getTrailerDriver(vehicle: Vehicle): string {
+    return this.driverByTrailerId.get(String(vehicle.id)) || '';
+  }
+
+  /** Compose plate + state with em-dash placeholder when blank. */
+  getPlateState(vehicle: Vehicle): string {
+    const plate = (vehicle.license_plate || '').trim();
+    const state = (vehicle.state || '').trim();
+    if (plate && state) return `${plate} (${state})`;
+    return plate || state || '—';
   }
 
   retryLoad(): void {
@@ -368,7 +489,9 @@ export class VehiclesComponent implements OnInit, OnDestroy {
   }
 
   get hasActiveFilters(): boolean {
-    return this.searchQuery.trim() !== '' || this.selectedStatus !== 'all';
+    return this.searchQuery.trim() !== ''
+      || this.selectedStatus !== 'all'
+      || this.selectedOwnership !== 'all';
   }
 
   get displayingRange(): string {
@@ -478,12 +601,16 @@ export class VehiclesComponent implements OnInit, OnDestroy {
   openVehicleDetails(vehicle: Vehicle): void {
     this.selectedVehicleDetails = vehicle;
     this.showVehicleDetails = true;
+    this.activeDetailTab = 'overview';
+    this.resetMaintenanceHistoryState();
     this.loadEquipmentSafetySummary(vehicle.id);
   }
 
   closeVehicleDetails(): void {
     this.showVehicleDetails = false;
     this.selectedVehicleDetails = null;
+    this.activeDetailTab = 'overview';
+    this.resetMaintenanceHistoryState();
     this.equipmentSafetyError = '';
     this.equipmentSafetySummary = {
       totalIncidents: 0,
@@ -494,6 +621,110 @@ export class VehiclesComponent implements OnInit, OnDestroy {
       lastIncidentDate: null,
       recentIncidents: []
     };
+  }
+
+  selectDetailTab(tab: DetailTab): void {
+    if (this.activeDetailTab === tab) return;
+    this.activeDetailTab = tab;
+    if (tab === 'maintenance' && !this.maintenanceHistoryLoaded && this.selectedVehicleDetails) {
+      this.loadMaintenanceHistory(this.selectedVehicleDetails.id, 1);
+    }
+  }
+
+  loadMaintenanceHistory(vehicleId: string, page: number): void {
+    if (!vehicleId) return;
+    this.maintenanceHistoryLoading = true;
+    this.maintenanceHistoryError = '';
+    this.maintenancePage = page;
+
+    this.apiService.getVehicleMaintenanceHistory(vehicleId, page, this.maintenancePageSize).subscribe({
+      next: (resp: any) => {
+        this.maintenanceRows = Array.isArray(resp?.data) ? resp.data : [];
+        const meta = resp?.meta || {};
+        this.maintenanceMeta = {
+          page: Number(meta.page) || page,
+          pageSize: Number(meta.pageSize) || this.maintenancePageSize,
+          total: Number(meta.total) || 0,
+          lifetime_spend: Number(meta.lifetime_spend) || 0
+        };
+        this.maintenanceHistoryLoaded = true;
+        this.maintenanceHistoryLoading = false;
+      },
+      error: () => {
+        this.maintenanceHistoryError = 'Unable to load maintenance history.';
+        this.maintenanceHistoryLoading = false;
+      }
+    });
+  }
+
+  retryMaintenanceHistory(): void {
+    if (!this.selectedVehicleDetails) return;
+    this.loadMaintenanceHistory(this.selectedVehicleDetails.id, this.maintenancePage || 1);
+  }
+
+  onMaintenancePageChange(page: number): void {
+    if (!this.selectedVehicleDetails) return;
+    if (page < 1 || page > this.maintenanceTotalPages) return;
+    this.loadMaintenanceHistory(this.selectedVehicleDetails.id, page);
+  }
+
+  get maintenanceTotalPages(): number {
+    const size = this.maintenanceMeta?.pageSize || this.maintenancePageSize;
+    return Math.max(1, Math.ceil((this.maintenanceMeta?.total || 0) / size));
+  }
+
+  get lastWorkOrderDate(): string | null {
+    // Rows come back ordered by work_orders.created_at DESC, so the first row of page 1 is the latest.
+    if (this.maintenancePage !== 1 || !this.maintenanceRows.length) return null;
+    const first = this.maintenanceRows[0];
+    return first?.completion_date || first?.request_date || null;
+  }
+
+  canViewInvoices(): boolean {
+    return this.permissions.hasPermission(PERMISSIONS.INVOICES_VIEW);
+  }
+
+  /** Scope: row click → open /work-order/:id in a new tab. */
+  openWorkOrder(row: MaintenanceRow): void {
+    if (!row?.work_order_id) return;
+    window.open(`/work-order/${row.work_order_id}`, '_blank', 'noopener');
+  }
+
+  /**
+   * Scope: invoice pill click → download PDF.
+   * Open the gateway URL in a new tab — the API streams the PDF.
+   */
+  openInvoicePdf(invoice: MaintenanceInvoice | null | undefined, event?: Event): void {
+    if (event) event.stopPropagation();
+    if (!invoice?.id) return;
+    window.open(`${environment.apiUrl}/invoices/${invoice.id}/pdf`, '_blank', 'noopener');
+  }
+
+  getMaintenanceStatusBadge(status: string | null | undefined): string {
+    const normalized = (status || '').toString().trim().toUpperCase();
+    if (normalized === 'COMPLETED' || normalized === 'CLOSED' || normalized === 'INVOICED') return 'badge-success';
+    if (normalized === 'CANCELED' || normalized === 'CANCELLED') return 'badge-muted';
+    if (normalized === 'IN_PROGRESS' || normalized === 'OPEN') return 'badge-info';
+    return 'badge-warning';
+  }
+
+  getMaintenanceStatusLabel(status: string | null | undefined): string {
+    const normalized = (status || '').toString().trim();
+    if (!normalized) return '—';
+    return normalized.replace(/_/g, ' ');
+  }
+
+  trackByMaintenanceRow(_index: number, row: MaintenanceRow): string {
+    return row?.work_order_id || String(_index);
+  }
+
+  private resetMaintenanceHistoryState(): void {
+    this.maintenanceHistoryLoading = false;
+    this.maintenanceHistoryError = '';
+    this.maintenanceHistoryLoaded = false;
+    this.maintenanceRows = [];
+    this.maintenanceMeta = { page: 1, pageSize: this.maintenancePageSize, total: 0, lifetime_spend: 0 };
+    this.maintenancePage = 1;
   }
 
   loadEquipmentSafetySummary(vehicleId: string): void {

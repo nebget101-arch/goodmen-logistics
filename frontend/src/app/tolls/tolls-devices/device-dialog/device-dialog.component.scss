@@ -98,11 +98,15 @@ select.field-input {
 }
 
 .autocomplete-item {
+  width: 100%;
   padding: 0.5rem 0.75rem;
   font-size: 0.8125rem;
   color: #e2e8f0;
   cursor: pointer;
   transition: background 0.1s;
+  text-align: left;
+  border: 0;
+  background: transparent;
 
   &:hover {
     background: rgba(56, 189, 248, 0.12);

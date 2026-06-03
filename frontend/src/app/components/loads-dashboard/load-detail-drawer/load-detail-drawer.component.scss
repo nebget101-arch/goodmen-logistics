@@ -1,0 +1,345 @@
+/*
+ * FN-808 — Load Detail Side Drawer styles.
+ *
+ * The drawer is positioned as a right-anchored sibling of the loads table.
+ * Parent applies a grid layout to shrink the table when the drawer is open;
+ * this component keeps its positioning simple (position: relative within a
+ * grid column) so the two panes share the viewport without overlapping.
+ */
+
+/* FN-1040 — re-tokenized to match the AI dark theme (.card / .topbar in styles.css). */
+$drawer-border: var(--border-color);
+$drawer-bg: rgba(15, 23, 42, 0.96);
+$drawer-header-bg: rgba(2, 6, 23, 0.92);
+$drawer-text: #e5e7eb;
+$drawer-text-strong: #e5f9ff;
+$drawer-muted: #94a3b8;
+$accent: #67e8f9;
+$accent-soft: rgba(56, 189, 248, 0.18);
+$accent-border: rgba(56, 189, 248, 0.35);
+
+:host {
+  /*
+   * FN-808: Drawer is pinned to the viewport's right edge so it stays in
+   * place as the user scrolls the loads list. The parent applies a
+   * right-padding equal to the drawer width so the table reflows into the
+   * remaining viewport space (the "grid layout" AC) — no overlap with table
+   * content. Width is applied inline via [style.width.px] on .load-drawer.
+   */
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 40;
+  display: block;
+  pointer-events: auto;
+}
+
+.load-drawer {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: $drawer-bg;
+  border-left: 1px solid $drawer-border;
+  box-shadow:
+    -18px 0 44px rgba(2, 6, 23, 0.85),
+    0 0 0 1px rgba(15, 23, 42, 1);
+  color: $drawer-text;
+  animation: drawer-slide-in 280ms cubic-bezier(0.4, 0, 0.2, 1);
+  overflow: hidden;
+}
+
+@keyframes drawer-slide-in {
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+.load-drawer__resize-handle {
+  position: absolute;
+  top: 0;
+  left: -3px;
+  width: 6px;
+  height: 100%;
+  cursor: col-resize;
+  z-index: 2;
+  background: transparent;
+
+  &:hover,
+  &:active {
+    background: $accent-soft;
+  }
+}
+
+.load-drawer__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 16px;
+  background: $drawer-header-bg;
+  border-bottom: 1px solid $drawer-border;
+  flex-shrink: 0;
+}
+
+.load-drawer__header-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.load-drawer__header-right {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.load-drawer__nav-btn,
+.load-drawer__icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+  background: transparent;
+  border: 1px solid transparent;
+  color: $drawer-text;
+  cursor: pointer;
+  transition: background 120ms ease, border-color 120ms ease;
+
+  &:hover:not(:disabled) {
+    background: $accent-soft;
+    border-color: $accent-border;
+    color: $drawer-text-strong;
+  }
+
+  &:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+
+  .material-symbols-outlined {
+    font-size: 20px;
+  }
+}
+
+.load-drawer__title {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.load-drawer__load-number {
+  font-size: 16px;
+  font-weight: 600;
+  color: $drawer-text-strong;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 240px;
+}
+
+/* FN-818 — header AI marker + confidence chip spacing. */
+.load-drawer__ai-sparkle {
+  line-height: 0;
+}
+.load-drawer__confidence-badge {
+  line-height: 0;
+}
+
+.load-drawer__tabs {
+  display: flex;
+  gap: 4px;
+  padding: 8px 12px 0;
+  border-bottom: 1px solid $drawer-border;
+  flex-shrink: 0;
+  background: $drawer-bg;
+}
+
+.load-drawer__tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  margin-bottom: -1px;
+  border: 1px solid transparent;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: $drawer-muted;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  border-top-left-radius: 6px;
+  border-top-right-radius: 6px;
+  transition: color 120ms ease, border-color 120ms ease;
+
+  .material-symbols-outlined {
+    font-size: 18px;
+  }
+
+  &:hover {
+    color: $drawer-text-strong;
+  }
+
+  &.is-active {
+    color: $accent;
+    border-bottom-color: $accent;
+  }
+}
+
+.load-drawer__banner {
+  padding: 8px 16px;
+  font-size: 13px;
+  color: $drawer-muted;
+  background: $drawer-header-bg;
+  border-bottom: 1px solid $drawer-border;
+
+  &--error {
+    color: #fca5a5;
+    background: rgba(127, 29, 29, 0.35);
+  }
+}
+
+.load-drawer__body {
+  flex: 1 1 auto;
+  overflow: auto;
+  padding: 16px;
+
+  &.is-loading {
+    opacity: 0.6;
+    pointer-events: none;
+  }
+}
+
+.load-drawer__footer {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+  border-top: 1px solid $drawer-border;
+  background: $drawer-header-bg;
+  flex-shrink: 0;
+
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+
+    .material-symbols-outlined {
+      font-size: 18px;
+    }
+  }
+
+  .spin {
+    animation: load-drawer-spin 900ms linear infinite;
+  }
+}
+
+@keyframes load-drawer-spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+
+.load-drawer__unsaved-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(2, 6, 23, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10;
+}
+
+.load-drawer__unsaved-dialog {
+  background: $drawer-bg;
+  border: 1px solid $drawer-border;
+  border-radius: 12px;
+  padding: 20px 24px;
+  max-width: 380px;
+  width: calc(100% - 32px);
+  box-shadow:
+    0 24px 48px rgba(0, 0, 0, 0.55),
+    0 0 0 1px rgba(15, 23, 42, 1);
+  text-align: center;
+
+  h3 {
+    margin: 8px 0 4px;
+    font-size: 16px;
+    font-weight: 600;
+    color: $drawer-text-strong;
+  }
+
+  p {
+    margin: 0 0 16px;
+    font-size: 13px;
+    color: $drawer-muted;
+  }
+}
+
+.load-drawer__unsaved-icon {
+  color: #f59e0b;
+  font-size: 28px;
+}
+
+.load-drawer__unsaved-actions {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+}
+
+/* While the user is dragging the resize handle, inhibit text selection
+ * across the entire page so the drag stays smooth. ::ng-deep breaks out
+ * of Emulated view encapsulation so the rule reaches <body>. */
+::ng-deep body.drawer-resizing {
+  user-select: none;
+  cursor: col-resize;
+}
+
+/* FN-1439 — Suggest-driver CTA on the Driver tab. */
+.load-drawer__suggest-driver {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin: 0 0 16px;
+  padding: 14px 16px;
+  background: $accent-soft;
+  border: 1px solid $accent-border;
+  border-radius: 10px;
+  color: $drawer-text;
+
+  .load-drawer__suggest-driver-copy {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+
+    > .material-symbols-outlined {
+      color: $accent;
+      font-size: 24px;
+      margin-top: 2px;
+    }
+
+    strong {
+      display: block;
+      color: $drawer-text-strong;
+      font-size: 14px;
+    }
+
+    p {
+      margin: 4px 0 0;
+      color: $drawer-muted;
+      font-size: 12px;
+      line-height: 1.4;
+    }
+  }
+}

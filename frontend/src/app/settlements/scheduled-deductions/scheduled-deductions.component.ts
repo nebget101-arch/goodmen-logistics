@@ -18,6 +18,10 @@ interface RecurringDeduction {
   end_date: string | null;
   source_type: string | null;
   applies_when: string;
+  expense_responsibility: string | null;
+  split_type: string | null;
+  driver_share: number | null;
+  owner_share: number | null;
   enabled: boolean;
   created_at?: string;
   updated_at?: string;
@@ -40,6 +44,10 @@ interface RecurringDeductionCreatePayload {
   end_date?: string;
   source_type?: string;
   applies_when?: string;
+  expense_responsibility?: string;
+  split_type?: string;
+  driver_share?: number;
+  owner_share?: number;
   enabled: boolean;
 }
 
@@ -57,6 +65,10 @@ interface RecurringDeductionUpdatePayload {
   enabled?: boolean;
   applies_when?: string;
   source_type?: string;
+  expense_responsibility?: string;
+  split_type?: string;
+  driver_share?: number;
+  owner_share?: number;
 }
 
 @Component({
@@ -103,6 +115,10 @@ export class ScheduledDeductionsComponent implements OnInit {
     end_date: null,
     source_type: null,
     applies_when: 'always',
+    expense_responsibility: null,
+    split_type: null,
+    driver_share: null,
+    owner_share: null,
     enabled: true
   };
 
@@ -126,9 +142,21 @@ export class ScheduledDeductionsComponent implements OnInit {
   ];
 
   appliesWhenOptions = [
-    { value: 'always', label: 'Always' },
-    { value: 'has_loads', label: 'Only when driver has loads' },
+    { value: 'always', label: 'Always (even if no loads)' },
+    { value: 'has_loads', label: 'Only when loads exist' },
     { value: 'specific_expense', label: 'Based on expense responsibility' }
+  ];
+
+  expenseResponsibilityOptions = [
+    { value: 'company', label: 'Company' },
+    { value: 'driver', label: 'Driver' },
+    { value: 'owner', label: 'Equipment Owner' },
+    { value: 'shared', label: 'Shared' }
+  ];
+
+  splitTypeOptions = [
+    { value: 'percentage', label: 'Percentage' },
+    { value: 'fixed_amount', label: 'Fixed Amount' }
   ];
 
   expenseTypeOptions = [
@@ -218,6 +246,10 @@ export class ScheduledDeductionsComponent implements OnInit {
       end_date: null,
       source_type: null,
       applies_when: 'always',
+      expense_responsibility: null,
+      split_type: null,
+      driver_share: null,
+      owner_share: null,
       enabled: true
     };
     this.showModal = true;
@@ -241,6 +273,10 @@ export class ScheduledDeductionsComponent implements OnInit {
       end_date: null,
       source_type: null,
       applies_when: 'always',
+      expense_responsibility: null,
+      split_type: null,
+      driver_share: null,
+      owner_share: null,
       enabled: true
     };
     this.formData = {
@@ -264,7 +300,25 @@ export class ScheduledDeductionsComponent implements OnInit {
       return;
     }
 
+    // Client-side split validation
+    if (this.formData.expense_responsibility === 'shared') {
+      const ds = Number(this.formData.driver_share ?? 0);
+      const os = Number(this.formData.owner_share ?? 0);
+      if (this.formData.split_type === 'percentage' && Math.abs(ds + os - 100) > 0.01) {
+        alert('Percentage splits must sum to 100%');
+        return;
+      }
+      if (this.formData.split_type === 'fixed_amount') {
+        const total = Number(this.formData.amount ?? 0);
+        if (total > 0 && Math.abs(ds + os - total) > 0.01) {
+          alert('Fixed amount splits must sum to the total deduction amount');
+          return;
+        }
+      }
+    }
+
     this.saving = true;
+    const isShared = this.formData.expense_responsibility === 'shared';
     const createPayload: RecurringDeductionCreatePayload = {
       driver_id: this.formData.driver_id ?? undefined,
       payee_id: this.formData.payee_id ?? undefined,
@@ -278,6 +332,10 @@ export class ScheduledDeductionsComponent implements OnInit {
       end_date: this.formData.end_date ?? undefined,
       source_type: this.formData.source_type ?? undefined,
       applies_when: this.formData.applies_when || 'always',
+      expense_responsibility: this.formData.expense_responsibility ?? undefined,
+      split_type: isShared ? (this.formData.split_type ?? undefined) : undefined,
+      driver_share: isShared ? (this.formData.driver_share ?? undefined) : undefined,
+      owner_share: isShared ? (this.formData.owner_share ?? undefined) : undefined,
       enabled: this.formData.enabled ?? true
     };
 
@@ -294,7 +352,11 @@ export class ScheduledDeductionsComponent implements OnInit {
       end_date: createPayload.end_date,
       enabled: createPayload.enabled,
       applies_when: createPayload.applies_when,
-      source_type: createPayload.source_type
+      source_type: createPayload.source_type,
+      expense_responsibility: createPayload.expense_responsibility,
+      split_type: createPayload.split_type,
+      driver_share: createPayload.driver_share,
+      owner_share: createPayload.owner_share
     };
 
     if (this.editingId) {
@@ -384,6 +446,25 @@ export class ScheduledDeductionsComponent implements OnInit {
     return option ? option.label : frequency;
   }
 
+  getAppliesWhenLabel(value: string): string {
+    const option = this.appliesWhenOptions.find(o => o.value === value);
+    return option ? option.label : value || 'Always';
+  }
+
+  getExpenseResponsibilityLabel(value: string | null): string {
+    if (!value) return '—';
+    const option = this.expenseResponsibilityOptions.find(o => o.value === value);
+    return option ? option.label : value;
+  }
+
+  formatSplitConfig(d: RecurringDeduction): string {
+    if (d.expense_responsibility !== 'shared' || !d.split_type) return '—';
+    if (d.split_type === 'percentage') {
+      return `Driver ${d.driver_share ?? 0}% / Owner ${d.owner_share ?? 0}%`;
+    }
+    return `Driver $${(d.driver_share ?? 0).toFixed(2)} / Owner $${(d.owner_share ?? 0).toFixed(2)}`;
+  }
+
   private normalizeDateInput(value?: string | null): string | null {
     if (!value) return null;
     return String(value).slice(0, 10);
@@ -410,6 +491,10 @@ export class ScheduledDeductionsComponent implements OnInit {
       end_date: this.normalizeDateInput(row?.end_date),
       source_type: row?.source_type ?? null,
       applies_when: normalizedAppliesWhen,
+      expense_responsibility: row?.expense_responsibility ?? null,
+      split_type: row?.split_type ?? null,
+      driver_share: row?.driver_share != null ? Number(row.driver_share) : null,
+      owner_share: row?.owner_share != null ? Number(row.owner_share) : null,
       enabled: row?.enabled !== false,
       created_at: row?.created_at,
       updated_at: row?.updated_at,

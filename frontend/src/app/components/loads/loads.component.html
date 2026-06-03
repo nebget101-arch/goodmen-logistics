@@ -141,8 +141,17 @@
               </div>
               <div class="modal-body" *ngIf="editLoad">
                 <form (ngSubmit)="updateLoad()">
-                  <div><label>Driver Name: <input [(ngModel)]="editLoad.driverName" name="editDriverName" required></label></div>
-                  <div><label>Vehicle Unit: <input [(ngModel)]="editLoad.vehicleUnit" name="editVehicleUnit" required></label></div>
+                  <!-- FN-538: Driver select with auto-fill of truck/trailer on change -->
+                  <div><label>Driver:
+                    <app-ai-select [(ngModel)]="editLoad.driverId" name="editDriverId"
+                      [options]="driverSelectOptions"
+                      placeholder="Select driver"
+                      (ngModelChange)="onEditDriverChange($event)">
+                    </app-ai-select>
+                  </label></div>
+                  <div><label>Truck (unit #): <input [(ngModel)]="editLoad.truck" name="editTruck" placeholder="Auto-filled from driver"></label></div>
+                  <div><label>Trailer (unit #): <input [(ngModel)]="editLoad.trailer" name="editTrailer" placeholder="Auto-filled from driver"></label></div>
+                  <div><label>Vehicle Unit: <input [(ngModel)]="editLoad.vehicleUnit" name="editVehicleUnit"></label></div>
                   <div><label>Pickup Location: <input [(ngModel)]="editLoad.pickupLocation" name="editPickupLocation" required></label></div>
                   <div><label>Pickup City: <input [(ngModel)]="editLoad.pickupCity" name="editPickupCity"></label></div>
                   <div><label>Pickup State: <input [(ngModel)]="editLoad.pickupState" name="editPickupState"></label></div>

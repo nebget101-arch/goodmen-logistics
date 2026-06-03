@@ -1,0 +1,422 @@
+<!-- Not a bin-capable location type -->
+<div class="bins-tab" *ngIf="!isBinCapable">
+  <div class="not-applicable">
+    <span class="material-symbols-outlined na-icon">inventory_2</span>
+    <p>Bins are only available for <strong>Shop</strong> and <strong>Warehouse</strong> locations.</p>
+  </div>
+</div>
+
+<!-- Bin-capable location -->
+<div class="bins-tab" *ngIf="isBinCapable">
+
+  <!-- Error banner -->
+  <div *ngIf="error" class="alert alert-danger">
+    <span class="material-symbols-outlined">error</span>
+    <span>{{ error }}</span>
+    <button type="button" class="alert-dismiss" (click)="error = ''">&times;</button>
+  </div>
+
+  <!-- Header bar -->
+  <div class="tab-header">
+    <div class="search-wrap">
+      <span class="material-symbols-outlined search-icon">search</span>
+      <input
+        type="text"
+        class="filter-input search-input"
+        placeholder="Search bins by code, name, or zone..."
+        [(ngModel)]="searchQuery"
+        (keyup.enter)="onSearch()"
+        (input)="onSearch()"
+      />
+    </div>
+
+    <div class="header-actions">
+      <button type="button" class="btn btn-outline-accent" (click)="openBulkDialog()">
+        <span class="material-symbols-outlined">library_add</span>
+        Bulk Create
+      </button>
+      <button type="button" class="btn btn-primary" (click)="openAddDialog()">
+        <span class="material-symbols-outlined">add</span>
+        Add Bin
+      </button>
+    </div>
+  </div>
+
+  <!-- Loading -->
+  <div *ngIf="loading" class="loading">
+    <span class="material-symbols-outlined spin">progress_activity</span>
+    Loading bins...
+  </div>
+
+  <!-- Bins table -->
+  <div class="table-wrap" *ngIf="!loading">
+    <table class="table">
+      <thead>
+        <tr>
+          <th scope="col">Code</th>
+          <th scope="col">Name</th>
+          <th scope="col">Type</th>
+          <th scope="col">Zone</th>
+          <th scope="col">Active</th>
+          <th scope="col">Inventory</th>
+          <th scope="col" class="col-actions">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr *ngIf="filteredBins.length === 0">
+          <td colspan="7" class="empty-state">
+            <span class="material-symbols-outlined">inventory_2</span>
+            {{ searchQuery ? 'No bins match your search.' : 'No bins created yet.' }}
+          </td>
+        </tr>
+        <tr *ngFor="let bin of filteredBins">
+          <!-- Code -->
+          <td>
+            <span class="bin-code">{{ bin.bin_code }}</span>
+          </td>
+
+          <!-- Name -->
+          <td>
+            <span *ngIf="bin.bin_name">{{ bin.bin_name }}</span>
+            <span *ngIf="!bin.bin_name" class="muted">--</span>
+          </td>
+
+          <!-- Type badge -->
+          <td>
+            <span [ngClass]="getTypeBadgeClass(bin.bin_type)">
+              {{ getTypeLabel(bin.bin_type) }}
+            </span>
+          </td>
+
+          <!-- Zone -->
+          <td>
+            <span *ngIf="bin.zone">{{ bin.zone }}</span>
+            <span *ngIf="!bin.zone" class="muted">--</span>
+          </td>
+
+          <!-- Active -->
+          <td>
+            <span class="status-pill" [class.status-active]="bin.active" [class.status-inactive]="!bin.active">
+              {{ bin.active ? 'Active' : 'Inactive' }}
+            </span>
+          </td>
+
+          <!-- Inventory Count -->
+          <td>
+            <span class="inventory-count" *ngIf="bin.inventory_count !== undefined && bin.inventory_count !== null">
+              {{ bin.inventory_count }}
+            </span>
+            <span *ngIf="bin.inventory_count === undefined || bin.inventory_count === null" class="muted">0</span>
+          </td>
+
+          <!-- Actions -->
+          <td class="col-actions">
+            <div class="action-group">
+              <button
+                type="button"
+                class="btn-sm btn-outline"
+                (click)="openEditDialog(bin)"
+                title="Edit bin"
+              >
+                <span class="material-symbols-outlined">edit</span>
+                Edit
+              </button>
+              <button
+                type="button"
+                class="btn-sm btn-danger-sm"
+                (click)="openDeleteConfirm(bin)"
+                title="Delete bin"
+              >
+                <span class="material-symbols-outlined">delete</span>
+              </button>
+            </div>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Summary -->
+  <div class="tab-footer" *ngIf="!loading && bins.length > 0">
+    <span class="summary-text">
+      {{ filteredBins.length }} of {{ bins.length }} bin{{ bins.length !== 1 ? 's' : '' }}
+    </span>
+  </div>
+</div>
+
+<!-- ─── Add Bin Dialog ──────────────────────────────────────────────────── -->
+<div class="modal-backdrop" *ngIf="showAddDialog" (click)="closeAddDialog()">
+  <div class="modal modal-sm" (click)="$event.stopPropagation()">
+    <div class="modal-header">
+      <h3>
+        <span class="material-symbols-outlined title-icon">add_box</span>
+        Add Bin
+      </h3>
+      <button type="button" class="modal-close" (click)="closeAddDialog()">&times;</button>
+    </div>
+
+    <div class="modal-body">
+      <div class="form-grid">
+        <div class="form-group form-group-full">
+          <label for="addBinCode">Bin Code <span class="required">*</span></label>
+          <input id="addBinCode" type="text" [(ngModel)]="binForm.bin_code" placeholder="e.g. A-1" />
+        </div>
+
+        <div class="form-group">
+          <label for="addBinName">Name</label>
+          <input id="addBinName" type="text" [(ngModel)]="binForm.bin_name" placeholder="Optional label" />
+        </div>
+
+        <div class="form-group">
+          <label for="addBinType">Type</label>
+          <select id="addBinType" [(ngModel)]="binForm.bin_type">
+            <option value="">-- Select --</option>
+            <option *ngFor="let opt of binTypeOptions" [value]="opt.value">{{ opt.label }}</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label for="addBinZone">Zone</label>
+          <input id="addBinZone" type="text" [(ngModel)]="binForm.zone" placeholder="e.g. A" />
+        </div>
+
+        <div class="form-group">
+          <label for="addBinAisle">Aisle</label>
+          <input id="addBinAisle" type="text" [(ngModel)]="binForm.aisle" placeholder="e.g. 1" />
+        </div>
+
+        <div class="form-group">
+          <label for="addBinShelf">Shelf</label>
+          <input id="addBinShelf" type="text" [(ngModel)]="binForm.shelf" placeholder="e.g. Top" />
+        </div>
+
+        <div class="form-group">
+          <label for="addBinPosition">Position</label>
+          <input id="addBinPosition" type="text" [(ngModel)]="binForm.position" placeholder="e.g. Left" />
+        </div>
+
+        <div class="form-group form-group-full">
+          <label for="addBinNotes">Capacity Notes</label>
+          <textarea id="addBinNotes" [(ngModel)]="binForm.capacity_notes" rows="2"
+                    placeholder="Weight limits, size constraints..."></textarea>
+        </div>
+      </div>
+    </div>
+
+    <div class="modal-footer">
+      <button type="button" class="btn btn-ghost" (click)="closeAddDialog()" [disabled]="saving">Cancel</button>
+      <button type="button" class="btn btn-primary" (click)="saveNewBin()"
+              [disabled]="saving || !binForm.bin_code.trim()">
+        <span class="material-symbols-outlined spin" *ngIf="saving">progress_activity</span>
+        {{ saving ? 'Saving...' : 'Save Bin' }}
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ─── Edit Bin Dialog ─────────────────────────────────────────────────── -->
+<div class="modal-backdrop" *ngIf="showEditDialog" (click)="closeEditDialog()">
+  <div class="modal modal-sm" (click)="$event.stopPropagation()">
+    <div class="modal-header">
+      <h3>
+        <span class="material-symbols-outlined title-icon">edit</span>
+        Edit Bin
+      </h3>
+      <button type="button" class="modal-close" (click)="closeEditDialog()">&times;</button>
+    </div>
+
+    <div class="modal-body">
+      <div class="form-grid">
+        <div class="form-group form-group-full">
+          <label for="editBinCode">Bin Code <span class="required">*</span></label>
+          <input id="editBinCode" type="text" [(ngModel)]="binForm.bin_code" placeholder="e.g. A-1" />
+        </div>
+
+        <div class="form-group">
+          <label for="editBinName">Name</label>
+          <input id="editBinName" type="text" [(ngModel)]="binForm.bin_name" placeholder="Optional label" />
+        </div>
+
+        <div class="form-group">
+          <label for="editBinType">Type</label>
+          <select id="editBinType" [(ngModel)]="binForm.bin_type">
+            <option value="">-- Select --</option>
+            <option *ngFor="let opt of binTypeOptions" [value]="opt.value">{{ opt.label }}</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label for="editBinZone">Zone</label>
+          <input id="editBinZone" type="text" [(ngModel)]="binForm.zone" placeholder="e.g. A" />
+        </div>
+
+        <div class="form-group">
+          <label for="editBinAisle">Aisle</label>
+          <input id="editBinAisle" type="text" [(ngModel)]="binForm.aisle" placeholder="e.g. 1" />
+        </div>
+
+        <div class="form-group">
+          <label for="editBinShelf">Shelf</label>
+          <input id="editBinShelf" type="text" [(ngModel)]="binForm.shelf" placeholder="e.g. Top" />
+        </div>
+
+        <div class="form-group">
+          <label for="editBinPosition">Position</label>
+          <input id="editBinPosition" type="text" [(ngModel)]="binForm.position" placeholder="e.g. Left" />
+        </div>
+
+        <div class="form-group form-group-full">
+          <label for="editBinNotes">Capacity Notes</label>
+          <textarea id="editBinNotes" [(ngModel)]="binForm.capacity_notes" rows="2"
+                    placeholder="Weight limits, size constraints..."></textarea>
+        </div>
+
+        <div class="form-group form-group-full">
+          <label class="toggle-label">
+            <input type="checkbox" [(ngModel)]="binForm.active" />
+            <span class="toggle-text">Active</span>
+          </label>
+        </div>
+      </div>
+    </div>
+
+    <div class="modal-footer">
+      <button type="button" class="btn btn-ghost" (click)="closeEditDialog()" [disabled]="saving">Cancel</button>
+      <button type="button" class="btn btn-primary" (click)="saveEditBin()"
+              [disabled]="saving || !binForm.bin_code.trim()">
+        <span class="material-symbols-outlined spin" *ngIf="saving">progress_activity</span>
+        {{ saving ? 'Saving...' : 'Update Bin' }}
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ─── Delete Confirm Dialog ───────────────────────────────────────────── -->
+<div class="modal-backdrop" *ngIf="showDeleteConfirm" (click)="closeDeleteConfirm()">
+  <div class="modal modal-xs" (click)="$event.stopPropagation()">
+    <div class="modal-header">
+      <h3>
+        <span class="material-symbols-outlined title-icon-danger">warning</span>
+        Delete Bin
+      </h3>
+      <button type="button" class="modal-close" (click)="closeDeleteConfirm()">&times;</button>
+    </div>
+
+    <div class="modal-body" *ngIf="deletingBin">
+      <p class="confirm-text">
+        Are you sure you want to delete bin <strong>{{ deletingBin.bin_code }}</strong>?
+      </p>
+      <div class="inventory-warning" *ngIf="deletingBin.inventory_count && deletingBin.inventory_count > 0">
+        <span class="material-symbols-outlined">warning</span>
+        <span>
+          This bin has <strong>{{ deletingBin.inventory_count }}</strong> inventory item{{ deletingBin.inventory_count !== 1 ? 's' : '' }}.
+          Deleting will soft-deactivate the bin.
+        </span>
+      </div>
+    </div>
+
+    <div class="modal-footer">
+      <button type="button" class="btn btn-ghost" (click)="closeDeleteConfirm()" [disabled]="saving">Cancel</button>
+      <button type="button" class="btn btn-danger" (click)="confirmDelete()" [disabled]="saving">
+        <span class="material-symbols-outlined spin" *ngIf="saving">progress_activity</span>
+        {{ saving ? 'Deleting...' : 'Delete' }}
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ─── Bulk Create Dialog ──────────────────────────────────────────────── -->
+<div class="modal-backdrop" *ngIf="showBulkDialog" (click)="closeBulkDialog()">
+  <div class="modal modal-md" (click)="$event.stopPropagation()">
+    <div class="modal-header">
+      <h3>
+        <span class="material-symbols-outlined title-icon">library_add</span>
+        Bulk Create Bins
+      </h3>
+      <button type="button" class="modal-close" (click)="closeBulkDialog()">&times;</button>
+    </div>
+
+    <div class="modal-body">
+      <!-- Mode selector -->
+      <div class="bulk-mode-tabs">
+        <button type="button"
+                class="bulk-mode-tab"
+                [class.active]="bulkMode === 'range'"
+                (click)="bulkMode = 'range'; bulkPreview = []">
+          Range Pattern
+        </button>
+        <button type="button"
+                class="bulk-mode-tab"
+                [class.active]="bulkMode === 'zone'"
+                (click)="bulkMode = 'zone'; bulkPreview = []">
+          Zone + Rows
+        </button>
+      </div>
+
+      <!-- Range mode -->
+      <div class="bulk-form" *ngIf="bulkMode === 'range'">
+        <div class="form-group form-group-full">
+          <label for="bulkPattern">Range Pattern</label>
+          <input id="bulkPattern" type="text" [(ngModel)]="bulkPattern"
+                 placeholder="e.g. A-1..A-20 or SHELF-01..SHELF-10" />
+          <span class="form-hint">Use prefix + start..prefix + end format</span>
+        </div>
+      </div>
+
+      <!-- Zone+Rows mode -->
+      <div class="bulk-form" *ngIf="bulkMode === 'zone'">
+        <div class="form-group">
+          <label for="bulkZone">Zone</label>
+          <input id="bulkZone" type="text" [(ngModel)]="bulkZone" placeholder="e.g. A" />
+        </div>
+
+        <div class="form-group form-group-full">
+          <label for="bulkRows">Rows (one per line)</label>
+          <textarea id="bulkRows" [(ngModel)]="bulkRows" rows="5"
+                    placeholder="1&#10;2&#10;3&#10;4&#10;5"></textarea>
+        </div>
+      </div>
+
+      <!-- Optional bin type -->
+      <div class="form-group">
+        <label for="bulkBinType">Bin Type (optional)</label>
+        <select id="bulkBinType" [(ngModel)]="bulkBinType">
+          <option value="">-- None --</option>
+          <option *ngFor="let opt of binTypeOptions" [value]="opt.value">{{ opt.label }}</option>
+        </select>
+      </div>
+
+      <!-- Preview button -->
+      <div class="bulk-actions">
+        <button type="button" class="btn btn-outline-accent" (click)="generatePreview()">
+          <span class="material-symbols-outlined">visibility</span>
+          Preview
+        </button>
+      </div>
+
+      <!-- Preview list -->
+      <div class="bulk-preview" *ngIf="bulkPreview.length > 0">
+        <div class="preview-header">
+          <span class="material-symbols-outlined">list</span>
+          {{ bulkPreview.length }} bin{{ bulkPreview.length !== 1 ? 's' : '' }} will be created:
+        </div>
+        <div class="preview-codes">
+          <span class="preview-code" *ngFor="let code of bulkPreview">{{ code }}</span>
+        </div>
+      </div>
+
+      <div class="bulk-preview bulk-preview-empty" *ngIf="bulkPreview.length === 0 && (bulkPattern || bulkZone)">
+        <span class="muted">Click "Preview" to see generated bin codes</span>
+      </div>
+    </div>
+
+    <div class="modal-footer">
+      <button type="button" class="btn btn-ghost" (click)="closeBulkDialog()" [disabled]="bulkSaving">Cancel</button>
+      <button type="button" class="btn btn-primary" (click)="confirmBulkCreate()"
+              [disabled]="bulkSaving || bulkPreview.length === 0">
+        <span class="material-symbols-outlined spin" *ngIf="bulkSaving">progress_activity</span>
+        {{ bulkSaving ? 'Creating...' : 'Create ' + bulkPreview.length + ' Bins' }}
+      </button>
+    </div>
+  </div>
+</div>

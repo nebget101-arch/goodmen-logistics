@@ -44,6 +44,8 @@ export const NAV_SECTIONS: NavSection[] = [
       { path: '/safety/compliance', label: 'Compliance', tab: 'safety_claims' },
       { path: '/safety', label: 'Claims & Accidents', tab: 'safety_claims' },
       { path: '/safety/fmcsa', label: 'FMCSA Safety', tab: 'fmcsa_safety' },
+      { path: '/safety/fmcsa/inspections', label: 'Inspections', tab: 'fmcsa_safety' },
+      { path: '/safety/risk-scores', label: 'Driver Risk Scores', tab: 'safety_claims' },
     ],
   },
   {
@@ -66,6 +68,15 @@ export const NAV_SECTIONS: NavSection[] = [
       { path: '/inventory-transfers', label: 'Transfers', tab: 'transfers' },
       { path: '/direct-sales', label: 'Direct Sales', tab: 'sales' },
       { path: '/inventory-reports', label: 'Reports', tab: 'inventory_reports' },
+      { path: '/reports/auto-replenishment', label: 'Auto-Replenishment', tab: 'inventory_reports' },
+    ],
+  },
+  {
+    sectionLabel: 'Fleet Management',
+    sectionIcon: 'local_shipping',
+    tab: 'settlements',
+    children: [
+      { path: '/idle-truck-alerts', label: 'Idle Truck Alerts', tab: 'settlements' },
     ],
   },
   {

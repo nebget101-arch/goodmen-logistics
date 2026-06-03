@@ -5,6 +5,7 @@ import { SettlementWizardComponent } from './settlement-wizard/settlement-wizard
 import { SettlementDetailComponent } from './settlement-detail/settlement-detail.component';
 import { ScheduledDeductionsComponent } from './scheduled-deductions/scheduled-deductions.component';
 import { EquipmentOwnersComponent } from './equipment-owners/equipment-owners.component';
+import { BalanceTransferQueueComponent } from './balance-transfer-queue/balance-transfer-queue.component';
 import { AuthGuard } from '../auth.guard';
 import { PlanGuard } from '../guards/plan.guard';
 import { PermissionGuard } from '../guards/permission.guard';
@@ -28,6 +29,12 @@ const routes: Routes = [
     component: EquipmentOwnersComponent,
     canActivate: [AuthGuard, PlanGuard, PermissionGuard],
     data: { planPath: '/settlements/equipment-owners', anyPermission: [PERMISSIONS.SETTLEMENTS_VIEW, PERMISSIONS.SETTLEMENTS_EDIT] }
+  },
+  {
+    path: 'balance-transfers',
+    component: BalanceTransferQueueComponent,
+    canActivate: [AuthGuard, PlanGuard, PermissionGuard],
+    data: { planPath: '/settlements/balance-transfers', anyPermission: [PERMISSIONS.SETTLEMENTS_VIEW, PERMISSIONS.SETTLEMENTS_EDIT] }
   },
   {
     path: 'new',

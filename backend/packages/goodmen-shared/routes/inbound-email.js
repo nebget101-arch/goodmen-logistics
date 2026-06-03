@@ -1,0 +1,439 @@
+'use strict';
+
+/**
+ * Tenant-facing inbound-email routes — FN-760 + FN-761
+ *
+ * Mounted at /api/tenants/me/inbound-email behind authMiddleware +
+ * tenantContextMiddleware.
+ *
+ *   GET    /                  -> current tenant's inbound address + basic settings
+ *   POST   /test              -> send a test email to the tenant's inbound address
+ *   GET    /logs              -> recent inbound emails for the tenant (paged)
+ *   GET    /whitelist         -> tenant's sender whitelist (FN-761)
+ *   POST   /whitelist         -> add a sender or domain to the whitelist
+ *   DELETE /whitelist/:id     -> remove an entry from the whitelist
+ */
+
+const dns = require('dns').promises;
+const express = require('express');
+const knex = require('../config/knex');
+const { sendEmail } = require('../services/notification-service');
+
+const router = express.Router();
+
+const MAX_LIMIT = 100;
+const TEST_EMAIL_SUBJECT = 'FleetNeuron pipeline self-test';
+const TEST_EMAIL_SYSTEM_SENDER = 'system-test@fleetneuron.ai';
+
+function extractDomain(address) {
+  const raw = (address || '').toString().trim().toLowerCase();
+  const at = raw.lastIndexOf('@');
+  if (at < 0 || at === raw.length - 1) return null;
+  return raw.slice(at + 1);
+}
+
+async function resolveMxRecords(domain) {
+  if (!domain) return { ok: false, records: [], error: 'missing_domain' };
+  try {
+    const records = await dns.resolveMx(domain);
+    const hosts = (records || [])
+      .sort((a, b) => (a.priority || 0) - (b.priority || 0))
+      .map((r) => r.exchange)
+      .filter(Boolean);
+    return { ok: hosts.length > 0, records: hosts, error: hosts.length ? null : 'no_mx_records' };
+  } catch (err) {
+    return { ok: false, records: [], error: err?.code || err?.message || 'mx_lookup_failed' };
+  }
+}
+
+function normalizeWhitelistPattern(raw) {
+  const trimmed = (raw || '').toString().trim().toLowerCase();
+  if (!trimmed) return null;
+  const isDomain = trimmed.startsWith('@');
+  if (!trimmed.includes('@')) return null;
+  return { pattern: trimmed, isDomain };
+}
+
+router.get('/', async (req, res) => {
+  const tenantId = req.context?.tenantId || req.tenantId;
+  if (!tenantId) {
+    return res.status(403).json({ error: 'Forbidden: tenant context required' });
+  }
+
+  const hasColumn = await knex.schema
+    .hasColumn('tenants', 'inbound_email_address')
+    .catch(() => false);
+  if (!hasColumn) {
+    return res.json({
+      success: true,
+      data: {
+        tenantId,
+        address: null,
+        is_active: false,
+        message: 'Inbound email feature not yet provisioned (FN-759 migration pending)'
+      }
+    });
+  }
+
+  const row = await knex('tenants')
+    .where({ id: tenantId })
+    .select('id', 'inbound_email_address')
+    .first()
+    .catch(() => null);
+
+  const address = row?.inbound_email_address || null;
+  return res.json({
+    success: true,
+    data: {
+      tenantId,
+      address,
+      is_active: !!address
+    }
+  });
+});
+
+router.post('/test', async (req, res) => {
+  const tenantId = req.context?.tenantId || req.tenantId;
+  if (!tenantId) {
+    return res.status(403).json({ success: false, error: 'Forbidden: tenant context required' });
+  }
+
+  const hasColumn = await knex.schema
+    .hasColumn('tenants', 'inbound_email_address')
+    .catch(() => false);
+  if (!hasColumn) {
+    return res.status(503).json({
+      success: false,
+      error: 'Inbound email feature not yet provisioned'
+    });
+  }
+
+  const tenantRow = await knex('tenants')
+    .where({ id: tenantId })
+    .select('inbound_email_address', 'name')
+    .first()
+    .catch(() => null);
+  const address = tenantRow?.inbound_email_address;
+  if (!address) {
+    return res.status(400).json({
+      success: false,
+      error: 'No inbound email address configured for this tenant'
+    });
+  }
+
+  const userEmail = (req.user?.email || '').trim() || null;
+  const domain = extractDomain(address);
+  const mx = await resolveMxRecords(domain);
+
+  // Always insert a placeholder row so the UI is never silent, even if MX
+  // fails or the outbound provider rejects later. Reconciliation in
+  // integrations-service flips this row to success/rejected when the inbound
+  // webhook fires (within ~5 min window).
+  const hasLogTable = await knex.schema.hasTable('inbound_emails').catch(() => false);
+  let logRowId = null;
+  if (hasLogTable) {
+    try {
+      const [inserted] = await knex('inbound_emails')
+        .insert({
+          tenant_id: tenantId,
+          from_email: TEST_EMAIL_SYSTEM_SENDER,
+          subject: TEST_EMAIL_SUBJECT,
+          body_text: 'Self-diagnostic placeholder — awaiting webhook round-trip.',
+          processing_status: 'test_pending'
+        })
+        .returning(['id']);
+      logRowId = inserted?.id ?? inserted ?? null;
+    } catch (_) {
+      logRowId = null;
+    }
+  }
+
+  // If MX doesn't resolve, short-circuit with an actionable diagnostic
+  // *before* attempting an outbound send — SendGrid would accept the mail
+  // regardless but it would bounce at delivery, producing a misleading success.
+  if (!mx.ok) {
+    return res.json({
+      success: false,
+      diagnostics: {
+        mxRecords: mx.records,
+        mxResolves: false,
+        mxError: mx.error,
+        outboundProviderResponse: null,
+        logRowId,
+        instructions:
+          `MX records for ${domain} could not be resolved (${mx.error}). ` +
+          'SendGrid Inbound Parse DNS provisioning is likely incomplete — see FN-758 / devops runbook.'
+      }
+    });
+  }
+
+  const text = [
+    'This is an automated self-diagnostic email from FleetNeuron.',
+    '',
+    `Destination: ${address}`,
+    `MX hosts: ${mx.records.join(', ')}`,
+    '',
+    userEmail ? `Triggered by: ${userEmail}` : 'Triggered by: (unknown user)',
+    `Tenant: ${tenantRow?.name || tenantId}`
+  ].join('\n');
+
+  const sendResult = await sendEmail({
+    to: address,
+    subject: TEST_EMAIL_SUBJECT,
+    text,
+    replyTo: userEmail || undefined
+  });
+
+  if (!sendResult.sent) {
+    // Mark the placeholder row as rejected so the UI reflects reality.
+    if (logRowId) {
+      await knex('inbound_emails')
+        .where({ id: logRowId })
+        .update({
+          processing_status: 'rejected',
+          error_message: `outbound_send_failed: ${sendResult.error || 'unknown'}`
+        })
+        .catch(() => {});
+    }
+    return res.json({
+      success: false,
+      diagnostics: {
+        mxRecords: mx.records,
+        mxResolves: true,
+        outboundProviderResponse: { accepted: false, error: sendResult.error || 'send_failed' },
+        logRowId,
+        instructions:
+          'Outbound provider (SendGrid) rejected the test message. Check SENDGRID_API_KEY ' +
+          'and the FROM address verification status in SendGrid.'
+      }
+    });
+  }
+
+  return res.json({
+    success: true,
+    diagnostics: {
+      mxRecords: mx.records,
+      mxResolves: true,
+      outboundProviderResponse: {
+        accepted: true,
+        messageId: sendResult.messageId || null
+      },
+      logRowId,
+      instructions:
+        'Refresh in 30s; the log row should transition from test_pending to success/rejected ' +
+        'once SendGrid Inbound Parse forwards the message back to our webhook.'
+    }
+  });
+});
+
+router.get('/health', async (req, res) => {
+  const tenantId = req.context?.tenantId || req.tenantId;
+  if (!tenantId) {
+    return res.status(403).json({ success: false, error: 'Forbidden: tenant context required' });
+  }
+
+  const hasColumn = await knex.schema
+    .hasColumn('tenants', 'inbound_email_address')
+    .catch(() => false);
+  if (!hasColumn) {
+    return res.json({
+      success: true,
+      data: {
+        configured: false,
+        mxOk: false,
+        lastWebhookReceiptAt: null,
+        lastSuccessAt: null,
+        lastRejectionReason: null
+      }
+    });
+  }
+
+  const tenantRow = await knex('tenants')
+    .where({ id: tenantId })
+    .select('inbound_email_address')
+    .first()
+    .catch(() => null);
+  const address = tenantRow?.inbound_email_address || null;
+  const domain = extractDomain(address);
+  const mx = domain ? await resolveMxRecords(domain) : { ok: false, records: [] };
+
+  const hasLogTable = await knex.schema.hasTable('inbound_emails').catch(() => false);
+  let lastWebhookReceiptAt = null;
+  let lastSuccessAt = null;
+  let lastRejectionReason = null;
+  if (hasLogTable) {
+    // Any non-placeholder row indicates the webhook actually fired.
+    const lastWebhookRow = await knex('inbound_emails')
+      .where('tenant_id', tenantId)
+      .whereNot('processing_status', 'test_pending')
+      .orderBy('received_at', 'desc')
+      .select('received_at', 'processing_status', 'error_message')
+      .first()
+      .catch(() => null);
+    lastWebhookReceiptAt = lastWebhookRow?.received_at || null;
+
+    const lastSuccessRow = await knex('inbound_emails')
+      .where({ tenant_id: tenantId, processing_status: 'success' })
+      .orderBy('received_at', 'desc')
+      .select('received_at')
+      .first()
+      .catch(() => null);
+    lastSuccessAt = lastSuccessRow?.received_at || null;
+
+    const lastRejectionRow = await knex('inbound_emails')
+      .where({ tenant_id: tenantId, processing_status: 'rejected' })
+      .orderBy('received_at', 'desc')
+      .select('error_message')
+      .first()
+      .catch(() => null);
+    lastRejectionReason = lastRejectionRow?.error_message || null;
+  }
+
+  return res.json({
+    success: true,
+    data: {
+      configured: !!address,
+      address,
+      mxOk: !!mx.ok,
+      mxRecords: mx.records,
+      lastWebhookReceiptAt,
+      lastSuccessAt,
+      lastRejectionReason
+    }
+  });
+});
+
+router.get('/logs', async (req, res) => {
+  const tenantId = req.context?.tenantId || req.tenantId;
+  if (!tenantId) {
+    return res.status(403).json({ error: 'Forbidden: tenant context required' });
+  }
+
+  const hasTable = await knex.schema.hasTable('inbound_emails').catch(() => false);
+  if (!hasTable) {
+    return res.json({ success: true, data: [], total: 0, configured: false });
+  }
+
+  const limitRaw = parseInt(req.query.limit, 10);
+  const offsetRaw = parseInt(req.query.offset, 10);
+  const limit = Number.isFinite(limitRaw) && limitRaw > 0 ? Math.min(limitRaw, MAX_LIMIT) : 25;
+  const offset = Number.isFinite(offsetRaw) && offsetRaw >= 0 ? offsetRaw : 0;
+
+  const baseQuery = knex('inbound_emails').where({ tenant_id: tenantId });
+  const [{ count }] = await baseQuery.clone().count('id as count');
+  const rows = await baseQuery
+    .clone()
+    .orderBy('received_at', 'desc')
+    .limit(limit)
+    .offset(offset)
+    .select(
+      'id',
+      'from_email',
+      'subject',
+      'received_at',
+      'load_id',
+      'processing_status',
+      'error_message'
+    );
+
+  return res.json({
+    success: true,
+    data: rows,
+    total: Number(count) || 0,
+    configured: true
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Whitelist CRUD — FN-761
+// ---------------------------------------------------------------------------
+
+router.get('/whitelist', async (req, res) => {
+  const tenantId = req.context?.tenantId || req.tenantId;
+  if (!tenantId) {
+    return res.status(403).json({ error: 'Forbidden: tenant context required' });
+  }
+  const hasTable = await knex.schema
+    .hasTable('inbound_email_whitelist')
+    .catch(() => false);
+  if (!hasTable) {
+    return res.json({ success: true, data: [], configured: false });
+  }
+  const rows = await knex('inbound_email_whitelist')
+    .where('tenant_id', tenantId)
+    .orderBy('created_at', 'asc')
+    .select('id', 'pattern', 'is_domain', 'created_by_user_id', 'created_at');
+  const data = rows.map((r) => ({ ...r, sender_email: r.pattern }));
+  return res.json({ success: true, data, configured: true });
+});
+
+router.post('/whitelist', async (req, res) => {
+  const tenantId = req.context?.tenantId || req.tenantId;
+  if (!tenantId) {
+    return res.status(403).json({ error: 'Forbidden: tenant context required' });
+  }
+  const hasTable = await knex.schema
+    .hasTable('inbound_email_whitelist')
+    .catch(() => false);
+  if (!hasTable) {
+    return res
+      .status(503)
+      .json({ success: false, error: 'Whitelist table not provisioned' });
+  }
+
+  const rawPattern = req.body?.sender_email ?? req.body?.pattern;
+  const parsed = normalizeWhitelistPattern(rawPattern);
+  if (!parsed) {
+    return res.status(400).json({
+      success: false,
+      error: 'Pattern must be a valid email address or `@domain.com`'
+    });
+  }
+
+  try {
+    const [row] = await knex('inbound_email_whitelist')
+      .insert({
+        tenant_id: tenantId,
+        pattern: parsed.pattern,
+        is_domain: parsed.isDomain,
+        created_by_user_id: req.user?.id || null
+      })
+      .returning(['id', 'pattern', 'is_domain', 'created_by_user_id', 'created_at']);
+    return res.status(201).json({
+      success: true,
+      data: { ...row, sender_email: row.pattern }
+    });
+  } catch (err) {
+    // Postgres unique-violation code
+    if (err?.code === '23505') {
+      return res
+        .status(409)
+        .json({ success: false, error: 'Pattern already exists for this tenant' });
+    }
+    return res
+      .status(500)
+      .json({ success: false, error: 'Failed to add whitelist entry' });
+  }
+});
+
+router.delete('/whitelist/:id', async (req, res) => {
+  const tenantId = req.context?.tenantId || req.tenantId;
+  if (!tenantId) {
+    return res.status(403).json({ error: 'Forbidden: tenant context required' });
+  }
+  const hasTable = await knex.schema
+    .hasTable('inbound_email_whitelist')
+    .catch(() => false);
+  if (!hasTable) {
+    return res.status(404).json({ success: false, error: 'Not found' });
+  }
+  const deleted = await knex('inbound_email_whitelist')
+    .where({ tenant_id: tenantId, id: req.params.id })
+    .del();
+  if (!deleted) {
+    return res.status(404).json({ success: false, error: 'Whitelist entry not found' });
+  }
+  return res.json({ success: true });
+});
+
+module.exports = router;

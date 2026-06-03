@@ -1,0 +1,171 @@
+<ng-container *ngIf="state as s">
+  <div
+    class="explain-backdrop"
+    (click)="close()"
+    (keydown.enter)="close()"
+    (keydown.space)="close()"
+    role="presentation"
+    aria-hidden="true"
+  ></div>
+
+  <aside
+    class="explain-panel"
+    role="dialog"
+    aria-modal="true"
+    [attr.aria-label]="(s.label ? s.label + ' — explanation' : 'AI explanation')"
+  >
+    <header class="explain-panel__header">
+      <div class="explain-panel__title">
+        <span class="explain-panel__eyebrow">AI explanation</span>
+        <h2 class="explain-panel__heading">
+          {{ response?.subject || s.label || 'Why this value?' }}
+        </h2>
+      </div>
+      <button
+        type="button"
+        class="explain-panel__close"
+        (click)="close()"
+        aria-label="Close explanation panel"
+      >✕</button>
+    </header>
+
+    <div class="explain-panel__body">
+      <ng-container *ngIf="loading">
+        <div class="explain-panel__loading" role="status" aria-live="polite">
+          <div class="explain-skeleton explain-skeleton--lg"></div>
+          <div class="explain-skeleton explain-skeleton--md"></div>
+          <div class="explain-skeleton explain-skeleton--md"></div>
+          <div class="explain-skeleton explain-skeleton--sm"></div>
+        </div>
+      </ng-container>
+
+      <ng-container *ngIf="!loading && errorMessage">
+        <div class="explain-panel__error" role="alert">
+          <p>{{ errorMessage }}</p>
+          <button type="button" class="explain-btn" (click)="retry()">Retry</button>
+        </div>
+      </ng-container>
+
+      <ng-container *ngIf="!loading && !errorMessage && response as r">
+        <p class="explain-panel__summary" *ngIf="r.summary">{{ r.summary }}</p>
+
+        <!-- Sources -->
+        <section class="explain-section">
+          <button
+            type="button"
+            class="explain-section__toggle"
+            (click)="toggle('sources')"
+            [attr.aria-expanded]="!collapsed.sources"
+          >
+            <span class="explain-section__label">Source signals</span>
+            <span class="explain-section__count">{{ r.sources.length || 0 }}</span>
+            <span class="explain-section__chevron" [class.is-open]="!collapsed.sources">▾</span>
+          </button>
+          <div class="explain-section__body" *ngIf="!collapsed.sources">
+            <p class="explain-section__empty" *ngIf="!r.sources.length">
+              No source signals were recorded for this value.
+            </p>
+            <ul class="explain-list" *ngIf="r.sources.length">
+              <li
+                *ngFor="let src of r.sources; trackBy: trackBySource"
+                class="explain-list__item"
+              >
+                <div class="explain-list__title">{{ src.label }}</div>
+                <div class="explain-list__detail" *ngIf="src.detail">{{ src.detail }}</div>
+                <ng-container *ngIf="src.link as ln">
+                  <a
+                    *ngIf="ln.routerLink as cmds"
+                    class="explain-list__link"
+                    [routerLink]="cmds"
+                    [queryParams]="ln.queryParams"
+                    (click)="close()"
+                  >{{ ln.label || 'View source row' }} →</a>
+                  <a
+                    *ngIf="!ln.routerLink && ln.href"
+                    class="explain-list__link"
+                    [href]="ln.href"
+                    target="_blank"
+                    rel="noopener"
+                  >{{ ln.label || 'View source' }} ↗</a>
+                </ng-container>
+              </li>
+            </ul>
+          </div>
+        </section>
+
+        <!-- Rules -->
+        <section class="explain-section">
+          <button
+            type="button"
+            class="explain-section__toggle"
+            (click)="toggle('rules')"
+            [attr.aria-expanded]="!collapsed.rules"
+          >
+            <span class="explain-section__label">Rules evaluated</span>
+            <span class="explain-section__count">{{ r.rules.length || 0 }}</span>
+            <span class="explain-section__chevron" [class.is-open]="!collapsed.rules">▾</span>
+          </button>
+          <div class="explain-section__body" *ngIf="!collapsed.rules">
+            <p class="explain-section__empty" *ngIf="!r.rules.length">
+              No rules contributed to this value.
+            </p>
+            <ul class="explain-list" *ngIf="r.rules.length">
+              <li
+                *ngFor="let rule of r.rules; trackBy: trackByRule"
+                class="explain-list__item"
+                [class.explain-list__item--matched]="rule.matched"
+              >
+                <div class="explain-list__title">
+                  <span
+                    class="explain-list__pill"
+                    [class.explain-list__pill--matched]="rule.matched"
+                  >{{ rule.matched ? 'Matched' : 'Skipped' }}</span>
+                  {{ rule.label }}
+                </div>
+                <div class="explain-list__detail" *ngIf="rule.detail">{{ rule.detail }}</div>
+              </li>
+            </ul>
+          </div>
+        </section>
+
+        <!-- Scores -->
+        <section class="explain-section">
+          <button
+            type="button"
+            class="explain-section__toggle"
+            (click)="toggle('scores')"
+            [attr.aria-expanded]="!collapsed.scores"
+          >
+            <span class="explain-section__label">Score components</span>
+            <span class="explain-section__count">{{ r.scores.length || 0 }}</span>
+            <span class="explain-section__chevron" [class.is-open]="!collapsed.scores">▾</span>
+          </button>
+          <div class="explain-section__body" *ngIf="!collapsed.scores">
+            <p class="explain-section__empty" *ngIf="!r.scores.length">
+              No numeric scores were recorded for this value.
+            </p>
+            <ul class="explain-list" *ngIf="r.scores.length">
+              <li
+                *ngFor="let sc of r.scores; trackBy: trackByScore"
+                class="explain-list__item"
+              >
+                <div class="explain-list__title">
+                  <span>{{ sc.label }}</span>
+                  <span class="explain-score__value">{{ scorePercent(sc.value) }}%</span>
+                </div>
+                <div class="explain-score__bar" aria-hidden="true">
+                  <div class="explain-score__bar-fill" [style.width.%]="scorePercent(sc.value)"></div>
+                </div>
+                <div class="explain-list__detail" *ngIf="sc.detail">{{ sc.detail }}</div>
+              </li>
+            </ul>
+          </div>
+        </section>
+
+        <p class="explain-panel__expiry" *ngIf="expiryLabel() as exp">
+          Explanation cached until {{ exp }}.
+        </p>
+      </ng-container>
+    </div>
+  </aside>
+</ng-container>

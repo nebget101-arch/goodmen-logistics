@@ -1,0 +1,16 @@
+<div class="view-toggle" role="tablist" aria-label="Loads list view">
+  <button
+    type="button"
+    *ngFor="let tab of tabs; trackBy: trackByValue"
+    class="view-toggle__tab"
+    [class.view-toggle__tab--active]="isActive(tab.value)"
+    role="tab"
+    [attr.aria-selected]="isActive(tab.value)"
+    [attr.aria-controls]="'loads-view-' + tab.value"
+    [attr.tabindex]="isActive(tab.value) ? 0 : -1"
+    (click)="setValue(tab.value, $event)"
+  >
+    <span class="material-symbols-outlined" aria-hidden="true">{{ tab.icon }}</span>
+    <span class="view-toggle__label">{{ tab.label }}</span>
+  </button>
+</div>

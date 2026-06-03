@@ -1,0 +1,10 @@
+FROM signoz/signoz-otel-collector:0.102.12
+
+# Copy collector pipeline configuration
+COPY infra/signoz/otel-collector-config.yaml /etc/otel/config.yaml
+
+# OTLP receivers: 4317 (gRPC), 4318 (HTTP)
+# Health check: 13133, Metrics: 8888
+EXPOSE 4317 4318 13133 8888
+
+CMD ["--config", "/etc/otel/config.yaml"]

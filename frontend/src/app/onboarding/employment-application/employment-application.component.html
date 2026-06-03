@@ -69,7 +69,9 @@
           </div>
           <div class="ea-field">
             <label for="eaSSN">Social Security Number <span class="req">*</span></label>
-            <input id="eaSSN" class="ea-input" [value]="getSsnDisplay()" (input)="onSsnInput($event)" placeholder="XXX-XX-XXXX" maxlength="11" autocomplete="off" />
+            <!-- FN-531: [value] binding removed — Angular CD was overwriting user input every cycle.
+                 Display is now managed imperatively inside onSsnInput() to avoid the conflict. -->
+            <input id="eaSSN" class="ea-input" (input)="onSsnInput($event)" placeholder="XXX-XX-XXXX" maxlength="11" autocomplete="off" />
           </div>
           <div class="ea-field">
             <label for="eaPosition">Position Applied For <span class="req">*</span></label>
@@ -92,9 +94,18 @@
           </div>
         </div>
         <div class="ea-grid-2">
-          <div class="ea-field ea-field-full">
+          <div class="ea-field ea-field-full ea-autocomplete-wrap">
             <label>Street <span class="req">*</span></label>
-            <input formControlName="street" class="ea-input" placeholder="Street address" />
+            <input formControlName="street" class="ea-input" placeholder="Start typing an address..."
+                   (input)="onAddressInput('currentAddress', $event)"
+                   (keydown)="onAddressKeydown('currentAddress', $event)"
+                   autocomplete="off" />
+            <div class="ea-autocomplete-dropdown" *ngIf="activeAutocompleteKey === 'currentAddress' && addressSuggestions['currentAddress']?.length">
+              <div class="ea-autocomplete-item" *ngFor="let s of addressSuggestions['currentAddress']"
+                   (mousedown)="selectSuggestion('currentAddress', s, $any(form.get('currentAddress')), { street: 'street', city: 'city', state: 'state', zip: 'zip' })">
+                {{ s.street }}, {{ s.city }}, {{ s.state }} {{ s.zip }}
+              </div>
+            </div>
           </div>
           <div class="ea-field">
             <label>City <span class="req">*</span></label>
@@ -232,9 +243,18 @@
               <label>Employer Name <span class="req">*</span></label>
               <input formControlName="employerName" class="ea-input" placeholder="Company name" />
             </div>
-            <div class="ea-field ea-field-full">
+            <div class="ea-field ea-field-full ea-autocomplete-wrap">
               <label>Street Address <span class="req">*</span></label>
-              <input formControlName="streetAddress" class="ea-input" placeholder="Street address" />
+              <input formControlName="streetAddress" class="ea-input" placeholder="Start typing an address..."
+                     (input)="onAddressInput('currentEmployer', $event)"
+                     (keydown)="onAddressKeydown('currentEmployer', $event)"
+                     autocomplete="off" />
+              <div class="ea-autocomplete-dropdown" *ngIf="activeAutocompleteKey === 'currentEmployer' && addressSuggestions['currentEmployer']?.length">
+                <div class="ea-autocomplete-item" *ngFor="let s of addressSuggestions['currentEmployer']"
+                     (mousedown)="selectSuggestion('currentEmployer', s, $any(form.get('currentEmployer')), { street: 'streetAddress', city: 'city', state: 'state', zip: 'zipCode' })">
+                  {{ s.street }}, {{ s.city }}, {{ s.state }} {{ s.zip }}
+                </div>
+              </div>
             </div>
             <div class="ea-field">
               <label>City <span class="req">*</span></label>
@@ -794,10 +814,27 @@
           <p>I certify this application is true and complete to the best of my knowledge.</p>
         </div>
 
+        <!-- FN-535: Auto-populated from Applicant Information + License History above; editable -->
         <div class="ea-grid-2" style="margin-top:16px;">
           <div class="ea-field">
-            <label>Applicant Printed Name <span class="req">*</span></label>
-            <input formControlName="applicantPrintedName" class="ea-input" placeholder="Full legal name" />
+            <label>Full Name <span class="req">*</span></label>
+            <input formControlName="applicantPrintedName" class="ea-input" placeholder="Auto-filled from applicant name" />
+          </div>
+          <div class="ea-field">
+            <label>Date of Birth</label>
+            <input type="date" formControlName="dateOfBirth" class="ea-input" />
+          </div>
+          <div class="ea-field">
+            <label>SSN Last 4</label>
+            <input formControlName="ssnLast4" class="ea-input" placeholder="Auto-filled from SSN" maxlength="4" />
+          </div>
+          <div class="ea-field">
+            <label>Driver's License Number</label>
+            <input formControlName="driversLicenseNumber" class="ea-input" placeholder="Auto-filled from License History" />
+          </div>
+          <div class="ea-field">
+            <label>State of Issue</label>
+            <input formControlName="stateOfIssue" class="ea-input" placeholder="Auto-filled from License History" />
           </div>
           <div class="ea-field">
             <label>Signature <span class="req">*</span></label>

@@ -1,6 +1,13 @@
 .loads-dashboard {
   padding: 8px 16px 16px;
   width: 100%;
+  /* FN-808: smooth table reflow when the detail drawer opens/closes. */
+  transition: padding-right 280ms cubic-bezier(0.4, 0, 0.2, 1);
+
+  &.has-drawer {
+    /* padding-right is applied inline via [style.padding-right.px] so the
+     * value tracks the user-adjustable drawer width. */
+  }
 
   .header {
     display: flex;
@@ -40,6 +47,56 @@
       align-items: center;
       justify-content: space-between;
       gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    /* FN-795: collapsible toggle button */
+    &__toggle {
+      appearance: none;
+      background: rgba(30, 41, 59, 0.75);
+      border: 1px solid rgba(71, 85, 105, 0.7);
+      color: rgba(203, 213, 225, 0.9);
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 500;
+      letter-spacing: 0.02em;
+      padding: 4px 10px;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      cursor: pointer;
+      transition: background 0.15s ease, color 0.15s ease;
+
+      &:hover {
+        background: rgba(51, 65, 85, 0.9);
+        color: #f1f5f9;
+      }
+
+      .material-symbols-outlined {
+        font-size: 16px;
+      }
+    }
+
+    /* FN-795: container for the collapsible status + billing breakdown sections */
+    &__collapsible {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      animation: intelChipRowsReveal 0.18s ease-out;
+    }
+
+    &__section {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    &__section-label {
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      font-weight: 600;
+      color: rgba(148, 163, 184, 0.85);
     }
 
     &__period {
@@ -74,6 +131,10 @@
       font-weight: 700;
       letter-spacing: 0.04em;
       white-space: nowrap;
+      // FN-821: subtle glow on headline totals for dark-theme pop.
+      text-shadow:
+        0 0 16px rgba(45, 212, 191, 0.35),
+        0 1px 0 rgba(15, 23, 42, 0.9);
     }
 
     &__track {
@@ -166,6 +227,12 @@
       font-weight: 600;
       color: var(--text-light);
     }
+  }
+
+  /* FN-795: reveal animation for the collapsible breakdown */
+  @keyframes intelChipRowsReveal {
+    from { opacity: 0; transform: translateY(-4px); }
+    to   { opacity: 1; transform: translateY(0); }
   }
 
   .active-filters {
@@ -424,15 +491,49 @@
       text-transform: uppercase;
       letter-spacing: 0.5px;
       color: var(--text-light);
-      padding: 10px;
+      // FN-1403: vertical padding stays fixed; horizontal padding is driven
+      // by --loads-cell-px so the density toggle scales padding both ways.
+      padding-top: 10px;
+      padding-bottom: 10px;
+      padding-left: var(--loads-cell-px, 10px);
+      padding-right: var(--loads-cell-px, 10px);
       cursor: pointer;
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
+
+      // FN-1059: drag handle injected by app-resizable-column directive.
+      // The directive sets `position: relative` on the host th so this
+      // anchors to the right edge.
+      .app-resize-handle {
+        position: absolute;
+        top: 0;
+        right: 0;
+        width: 6px;
+        height: 100%;
+        cursor: col-resize;
+        user-select: none;
+        touch-action: none;
+        background: transparent;
+        z-index: 2;
+        transition: background 120ms ease;
+
+        &:hover,
+        &:focus,
+        &:focus-visible {
+          background: rgba(20, 184, 166, 0.55);
+          outline: none;
+        }
+      }
     }
 
     td {
-      padding: 12px 10px;
+      // FN-1403: vertical padding handled by density modes; horizontal
+      // padding scales with --loads-cell-px so dense rows feel tight.
+      padding-top: 12px;
+      padding-bottom: 12px;
+      padding-left: var(--loads-cell-px, 10px);
+      padding-right: var(--loads-cell-px, 10px);
       border-top: 1px solid var(--border-color);
       vertical-align: top;
       font-size: 13px;
@@ -441,6 +542,60 @@
       text-overflow: ellipsis;
       max-width: 0;
     }
+  }
+
+  /* FN-766: virtualized loads table — header + CDK viewport body
+     share colgroup widths so columns align between the two tables. */
+  .loads-table-container {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    width: 100%;
+    // FN-1403: required so the inner header table can use position:sticky;
+    // sticky resolves against the nearest scrolling ancestor / table-card.
+    position: relative;
+  }
+
+  // FN-1403: pin the header table to the top of the loads-table-container so
+  // it stays visible when the page scrolls. The body table lives inside the
+  // cdk-virtual-scroll-viewport (own scrollbar), so this only affects page
+  // scroll. Background must be opaque so virtualized rows don't bleed through.
+  .table--header {
+    position: sticky;
+    top: 0;
+    z-index: 5;
+    background: var(--ai-surface-deep);
+    box-shadow: 0 1px 0 0 var(--border-color);
+  }
+
+  .loads-viewport {
+    display: block;
+    width: 100%;
+    height: calc(100vh - 420px);
+    min-height: 320px;
+  }
+
+  .table--body tbody tr:first-child td {
+    border-top: none;
+  }
+
+  // FN-1403: zebra striping + subtle vertical column separators using AI dark
+  // theme tokens. Applied only to the body table so the header keeps its
+  // stronger surface fill. Selection / hover states sit above this in
+  // specificity (later in the file) so they win the cascade.
+  .table--body tbody tr:nth-child(even) > td {
+    background: var(--ai-surface-zebra);
+  }
+  .table--body tbody tr > td + td,
+  .table--header thead tr > th + th {
+    border-left: 1px solid var(--border-color);
+  }
+
+  .empty-state {
+    padding: 24px;
+    text-align: center;
+    color: var(--text-light);
+    font-size: 13px;
   }
 
   /* --- Column header labels: center-aligned --- */
@@ -547,12 +702,57 @@
     }
   }
 
+  // FN-1403: row state tints now use AI dark-theme tokens.
   .row-delivered {
-    background: rgba(46, 125, 50, 0.05);
+    background: var(--ai-row-delivered-bg);
   }
 
   .row-cancelled {
-    background: rgba(198, 40, 40, 0.04);
+    background: var(--ai-row-cancelled-bg);
+  }
+
+  /* FN-808: Drawer row states.
+   * - Hover/pointer cue so users discover rows are clickable.
+   * - Active row gets a teal left border when its load is open in the drawer. */
+  tbody tr {
+    cursor: pointer;
+  }
+  tr.row-drawer-active > td:first-child {
+    box-shadow: inset 3px 0 0 0 #14b8a6;
+  }
+  tr.row-drawer-active > td {
+    background: rgba(20, 184, 166, 0.06);
+  }
+
+  /* FN-818: one-off glow for brand-new AI-extracted rows.
+   * Fades in a teal wash, pulses once, and decays. Respects
+   * prefers-reduced-motion so the row still gets a brief tint
+   * without the animation. */
+  tr.row-new-ai > td {
+    animation: row-new-ai-glow 3s ease-out 1;
+  }
+  @keyframes row-new-ai-glow {
+    0%   { background: rgba(45, 212, 191, 0.0); box-shadow: inset 0 0 0 0 rgba(45,212,191,0); }
+    15%  { background: rgba(45, 212, 191, 0.18); box-shadow: inset 0 0 24px 0 rgba(45,212,191,0.22); }
+    60%  { background: rgba(45, 212, 191, 0.10); }
+    100% { background: transparent; box-shadow: none; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    tr.row-new-ai > td {
+      animation: none;
+      background: rgba(45, 212, 191, 0.08);
+      transition: background 500ms ease;
+    }
+  }
+
+  /* FN-818: spacing for the sparkle + chip in the load rows. */
+  .row-ai-sparkle {
+    margin-left: 6px;
+    vertical-align: middle;
+  }
+  .row-confidence-badge {
+    margin-left: 8px;
+    vertical-align: middle;
   }
 
   .attachment-chips {
@@ -580,7 +780,7 @@
   }
 
   .link {
-    color: var(--primary-color);
+    color: #38bdf8;
     cursor: pointer;
     text-decoration: underline;
   }
@@ -709,9 +909,25 @@
     }
   }
 
+  /* FN-773: actions cell must escape td overflow:hidden so the
+     dropdown menu can render outside the row. */
+  td.actions-cell {
+    overflow: visible;
+  }
+
   .actions-dropdown .dropdown-menu {
     right: 0;
     left: auto;
+    z-index: 30;
+  }
+
+  /* FN-775: promote .actions-dropdown to its own stacking context so the
+     z-index:30 menu child clears subsequent <tr> cells regardless of
+     <td>-as-containing-block quirks under table-layout: fixed. */
+  .actions-dropdown {
+    position: relative;
+    z-index: 40;
+    isolation: isolate;
   }
 
   .actions-trigger {
@@ -760,6 +976,141 @@
     &.actions-menu-item-danger {
       color: #fca5a5;
     }
+  }
+
+  /* ── FN-1063: Clone Existing Load picker ── */
+  .clone-picker-modal {
+    max-width: 640px;
+    width: min(640px, calc(100vw - 32px));
+    display: flex;
+    flex-direction: column;
+    max-height: 80vh;
+  }
+
+  .clone-picker-modal__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 18px 22px 14px;
+    border-bottom: 1px solid rgba(94, 234, 212, 0.15);
+
+    h3 {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      margin: 0;
+      font-size: 18px;
+      color: var(--text-dark);
+    }
+  }
+
+  .clone-picker-modal__close {
+    background: transparent;
+    border: 1px solid rgba(148, 163, 184, 0.4);
+    color: var(--text-light);
+    border-radius: 999px;
+    padding: 4px 6px;
+    cursor: pointer;
+
+    &:hover {
+      color: var(--text-dark);
+      border-color: rgba(94, 234, 212, 0.6);
+    }
+  }
+
+  .clone-picker-modal__body {
+    padding: 16px 22px 20px;
+    overflow-y: auto;
+  }
+
+  .clone-picker-modal__hint {
+    font-size: 13px;
+    color: var(--text-light);
+    margin: 0 0 14px;
+  }
+
+  .clone-picker-modal__search {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: rgba(15, 23, 42, 0.85);
+    border: 1px solid rgba(148, 163, 184, 0.45);
+    border-radius: 8px;
+    padding: 8px 12px;
+
+    .material-symbols-outlined { color: var(--text-light); font-size: 18px; }
+
+    .clone-picker-modal__search-input {
+      flex: 1;
+      background: transparent;
+      border: none;
+      outline: none;
+      color: var(--text-dark);
+      font-size: 14px;
+
+      &::placeholder { color: var(--text-light); }
+    }
+
+    &:focus-within { border-color: rgba(94, 234, 212, 0.6); }
+  }
+
+  .clone-picker-modal__error {
+    margin-top: 10px;
+    padding: 8px 12px;
+    background: rgba(239, 68, 68, 0.12);
+    color: #fecaca;
+    border: 1px solid rgba(239, 68, 68, 0.3);
+    border-radius: 6px;
+    font-size: 13px;
+  }
+
+  .clone-picker-modal__loading,
+  .clone-picker-modal__empty {
+    margin-top: 14px;
+    padding: 14px;
+    text-align: center;
+    color: var(--text-light);
+    font-size: 13px;
+  }
+
+  .clone-picker-modal__results {
+    list-style: none;
+    margin: 14px 0 0;
+    padding: 0;
+    border: 1px solid rgba(148, 163, 184, 0.25);
+    border-radius: 8px;
+    overflow: hidden;
+  }
+
+  .clone-picker-modal__result {
+    display: grid;
+    grid-template-columns: 130px 1fr 1fr 80px;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 14px;
+    cursor: pointer;
+    border-bottom: 1px solid rgba(148, 163, 184, 0.15);
+    transition: background 100ms ease-out;
+    color: var(--text-dark);
+    font-size: 13px;
+
+    &:last-child { border-bottom: 0; }
+
+    &:hover,
+    &:focus-visible {
+      background: rgba(45, 212, 191, 0.1);
+      outline: none;
+    }
+
+    &.is-disabled {
+      pointer-events: none;
+      opacity: 0.5;
+    }
+
+    .clone-picker-modal__result-num { font-weight: 600; }
+    .clone-picker-modal__result-broker,
+    .clone-picker-modal__result-route { color: var(--text-light); }
+    .clone-picker-modal__result-status { text-align: right; color: var(--text-light); font-size: 11px; }
   }
 
   /* ── Bulk Upload AI-themed modal ── */
@@ -987,6 +1338,63 @@
     margin: 0;
   }
 
+  /* FN-1083: replace-vs-add inline confirm prompt */
+  .bulk-ai-replace-prompt {
+    padding: 14px;
+    border-radius: 10px;
+    background: rgba(56, 189, 248, 0.08);
+    border: 1px solid rgba(56, 189, 248, 0.3);
+  }
+
+  .bulk-ai-replace-prompt-text {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    margin: 0 0 12px;
+    font-size: 13px;
+    color: #e2e8f0;
+    line-height: 1.5;
+
+    .material-symbols-outlined {
+      font-size: 18px;
+      color: #67e8f9;
+      flex-shrink: 0;
+      margin-top: 1px;
+    }
+
+    strong { color: #67e8f9; font-weight: 700; }
+  }
+
+  .bulk-ai-replace-prompt-actions {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .bulk-ai-btn--ghost {
+    background: rgba(15, 23, 42, 0.6);
+    color: #e2e8f0;
+    border: 1px solid rgba(56, 189, 248, 0.4);
+    padding: 6px 12px;
+    border-radius: 8px;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+
+    .material-symbols-outlined { font-size: 15px; color: #67e8f9; }
+
+    &:hover:not(:disabled) {
+      background: rgba(56, 189, 248, 0.18);
+      border-color: rgba(56, 189, 248, 0.6);
+    }
+
+    &:disabled { opacity: 0.5; cursor: not-allowed; }
+  }
+
   .bulk-ai-error {
     display: flex;
     align-items: center;
@@ -1189,6 +1597,32 @@
     .pagination-page {
       font-size: 12px;
       color: var(--text-light);
+    }
+
+    // FN-1063: rows-per-page selector — sits next to the paginator buttons.
+    .page-size-control {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 12px;
+      color: var(--text-light);
+
+      .page-size-control__label {
+        color: var(--text-light);
+      }
+
+      .page-size-control__select {
+        padding: 4px 8px;
+        border-radius: 999px;
+        border: 1px solid rgba(148, 163, 184, 0.7);
+        background: rgba(15, 23, 42, 0.98);
+        color: var(--text-dark);
+        font-size: 12px;
+        cursor: pointer;
+
+        &:hover { border-color: rgba(34, 197, 94, 0.7); }
+        &:focus { outline: 2px solid rgba(45, 212, 191, 0.6); outline-offset: 1px; }
+      }
     }
 
     .pagination-btn {
@@ -2380,6 +2814,7 @@
 
     &.ai-dropzone--has-file {
       border-color: rgba(34, 197, 94, 0.6);
+      cursor: default;
       background:
         radial-gradient(circle at 50% 0%, rgba(34, 197, 94, 0.1), transparent 60%),
         rgba(15, 23, 42, 0.85);
@@ -2388,6 +2823,14 @@
     &.ai-dropzone--extracting {
       border-color: rgba(56, 189, 248, 0.6);
       cursor: default;
+    }
+
+    &.ai-dropzone--drag-over:not(.ai-dropzone--extracting) {
+      border-color: rgba(103, 232, 249, 0.95);
+      box-shadow: 0 0 30px rgba(56, 189, 248, 0.25);
+      background:
+        radial-gradient(circle at 50% 0%, rgba(56, 189, 248, 0.25), transparent 60%),
+        rgba(15, 23, 42, 0.85);
     }
   }
 
@@ -2438,6 +2881,94 @@
     height: 100%;
     opacity: 0;
     cursor: pointer;
+  }
+
+  .ai-dropzone-content--has-file {
+    position: relative;
+    z-index: 1;
+  }
+
+  .ai-clear-file-btn {
+    position: absolute;
+    top: 0;
+    right: 0;
+    width: 28px;
+    height: 28px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    background: rgba(15, 23, 42, 0.7);
+    border: 1px solid rgba(148, 163, 184, 0.3);
+    border-radius: 50%;
+    color: #94a3b8;
+    cursor: pointer;
+    transition: color 0.15s, background 0.15s, border-color 0.15s;
+    z-index: 2;
+
+    .material-symbols-outlined {
+      font-size: 16px;
+    }
+
+    &:hover {
+      color: #fca5a5;
+      background: rgba(239, 68, 68, 0.15);
+      border-color: rgba(239, 68, 68, 0.5);
+    }
+
+    &:focus-visible {
+      outline: 2px solid rgba(103, 232, 249, 0.6);
+      outline-offset: 2px;
+    }
+  }
+
+  .ai-file-actions {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 8px;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+
+  .ai-file-action-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 6px 12px;
+    background: rgba(56, 189, 248, 0.08);
+    border: 1px solid rgba(103, 232, 249, 0.3);
+    border-radius: 8px;
+    color: #67e8f9;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.15s, border-color 0.15s, color 0.15s;
+
+    .material-symbols-outlined {
+      font-size: 16px;
+    }
+
+    &:hover {
+      background: rgba(56, 189, 248, 0.18);
+      border-color: rgba(103, 232, 249, 0.6);
+      color: #bae6fd;
+    }
+  }
+
+  .ai-file-action-divider {
+    color: rgba(148, 163, 184, 0.4);
+    font-size: 12px;
+  }
+
+  .ai-hidden-file-input {
+    display: none;
+  }
+
+  .ai-dropzone-hint--bulk {
+    margin-top: 6px;
+    color: #7dd3fc;
+    font-style: italic;
   }
 
   /* AI Extracting Animation */
@@ -2911,3 +3442,1574 @@
     }
   }
 }
+
+/* ─── FN-746: Needs Review filter chip + row badge ─────────────────────────── */
+
+.quick-filter-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.quick-filter-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 12px;
+  border-radius: 20px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+  background: rgba(15, 23, 42, 0.5);
+  border: 1px solid rgba(51, 65, 85, 0.5);
+  color: #64748b;
+  transition: background 0.13s, border-color 0.13s, color 0.13s;
+
+  .material-symbols-outlined {
+    font-size: 0.9rem;
+  }
+
+  &:hover {
+    background: rgba(234, 179, 8, 0.08);
+    border-color: rgba(234, 179, 8, 0.3);
+    color: #fbbf24;
+  }
+
+  &--active {
+    background: rgba(234, 179, 8, 0.12);
+    border-color: rgba(234, 179, 8, 0.45);
+    color: #fde047;
+
+    .material-symbols-outlined {
+      color: #fde047;
+    }
+  }
+}
+
+.review-badge {
+  display: inline-flex;
+  align-items: center;
+  margin-left: 5px;
+  vertical-align: middle;
+  color: #fbbf24;
+
+  .material-symbols-outlined {
+    font-size: 0.85rem;
+  }
+}
+
+/* FN-762: "Created from email" banner in load details modal */
+.email-source-banner {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  background: rgba(56, 189, 248, 0.14);
+  color: #7dd3fc;
+  border: 1px solid rgba(56, 189, 248, 0.45);
+  margin: 0 0 12px;
+
+  .material-symbols-outlined {
+    font-size: 1rem;
+  }
+}
+
+/* FN-762: email preview panel inside load details */
+.email-preview {
+  margin-top: 16px;
+  padding: 14px 16px;
+  background: rgba(15, 23, 42, 0.55);
+  border: 1px solid rgba(56, 189, 248, 0.25);
+  border-radius: 10px;
+
+  h4 {
+    margin: 0 0 10px;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.92rem;
+    color: #e2e8f0;
+  }
+
+  &__meta {
+    display: grid;
+    grid-template-columns: max-content 1fr;
+    gap: 4px 14px;
+    margin: 0 0 10px;
+    font-size: 0.88rem;
+
+    dt {
+      color: #94a3b8;
+      font-weight: 500;
+    }
+
+    dd {
+      margin: 0;
+      color: #e2e8f0;
+      word-break: break-word;
+    }
+  }
+
+  &__body {
+    pre {
+      margin: 0;
+      padding: 10px;
+      background: rgba(2, 6, 23, 0.6);
+      color: #cbd5e1;
+      font-size: 0.82rem;
+      border-radius: 6px;
+      max-height: 240px;
+      overflow: auto;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+  }
+}
+
+/* FN-762: email-sourced load badge */
+.email-source-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  margin-left: 6px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  background: rgba(56, 189, 248, 0.13);
+  color: #7dd3fc;
+  border: 1px solid rgba(56, 189, 248, 0.45);
+  vertical-align: middle;
+
+  .material-symbols-outlined {
+    font-size: 0.85rem;
+  }
+}
+
+/* FN-755: Templates button + Save-As-Template modal */
+.loads-dashboard {
+  .btn-templates {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 10px 16px;
+    border-radius: 22px;
+    font-size: 14px;
+    font-weight: 500;
+    border: 2px solid rgba(148, 163, 184, 0.6);
+    background: rgba(15, 23, 42, 0.85);
+    color: var(--text-dark, #e2e8f0);
+    cursor: pointer;
+    transition: background 0.15s, border-color 0.15s;
+
+    &:hover {
+      background: rgba(30, 41, 59, 0.95);
+      border-color: rgba(125, 211, 252, 0.85);
+    }
+
+    .material-symbols-outlined {
+      font-size: 18px;
+    }
+  }
+
+  .modal.save-template-modal {
+    width: 480px;
+    max-width: calc(100vw - 48px);
+
+    .modal-body {
+      padding: 20px;
+    }
+
+    .save-template-field {
+      display: block;
+      margin-bottom: 14px;
+      font-size: 13px;
+      color: rgba(226, 232, 240, 0.85);
+
+      input,
+      textarea {
+        display: block;
+        width: 100%;
+        padding: 8px 10px;
+        margin-top: 4px;
+        border: 1px solid rgba(148, 163, 184, 0.5);
+        border-radius: 6px;
+        background: rgba(15, 23, 42, 0.6);
+        color: var(--text-dark, #e2e8f0);
+        font-size: 14px;
+        font-family: inherit;
+
+        &:focus {
+          outline: none;
+          border-color: rgba(125, 211, 252, 0.85);
+          box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.12);
+        }
+      }
+
+      textarea {
+        resize: vertical;
+        min-height: 72px;
+      }
+    }
+
+    .muted {
+      color: rgba(148, 163, 184, 0.85);
+      font-size: 13px;
+      margin: 0 0 16px;
+    }
+  }
+
+  // ─── FN-767: Loads table toolbar ────────────────────────────────────────
+  .loads-table-toolbar {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    justify-content: flex-end;
+    margin: 8px 0;
+
+    &__group {
+      position: relative;
+
+      .btn .material-symbols-outlined {
+        font-size: 18px;
+      }
+    }
+
+    .loads-views-menu,
+    .loads-columns-menu {
+      position: absolute;
+      right: 0;
+      top: calc(100% + 4px);
+      min-width: 240px;
+      max-height: 360px;
+      overflow-y: auto;
+      background: #0f172a;
+      border: 1px solid rgba(148, 163, 184, 0.25);
+      border-radius: 8px;
+      box-shadow: 0 12px 32px rgba(0, 0, 0, 0.35);
+      padding: 8px;
+      z-index: 40;
+    }
+
+    .loads-views-menu {
+      &__empty {
+        padding: 8px 10px;
+        font-size: 13px;
+        color: rgba(148, 163, 184, 0.85);
+      }
+
+      &__item {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        width: 100%;
+        padding: 8px 10px;
+        background: transparent;
+        border: none;
+        border-radius: 6px;
+        color: #e2e8f0;
+        font-size: 13px;
+        cursor: pointer;
+        text-align: left;
+
+        &:hover {
+          background: rgba(148, 163, 184, 0.12);
+        }
+      }
+
+      &__delete {
+        font-size: 18px;
+        color: rgba(148, 163, 184, 0.85);
+        cursor: pointer;
+
+        &:hover {
+          color: #ef4444;
+        }
+      }
+
+      &__save {
+        display: flex;
+        gap: 6px;
+        padding: 8px 6px 4px;
+        border-top: 1px solid rgba(148, 163, 184, 0.15);
+        margin-top: 6px;
+
+        input {
+          flex: 1 1 auto;
+          padding: 6px 8px;
+          border-radius: 6px;
+          border: 1px solid rgba(148, 163, 184, 0.25);
+          background: rgba(15, 23, 42, 0.6);
+          color: #e2e8f0;
+          font-size: 13px;
+        }
+      }
+    }
+
+    .loads-columns-menu {
+      &__item {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 6px 10px;
+        font-size: 13px;
+        color: #e2e8f0;
+        cursor: pointer;
+        border-radius: 6px;
+
+        &:hover {
+          background: rgba(148, 163, 184, 0.12);
+        }
+
+        &--locked {
+          opacity: 0.6;
+          cursor: not-allowed;
+        }
+
+        input[type="checkbox"] {
+          accent-color: #3b82f6;
+        }
+      }
+
+      // FN-1059: divider + reset action below the visibility checklist.
+      &__divider {
+        height: 1px;
+        margin: 6px 0;
+        background: rgba(148, 163, 184, 0.18);
+      }
+
+      &__action {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        width: 100%;
+        padding: 8px 10px;
+        background: transparent;
+        border: none;
+        border-radius: 6px;
+        color: #e2e8f0;
+        font-size: 13px;
+        cursor: pointer;
+        text-align: left;
+
+        .material-symbols-outlined {
+          font-size: 18px;
+          color: rgba(148, 163, 184, 0.85);
+        }
+
+        &:hover {
+          background: rgba(148, 163, 184, 0.12);
+        }
+      }
+    }
+  }
+
+  // ─── FN-767: Inline status dropdown in loads table ──────────────────────
+  .status-cell {
+    overflow: visible;
+  }
+
+  .status-inline {
+    position: relative;
+    display: inline-block;
+
+    &__trigger {
+      display: inline-flex;
+      align-items: center;
+      gap: 2px;
+      background: transparent;
+      border: none;
+      padding: 0;
+      cursor: pointer;
+
+      &:focus-visible {
+        outline: 2px solid rgba(59, 130, 246, 0.6);
+        outline-offset: 2px;
+        border-radius: 6px;
+      }
+    }
+
+    &__chevron {
+      font-size: 16px;
+      color: rgba(148, 163, 184, 0.85);
+    }
+
+    // FN-854: the dropdown menu itself is now portaled via CDK Overlay
+    // and styled globally in styles.css (.loads-inline-menu) so it
+    // escapes the cdk-virtual-scroll-viewport overflow:auto clip.
+  }
+
+  // ─── FN-805 / FN-855: Row-hover toolbar + inline notes editor ───────────
+  // The toolbar is opacity: 0 by default and fades in when the row is hovered.
+  // FN-855: broadened the reveal triggers to cover rows where tr:hover alone
+  // dropped — portaled hover-popovers (FN-806 Driver/Broker/Notes/Attachments)
+  // steal the pointer outside the <tr> DOM subtree, and the detail drawer
+  // (FN-808) leaves its active row without a hover state while the drawer
+  // sits over the grid.
+  td.actions-cell {
+    overflow: visible;
+    min-width: 0;
+  }
+
+  // FN-1063: row-toolbar buttons are always discoverable at reduced opacity
+  // and brighten to full on row hover / focus / drawer-active state. The
+  // earlier hover-only reveal (FN-805) made actions invisible to keyboard
+  // users and undiscoverable until users guessed there were row controls.
+  .row-toolbar {
+    display: inline-flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 4px;
+    min-height: 28px;
+    opacity: 0.55;
+    transition: opacity 100ms ease-out;
+    pointer-events: auto;
+  }
+
+  .table--body tr:hover .row-toolbar,
+  .table--body tr:focus-within .row-toolbar,
+  .table--body tr.row-drawer-active .row-toolbar,
+  .row-toolbar:hover,
+  .row-toolbar:focus-within {
+    opacity: 1;
+  }
+
+  .row-toolbar__btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    border-radius: 6px;
+    border: 1px solid transparent;
+    background: transparent;
+    color: rgba(226, 232, 240, 0.85);
+    cursor: pointer;
+    padding: 0;
+    transition: background 100ms ease-out, border-color 100ms ease-out, color 100ms ease-out;
+
+    .material-symbols-outlined {
+      font-size: 18px;
+    }
+
+    &:hover {
+      background: rgba(45, 212, 191, 0.12);
+      border-color: rgba(45, 212, 191, 0.45);
+      color: #f0fdfa;
+    }
+
+    &:focus-visible {
+      outline: 2px solid rgba(45, 212, 191, 0.6);
+      outline-offset: 1px;
+    }
+
+    &--danger {
+      color: #fca5a5;
+
+      &:hover {
+        background: rgba(239, 68, 68, 0.12);
+        border-color: rgba(239, 68, 68, 0.5);
+        color: #fecaca;
+      }
+    }
+  }
+
+  .billing-cell,
+  .notes-cell {
+    overflow: visible;
+  }
+
+  .notes-inline__trigger {
+    display: inline-block;
+    max-width: 100%;
+    padding: 4px 6px;
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 4px;
+    color: inherit;
+    font-size: inherit;
+    text-align: left;
+    cursor: text;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+
+    &:hover {
+      border-color: rgba(148, 163, 184, 0.35);
+      background: rgba(148, 163, 184, 0.08);
+    }
+
+    &:focus-visible {
+      outline: 2px solid rgba(59, 130, 246, 0.6);
+      outline-offset: 1px;
+    }
+
+    &--empty {
+      color: rgba(148, 163, 184, 0.7);
+      font-style: italic;
+    }
+  }
+
+  .notes-inline__textarea {
+    width: 100%;
+    min-height: 48px;
+    padding: 6px 8px;
+    background: rgba(15, 23, 42, 0.95);
+    border: 1px solid rgba(59, 130, 246, 0.5);
+    border-radius: 4px;
+    color: #e2e8f0;
+    font-size: 13px;
+    font-family: inherit;
+    resize: vertical;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
+
+    &:focus {
+      outline: none;
+      border-color: rgba(59, 130, 246, 0.8);
+    }
+  }
+
+  // ─── FN-806: Hover-preview triggers for driver / broker / attachments ───
+  // Cells need overflow:visible so the popover can escape the <td> clip.
+  .preview-cell {
+    overflow: visible;
+  }
+
+  .preview-trigger {
+    display: inline-block;
+    max-width: 100%;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    cursor: default;
+  }
+
+  .preview-cell .attachment-chips.preview-trigger {
+    white-space: normal;
+    overflow: visible;
+    text-overflow: clip;
+  }
+}
+
+// ─── FN-806: Shared hover-preview card styles. Defined at the root so the
+// templates rendered by <app-hover-popover> (which uses position:fixed and
+// ng-content projection) pick up the styles regardless of where the popover
+// element ends up in the DOM. ───────────────────────────────────────────────
+.hover-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 180px;
+  color: #f8fafc;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.hover-preview__title,
+.hover-preview__name {
+  font-weight: 600;
+  font-size: 13px;
+  color: #f1f5f9;
+  margin-bottom: 2px;
+}
+
+.hover-preview__row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.hover-preview__label {
+  color: rgba(203, 213, 225, 0.75);
+}
+
+.hover-preview__value {
+  font-weight: 500;
+  color: #f8fafc;
+
+  &--muted {
+    color: rgba(203, 213, 225, 0.75);
+    font-weight: 400;
+    font-style: italic;
+  }
+}
+
+.hover-preview__badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+
+  &--ok {
+    background: rgba(34, 197, 94, 0.2);
+    color: #bbf7d0;
+  }
+  &--danger {
+    background: rgba(239, 68, 68, 0.25);
+    color: #fecaca;
+  }
+}
+
+.hover-preview__footnote {
+  color: rgba(203, 213, 225, 0.75);
+  font-style: italic;
+  font-size: 11px;
+}
+
+.hover-preview__list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.hover-preview__list-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.hover-preview__icon {
+  font-size: 14px;
+  color: rgba(148, 163, 184, 0.85);
+  flex-shrink: 0;
+}
+
+.hover-preview__file-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.hover-preview__file-type {
+  font-size: 10px;
+  color: rgba(203, 213, 225, 0.75);
+  padding: 1px 6px;
+  background: rgba(148, 163, 184, 0.18);
+  border-radius: 4px;
+}
+
+/* FN-768: Bulk actions toolbar + row selection styling */
+.bulk-actions-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 10px 14px;
+  margin: 12px 0;
+  background: rgba(30, 41, 59, 0.85);
+  border: 1px solid rgba(59, 130, 246, 0.45);
+  border-radius: 10px;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.25);
+  flex-wrap: wrap;
+
+  .bulk-actions-summary {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    color: #e2e8f0;
+    font-size: 13px;
+
+    strong {
+      color: #38bdf8;
+      font-size: 15px;
+    }
+  }
+
+  .bulk-actions-controls {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+
+  .bulk-control {
+    display: flex;
+    flex-direction: column;
+    font-size: 11px;
+    color: rgba(203, 213, 225, 0.85);
+
+    .bulk-control-label {
+      font-weight: 500;
+      letter-spacing: 0.02em;
+      margin-bottom: 2px;
+    }
+
+    select {
+      background: rgba(15, 23, 42, 0.95);
+      color: #f1f5f9;
+      border: 1px solid rgba(71, 85, 105, 0.8);
+      border-radius: 6px;
+      padding: 4px 8px;
+      font-size: 13px;
+      min-width: 140px;
+
+      &:disabled { opacity: 0.6; cursor: not-allowed; }
+    }
+  }
+
+  .btn-link {
+    background: none;
+    border: none;
+    color: #38bdf8;
+    cursor: pointer;
+    font-size: 12px;
+    padding: 0;
+
+    &:hover { text-decoration: underline; }
+  }
+}
+
+.table {
+  .col-select {
+    width: 36px;
+    text-align: center;
+    padding-left: 6px;
+    padding-right: 6px;
+
+    input[type="checkbox"] {
+      cursor: pointer;
+    }
+  }
+
+  tr.row-selected > td {
+    // FN-1403: token-driven selected-row tint; overrides zebra striping.
+    background: var(--ai-row-selected-bg);
+  }
+
+  // ─── FN-813: realtime (WebSocket) styling ────────────────────────────────
+  // New row: brief highlight fade-in. Updated row: subtle pulse. Deleted row:
+  // fade-out + collapse. Animations target only <td> so the row height is
+  // preserved (animating on <tr> bounces the virtual-scroll layout).
+  tr.row-just-created > td {
+    animation: loadsRealtimeFadeIn 1.5s ease-out;
+  }
+  tr.row-just-updated > td {
+    animation: loadsRealtimePulse 1.2s ease-out;
+  }
+  tr.row-just-deleted {
+    opacity: 0;
+    transition: opacity 0.35s ease-out;
+    > td {
+      animation: loadsRealtimeFadeOut 0.4s ease-out forwards;
+    }
+  }
+
+  // In-transit pulsing dot + ETA countdown pill in the Status cell.
+  // FN-1403: routed through AI theme tokens; dot pulse keeps the legacy
+  // bright green so the live-tracking signal still reads at a glance.
+  .in-transit-dot {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    margin-left: 6px;
+    background: var(--ai-in-transit-pulse);
+    box-shadow: 0 0 0 0 var(--ai-in-transit-pulse-soft);
+    animation: loadsRealtimeInTransitPulse 1.6s ease-out infinite;
+    will-change: transform, box-shadow;
+    vertical-align: middle;
+  }
+  .in-transit-eta {
+    display: inline-block;
+    margin-left: 6px;
+    padding: 1px 6px;
+    border-radius: 999px;
+    font-size: 11px;
+    line-height: 14px;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    color: var(--ai-in-transit-eta-fg);
+    background: var(--ai-in-transit-eta-bg);
+    border: 1px solid var(--ai-in-transit-eta-border);
+  }
+
+  // Connection dot in the header (green/gray) + reconnecting banner.
+  .realtime-status {
+    display: inline-block;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    margin: 0 8px;
+    background: #9ca3af;
+    transition: background 0.2s ease, box-shadow 0.2s ease;
+  }
+  .realtime-status--connected {
+    background: #22c55e;
+    box-shadow: 0 0 0 2px rgba(34, 197, 94, 0.2);
+  }
+  .realtime-status--reconnecting {
+    background: #f59e0b;
+    animation: loadsRealtimeReconnectBlink 1.2s ease-in-out infinite;
+  }
+  .realtime-status--disconnected {
+    background: #9ca3af;
+  }
+
+  .realtime-banner {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    margin: 0 0 8px;
+    padding: 6px 12px;
+    border-radius: 6px;
+    background: rgba(245, 158, 11, 0.12);
+    border: 1px solid rgba(245, 158, 11, 0.35);
+    color: #92400e;
+    font-size: 12px;
+    font-weight: 600;
+    animation: loadsRealtimeFadeIn 0.3s ease-out;
+  }
+  .realtime-banner__dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #f59e0b;
+    animation: loadsRealtimeReconnectBlink 1.2s ease-in-out infinite;
+  }
+
+  // Stacked presence avatars in the header.
+  .realtime-presence {
+    display: inline-flex;
+    align-items: center;
+    margin-right: 4px;
+  }
+  .realtime-presence__avatar {
+    position: relative;
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    margin-left: -6px;
+    border: 2px solid #ffffff;
+    background: #6366f1;
+    color: #ffffff;
+    font-size: 11px;
+    font-weight: 700;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
+    animation: loadsRealtimeFadeIn 0.25s ease-out;
+    &:first-child { margin-left: 0; }
+    img { width: 100%; height: 100%; object-fit: cover; }
+  }
+  .realtime-presence__more {
+    margin-left: 6px;
+    font-size: 11px;
+    font-weight: 600;
+    color: #6b7280;
+  }
+}
+
+// Keyframes at the top level so the @-rules are valid outside nested selectors.
+@keyframes loadsRealtimeFadeIn {
+  0%   { background: rgba(59, 130, 246, 0.20); }
+  100% { background: transparent; }
+}
+@keyframes loadsRealtimePulse {
+  0%   { background: rgba(16, 185, 129, 0.00); }
+  40%  { background: rgba(16, 185, 129, 0.18); }
+  100% { background: transparent; }
+}
+@keyframes loadsRealtimeFadeOut {
+  0%   { background: rgba(239, 68, 68, 0.12); opacity: 1; }
+  100% { background: transparent; opacity: 0; }
+}
+@keyframes loadsRealtimeInTransitPulse {
+  0%   { transform: scale(1);   box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.55); }
+  70%  { transform: scale(1.1); box-shadow: 0 0 0 6px rgba(34, 197, 94, 0); }
+  100% { transform: scale(1);   box-shadow: 0 0 0 0 rgba(34, 197, 94, 0); }
+}
+@keyframes loadsRealtimeReconnectBlink {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.35; }
+}
+
+/* ============================================================================
+ * FN-821 — Visual Polish Phase 2
+ * ----------------------------------------------------------------------------
+ * Loading skeleton slot, empty-state fit, WebSocket banner, micro-animations,
+ * density modes, scroll-to-top, and dark-theme refinements.
+ * All motion runs via the shared ease `cubic-bezier(0.4, 0, 0.2, 1)` so the
+ * list feels tactile without tripping motion-sensitive users — every named
+ * keyframe below is paired with a `prefers-reduced-motion` override.
+ * ==========================================================================*/
+
+$fn-ease: cubic-bezier(0.4, 0, 0.2, 1);
+
+// ── Loading skeleton + empty-state placement ────────────────────────────────
+.loads-skeleton-slot {
+  display: block;
+  width: 100%;
+}
+
+// Empty-state card sits inside the .table-card container.
+app-loads-empty-state {
+  display: block;
+}
+
+// Hidden file input driving the empty-state "Import from PDF" action.
+.loads-empty-hidden-input {
+  display: none;
+}
+
+// ── WebSocket disconnected banner ───────────────────────────────────────────
+.loads-ws-banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  margin-bottom: 10px;
+  border-radius: 10px;
+  background:
+    radial-gradient(circle at 0 0, rgba(250, 204, 21, 0.18), transparent 60%),
+    rgba(15, 23, 42, 0.92);
+  border: 1px solid rgba(250, 204, 21, 0.45);
+  color: #fde68a;
+  font-size: 13px;
+  animation: fn821-banner-slide 260ms $fn-ease;
+
+  &__icon {
+    font-size: 20px;
+    color: #facc15;
+  }
+
+  &__text {
+    flex: 1;
+  }
+}
+
+@keyframes fn821-banner-slide {
+  from { opacity: 0; transform: translateY(-6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+// ── Density toggle menu ─────────────────────────────────────────────────────
+.loads-density-menu {
+  min-width: 200px;
+  padding: 6px;
+
+  &__item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    padding: 8px 10px;
+    border: none;
+    background: transparent;
+    color: #e2e8f0;
+    cursor: pointer;
+    border-radius: 8px;
+    font-size: 13px;
+    text-align: left;
+    transition: background 140ms $fn-ease, color 140ms $fn-ease;
+
+    .material-symbols-outlined {
+      font-size: 18px;
+      color: rgba(148, 163, 184, 0.85);
+    }
+
+    &:hover {
+      background: rgba(45, 212, 191, 0.12);
+    }
+
+    &--active {
+      background: rgba(45, 212, 191, 0.18);
+      color: #2dd4bf;
+
+      .material-symbols-outlined { color: #2dd4bf; }
+    }
+  }
+
+  &__label {
+    flex: 1;
+  }
+
+  &__meta {
+    font-size: 11px;
+    color: rgba(148, 163, 184, 0.75);
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+// ── Density-driven row height on the real table ─────────────────────────────
+// The cdk-virtual-scroll-viewport's itemSize is bound to rowHeightPx in TS;
+// here we align padding/line-height to the same target so rows actually
+// look compact/comfortable/spacious rather than just sharing the measurement.
+.loads-dashboard {
+  --loads-row-height: 52px;
+  // FN-1403: horizontal cell padding now scales with density alongside the
+  // existing row-height var. Default matches the historical 10px value so
+  // surfaces outside the .loads-dashboard scope (none today, but a safe
+  // fallback) stay visually unchanged.
+  --loads-cell-px: 10px;
+
+  .table--body tbody tr > td {
+    height: var(--loads-row-height);
+    transition: background 140ms $fn-ease;
+  }
+
+  &--compact {
+    --loads-cell-px: 8px;
+
+    .table--body tbody tr > td {
+      padding-top: 6px;
+      padding-bottom: 6px;
+      font-size: 12.5px;
+      line-height: 1.35;
+    }
+  }
+
+  &--comfortable {
+    --loads-cell-px: 12px;
+
+    .table--body tbody tr > td {
+      padding-top: 12px;
+      padding-bottom: 12px;
+    }
+  }
+
+  &--spacious {
+    --loads-cell-px: 16px;
+
+    .table--body tbody tr > td {
+      padding-top: 20px;
+      padding-bottom: 20px;
+      font-size: 13.5px;
+      line-height: 1.55;
+    }
+  }
+}
+
+// ── Row micro-animations ────────────────────────────────────────────────────
+// Row hover — subtle lift + teal border glow via a left-edge accent so we
+// don't redraw the whole row's box-shadow every frame (cheaper on long lists).
+// FN-1403: hover/focus tints now route through AI theme tokens. Hover wins
+// over zebra striping (later in cascade); :focus-within mirrors the hover
+// styling so keyboard users get the same affordance without a separate
+// outline ring competing with the existing in-row focus rings.
+.table--body tbody tr {
+  position: relative;
+  transition:
+    background 160ms $fn-ease,
+    box-shadow 180ms $fn-ease,
+    transform 180ms $fn-ease;
+
+  &:hover,
+  &:focus-within {
+    background: var(--ai-row-hover-bg);
+    box-shadow: inset 3px 0 0 var(--ai-row-hover-stripe);
+    transform: translateZ(0);
+  }
+
+  // Hover/focus tint must beat zebra striping (which lives on the td) but
+  // selected-row tint should still win when both apply, so we exclude .row-
+  // selected from the hover override.
+  &:hover:not(.row-selected) > td,
+  &:focus-within:not(.row-selected) > td {
+    background: var(--ai-row-hover-bg);
+  }
+}
+
+// New row — slide in from top. Added by the parent to each fresh row via
+// a class applied on the list entry. Lives here so virtual-scroll item
+// recycling doesn't strand the animation mid-frame.
+.table--body tbody tr.row-new,
+.table--body tbody tr.row-just-created {
+  animation: fn821-row-slide-in 320ms $fn-ease both;
+}
+
+// Row delete — fade + collapse before the row leaves the list.
+.table--body tbody tr.row-deleting,
+.table--body tbody tr.row-just-deleted {
+  animation: fn821-row-fade-out 280ms $fn-ease both;
+  pointer-events: none;
+}
+
+@keyframes fn821-row-slide-in {
+  from { opacity: 0; transform: translateY(-8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes fn821-row-fade-out {
+  from { opacity: 1; transform: translateY(0) scaleY(1); }
+  to   { opacity: 0; transform: translateY(0) scaleY(0.9); }
+}
+
+// Status-badge change pulse — applied briefly after an inline status update.
+.status-inline__trigger.status-inline__trigger--pulse,
+app-status-pill.status-pill--pulse {
+  animation: fn821-status-pulse 520ms $fn-ease;
+}
+
+@keyframes fn821-status-pulse {
+  0%   { filter: brightness(1); transform: scale(1); }
+  40%  { filter: brightness(1.25) drop-shadow(0 0 6px rgba(45, 212, 191, 0.65)); transform: scale(1.06); }
+  100% { filter: brightness(1); transform: scale(1); }
+}
+
+// Filter applied — rows fade out → fade in pulse on the viewport.
+.loads-viewport {
+  &--filter-pulse {
+    animation: fn821-viewport-fade 280ms $fn-ease;
+  }
+}
+
+@keyframes fn821-viewport-fade {
+  0%   { opacity: 1; }
+  40%  { opacity: 0.55; }
+  100% { opacity: 1; }
+}
+
+// ── Hover card gradient border (FN-821 dark-theme refinement) ───────────────
+.hover-preview {
+  position: relative;
+  // The existing popover has its own background; we add a teal→blue gradient
+  // edge via an absolutely-positioned pseudo-element so the gradient doesn't
+  // fight with the fill.
+  &::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    padding: 1px;
+    background: linear-gradient(135deg, rgba(45, 212, 191, 0.55), rgba(59, 130, 246, 0.4));
+    -webkit-mask:
+      linear-gradient(#000 0 0) content-box,
+      linear-gradient(#000 0 0);
+    -webkit-mask-composite: xor;
+            mask-composite: exclude;
+    pointer-events: none;
+  }
+}
+
+// ── Scroll-to-top button ────────────────────────────────────────────────────
+.loads-scroll-top {
+  position: fixed;
+  right: 24px;
+  bottom: 28px;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  border: 1px solid rgba(45, 212, 191, 0.5);
+  background:
+    radial-gradient(circle at 30% 30%, rgba(45, 212, 191, 0.35), transparent 60%),
+    rgba(15, 23, 42, 0.95);
+  color: #2dd4bf;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transform: translateY(12px);
+  pointer-events: none;
+  box-shadow: 0 14px 28px rgba(15, 23, 42, 0.55);
+  transition:
+    opacity 180ms $fn-ease,
+    transform 220ms $fn-ease,
+    border-color 180ms $fn-ease,
+    box-shadow 180ms $fn-ease;
+  z-index: 40;
+
+  .material-symbols-outlined {
+    font-size: 22px;
+  }
+
+  &:hover {
+    border-color: rgba(45, 212, 191, 0.85);
+    box-shadow: 0 16px 32px rgba(45, 212, 191, 0.35);
+  }
+
+  &:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 3px rgba(45, 212, 191, 0.45);
+  }
+
+  &--visible {
+    opacity: 1;
+    transform: translateY(0);
+    pointer-events: auto;
+  }
+}
+
+// ── Reduced-motion override ─────────────────────────────────────────────────
+@media (prefers-reduced-motion: reduce) {
+  .loads-ws-banner,
+  .table--body tbody tr.row-new,
+  .table--body tbody tr.row-just-created,
+  .table--body tbody tr.row-deleting,
+  .table--body tbody tr.row-just-deleted,
+  .status-inline__trigger--pulse,
+  app-status-pill.status-pill--pulse,
+  .loads-viewport--filter-pulse {
+    animation: none !important;
+  }
+
+  .table--body tbody tr {
+    transition: none;
+
+    &:hover {
+      transform: none;
+    }
+  }
+
+  .loads-scroll-top {
+    transition: opacity 80ms linear;
+    transform: none;
+  }
+}
+
+/* FN-862: beta trigger for the new shell-based load wizard. Removed by FN-869. */
+.load-wizard-v2-trigger {
+  display: flex;
+  justify-content: flex-end;
+  margin: -4px 4px 10px;
+}
+
+.load-wizard-v2-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  background: rgba(56, 189, 248, 0.08);
+  border: 1px solid rgba(56, 189, 248, 0.35);
+  border-radius: 999px;
+  color: #7dd3fc;
+  font-size: 0.78rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+
+  .material-symbols-outlined { font-size: 0.95rem; }
+
+  &:hover {
+    background: rgba(56, 189, 248, 0.16);
+    border-color: #38bdf8;
+    color: #e0f2fe;
+  }
+
+  &:focus-visible {
+    outline: 2px solid #38bdf8;
+    outline-offset: 2px;
+  }
+}
+
+/* FN-1059 — while a column resize drag is in flight, kill text selection
+ * across the entire page so the drag stays smooth. ::ng-deep breaks out
+ * of Emulated view encapsulation so the rule reaches <body>. */
+::ng-deep body.app-col-resizing {
+  user-select: none;
+  cursor: col-resize;
+}
+
+/* ─── FN-1353: Loads list redesign ──────────────────────────────────────────
+ * Tokens-only — no new hex values. The two-row filter container, the list-
+ * region header (view toggle + table-only toolbar slot), the hybrid Cards
+ * grid, and the read-only Kanban grid all live here. */
+
+.loads-filters {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0 0 8px;
+}
+
+.loads-filters__row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.loads-list-region-header {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  margin: 12px 0 8px;
+}
+
+.loads-list-region-header__spacer {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+/* ── Cards view ──────────────────────────────────────────────────────────── */
+
+.loads-cards-view {
+  display: block;
+  margin-top: 8px;
+}
+
+.loads-cards-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.loads-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 14px 10px 16px;
+  border-radius: 12px;
+  background: rgba(15, 23, 42, 0.92);
+  border: 1px solid rgba(51, 65, 85, 0.65);
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, transform 0.05s;
+
+  &:hover {
+    background: rgba(15, 23, 42, 1);
+    border-color: rgba(103, 232, 249, 0.4);
+  }
+
+  &--attention {
+    background: rgba(15, 23, 42, 0.98);
+    border-left: 3px solid var(--row-attention-accent);
+    padding-left: 13px;
+    box-shadow: 0 0 0 1px rgba(251, 146, 60, 0.18);
+  }
+}
+
+.loads-card__primary {
+  display: grid;
+  grid-template-columns: minmax(70px, 0.6fr) minmax(140px, 1fr) minmax(180px, 1.6fr) minmax(80px, 0.5fr) minmax(220px, 1.6fr);
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-width: 0;
+}
+
+.loads-card__load-number {
+  font-size: 0.95rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: var(--ai-accent-cyan);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.loads-card__driver,
+.loads-card__route,
+.loads-card__pipeline {
+  min-width: 0;
+}
+
+.loads-card__rate {
+  font-size: 0.9rem;
+  font-weight: 700;
+  text-align: right;
+  color: var(--ai-text-strong);
+  white-space: nowrap;
+}
+
+.loads-card__secondary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 14px;
+  font-size: 0.75rem;
+  color: var(--ai-text-muted);
+  padding-top: 4px;
+  border-top: 1px dashed rgba(51, 65, 85, 0.55);
+}
+
+.loads-card__meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.loads-card__meta-label {
+  text-transform: uppercase;
+  font-size: 0.66rem;
+  letter-spacing: 0.04em;
+  color: var(--ai-text-subtle);
+}
+
+.loads-card__meta-value {
+  color: var(--ai-text-soft);
+}
+
+.loads-card__actions {
+  margin-left: auto;
+}
+
+@media (max-width: 1024px) {
+  .loads-card__primary {
+    grid-template-columns: minmax(70px, 0.6fr) minmax(140px, 1fr) minmax(160px, 1.4fr);
+    grid-template-rows: auto auto;
+  }
+  .loads-card__rate, .loads-card__pipeline {
+    grid-column: 1 / -1;
+  }
+}
+
+/* ── Kanban view ─────────────────────────────────────────────────────────── */
+
+.loads-kanban-view {
+  margin-top: 8px;
+}
+
+.loads-kanban-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(220px, 1fr));
+  gap: 10px;
+  align-items: stretch;
+}
+
+.loads-kanban-col {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  background: rgba(15, 23, 42, 0.6);
+  border: 1px solid rgba(51, 65, 85, 0.55);
+  border-radius: 12px;
+  padding: 8px;
+}
+
+.loads-kanban-col__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 6px 8px;
+  border-bottom: 1px solid rgba(51, 65, 85, 0.55);
+  margin-bottom: 8px;
+}
+
+.loads-kanban-col__label {
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--ai-text-soft);
+}
+
+.loads-kanban-col__count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 22px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: rgba(103, 232, 249, 0.14);
+  color: var(--ai-accent-cyan);
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+.loads-kanban-col__list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  overflow-y: auto;
+}
+
+.loads-kanban-col__empty {
+  padding: 14px 8px;
+  text-align: center;
+  font-size: 0.75rem;
+  color: var(--ai-text-muted);
+  font-style: italic;
+}
+
+.loads-kanban-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 10px 8px 12px;
+  border-radius: 10px;
+  background: rgba(15, 23, 42, 0.92);
+  border: 1px solid rgba(51, 65, 85, 0.6);
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+
+  &:hover {
+    background: rgba(15, 23, 42, 1);
+    border-color: rgba(103, 232, 249, 0.4);
+  }
+
+  &--attention {
+    border-left: 3px solid var(--row-attention-accent);
+    padding-left: 9px;
+  }
+}
+
+.loads-kanban-card__top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.loads-kanban-card__load-number {
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--ai-accent-cyan);
+}
+
+.loads-kanban-card__rate {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--ai-text-strong);
+}
+
+.loads-kanban-card__bottom {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+@media (max-width: 1280px) {
+  .loads-kanban-grid {
+    grid-template-columns: repeat(3, minmax(220px, 1fr));
+  }
+}
+
+@media (max-width: 768px) {
+  .loads-kanban-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ─── FN-1403: Table view tabular numerals + right-aligned Rate ──────────────
+ * Numeric cells (Rate, Pickup Date, Completed Date, ETA chip) get
+ * font-variant-numeric: tabular-nums so column digits line up vertically and
+ * the Rate column header + body right-align cleanly.
+ *
+ * Scoped inside .loads-dashboard so Cards and Kanban templates that use other
+ * class names are unaffected.
+ */
+.loads-dashboard {
+  .table--header thead tr:first-child th.th-rate {
+    text-align: right;
+    padding-right: var(--loads-cell-px, 10px);
+  }
+
+  .table--body tbody tr > td.cell-num {
+    font-variant-numeric: tabular-nums;
+  }
+
+  .table--body tbody tr > td.cell-rate {
+    text-align: right;
+  }
+}
+

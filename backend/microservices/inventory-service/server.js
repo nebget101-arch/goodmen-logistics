@@ -1,3 +1,4 @@
+require('./tracing');
 require('dotenv').config();
 
 const express = require('express');
@@ -23,34 +24,15 @@ app.use(cors());
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 
-const swaggerOptions = {
-  definition: {
-    openapi: '3.0.0',
-    info: {
-      title: 'Inventory Service API',
-      version: '1.0.0',
-      description: 'API documentation for the Inventory microservice.'
-    },
-    components: {
-      securitySchemes: {
-        bearerAuth: {
-          type: 'http',
-          scheme: 'bearer',
-          bearerFormat: 'JWT'
-        }
-      }
-    },
-    security: [
-      {
-        bearerAuth: []
-      }
-    ]
-  },
+const { buildSwaggerOptions } = require('@goodmen/shared/config/swagger');
+const swaggerOptions = buildSwaggerOptions({
+  title: 'Inventory Service API',
+  description: 'API documentation for the Inventory microservice.',
   apis: [
     path.join(__dirname, '../../packages/goodmen-shared/routes/*.js'),
     __filename
   ]
-};
+});
 
 const swaggerSpec = swaggerJsdoc(swaggerOptions);
 
@@ -61,6 +43,8 @@ const receivingRouter = require('@goodmen/shared/routes/receiving');
 const barcodesRouter = require('@goodmen/shared/routes/barcodes');
 const shopClientsRouter = require('@goodmen/shared/routes/shop-clients');
 const customerBulkUploadRouter = require('@goodmen/shared/routes/customer-bulk-upload');
+const locationBinsRouter = require('@goodmen/shared/routes/location-bins');
+const warehouseSupplyRulesRouter = require('@goodmen/shared/routes/warehouse-supply-rules');
 const authMiddleware = require('@goodmen/shared/middleware/auth-middleware');
 const tenantContextMiddleware = require('@goodmen/shared/middleware/tenant-context-middleware');
 const requirePlanAccess = require('@goodmen/shared/middleware/plan-access-middleware');
@@ -69,6 +53,7 @@ const requirePartsPlan = requirePlanAccess('/parts');
 const requireReceivingPlan = requirePlanAccess('/receiving');
 const requireBarcodesPlan = requirePlanAccess('/barcodes');
 
+app.get('/api-docs-json', (_req, res) => res.json(swaggerSpec));
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 
 app.use('/api/inventory', authMiddleware, tenantContextMiddleware, requirePartsPlan, inventoryRouter);
@@ -78,6 +63,8 @@ app.use('/api/receiving', authMiddleware, tenantContextMiddleware, requireReceiv
 app.use('/api/barcodes', authMiddleware, tenantContextMiddleware, requireBarcodesPlan, barcodesRouter);
 app.use('/api/shop-clients', authMiddleware, tenantContextMiddleware, customerBulkUploadRouter);
 app.use('/api/shop-clients', authMiddleware, tenantContextMiddleware, shopClientsRouter);
+app.use('/api/locations/:locationId/bins', authMiddleware, tenantContextMiddleware, locationBinsRouter);
+app.use('/api/locations/:id/supply-rules', authMiddleware, tenantContextMiddleware, warehouseSupplyRulesRouter);
 
 /**
  * @openapi
@@ -99,6 +86,12 @@ app.get('/health', (req, res) => {
   res.json(healthStatus);
 });
 
-app.listen(PORT, () => {
+app.listen(PORT, async () => {
+  try {
+    await knex.migrate.latest();
+    console.log('✅ Database migrations applied');
+  } catch (err) {
+    console.error('⚠️  Migration error (non-fatal):', err.message);
+  }
   console.log(`📦 Inventory service running on http://localhost:${PORT}`);
 });

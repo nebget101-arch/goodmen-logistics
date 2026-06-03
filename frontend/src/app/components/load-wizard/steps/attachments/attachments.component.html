@@ -1,0 +1,251 @@
+<!--
+  FN-866 / FN-881 — Step 4: Attachments.
+  Behaviour branches on `mode` — see component docblock.
+-->
+<section class="wa-container" data-testid="wizard-step-attachments">
+
+  <!-- Header ────────────────────────────────────────────────────────────── -->
+  <header class="wa-header">
+    <div class="wa-title-row">
+      <h3 class="wa-title">Attachments</h3>
+      <span class="wa-count" *ngIf="(existing.length + queued.length) > 0">
+        {{ existing.length + queued.length }}
+        file{{ (existing.length + queued.length) !== 1 ? 's' : '' }}
+      </span>
+    </div>
+    <p class="wa-subtitle" *ngIf="!isView">
+      Upload rate confirmations, BOLs, PODs, and other documents.
+      Drag files here or click to browse.
+      <ng-container *ngIf="isImmediate">Files are uploaded immediately.</ng-container>
+      <ng-container *ngIf="isCreate">Files are attached to the load once you save.</ng-container>
+    </p>
+    <p class="wa-subtitle" *ngIf="isView">
+      Read-only list of attachments on this load.
+    </p>
+  </header>
+
+  <!-- Existing attachments (edit / view / ai-extract) ──────────────────── -->
+  <div class="wa-existing" *ngIf="existing.length > 0">
+    <h4 class="wa-subsection-title">
+      {{ isView ? 'Attached files' : 'Already on this load' }}
+    </h4>
+    <ul class="wa-file-list" role="list">
+      <li
+        class="wa-file-card wa-existing-card"
+        *ngFor="let att of existing; trackBy: trackByAttachmentId"
+        [attr.data-testid]="'wa-existing-' + att.id"
+      >
+        <div class="wa-file-info">
+          <span class="material-symbols-outlined wa-file-icon">
+            {{ getFileIcon(att.mime_type) }}
+          </span>
+          <div class="wa-file-meta">
+            <a
+              *ngIf="att.file_url; else noUrl"
+              class="wa-file-name"
+              [href]="att.file_url"
+              target="_blank"
+              rel="noopener noreferrer"
+              [title]="att.file_name"
+            >{{ att.file_name }}</a>
+            <ng-template #noUrl>
+              <span class="wa-file-name" [title]="att.file_name">{{ att.file_name }}</span>
+            </ng-template>
+            <span class="wa-file-sub">
+              <span class="wa-type-chip">{{ typeLabel(att.type) }}</span>
+              <span *ngIf="att.size_bytes as size">&middot; {{ formatSize(size) }}</span>
+            </span>
+          </div>
+        </div>
+
+        <div class="wa-row-actions" *ngIf="!isView">
+          <ng-container *ngIf="confirmingDeleteId === att.id; else deleteBtn">
+            <span class="wa-confirm-text">Delete?</span>
+            <button
+              type="button"
+              class="wa-btn wa-btn-danger"
+              (click)="confirmDelete(att.id)"
+              [disabled]="deletingIds.has(att.id)"
+              [attr.aria-label]="'Confirm delete ' + att.file_name"
+            >{{ deletingIds.has(att.id) ? 'Deleting…' : 'Yes' }}</button>
+            <button
+              type="button"
+              class="wa-btn wa-btn-ghost"
+              (click)="cancelDelete()"
+              [disabled]="deletingIds.has(att.id)"
+            >No</button>
+          </ng-container>
+          <ng-template #deleteBtn>
+            <button
+              type="button"
+              class="wa-icon-btn wa-icon-danger"
+              (click)="requestDelete(att.id)"
+              [attr.aria-label]="'Delete ' + att.file_name"
+              title="Delete attachment"
+            >
+              <span class="material-symbols-outlined">delete</span>
+            </button>
+          </ng-template>
+        </div>
+      </li>
+    </ul>
+  </div>
+
+  <!-- Drop zone ────────────────────────────────────────────────────────── -->
+  <div
+    *ngIf="!isView"
+    class="wa-dropzone"
+    [class.is-drag-over]="isDragOver"
+    (dragover)="onDragOver($event)"
+    (dragleave)="onDragLeave($event)"
+    (drop)="onDrop($event)"
+    data-testid="wa-dropzone"
+  >
+    <div class="wa-dropzone-content">
+      <span class="material-symbols-outlined wa-dropzone-icon">cloud_upload</span>
+      <p class="wa-dropzone-label">Drag &amp; drop files here</p>
+      <span class="wa-dropzone-divider">or</span>
+      <label class="wa-browse-btn">
+        Browse Files
+        <input
+          type="file"
+          multiple
+          class="wa-file-input"
+          [accept]="acceptAttr"
+          (change)="onFileInputChange($event)"
+          data-testid="wa-file-input"
+        />
+      </label>
+      <p class="wa-dropzone-hint">PDF, PNG, JPG</p>
+    </div>
+  </div>
+
+  <!-- Queued files ─────────────────────────────────────────────────────── -->
+  <div class="wa-queued" *ngIf="queued.length > 0">
+    <h4 class="wa-subsection-title">
+      {{ isImmediate ? 'Uploading' : 'Pending upload' }}
+    </h4>
+    <ul class="wa-file-list" role="list">
+      <ng-container *ngFor="let ctrl of queued.controls; let i = index; trackBy: trackByQueuedUid">
+        <li
+          class="wa-file-card"
+          [class.has-error]="asGroup(ctrl).get('error')?.value"
+          [attr.data-testid]="'wa-queued-' + i"
+        >
+          <div class="wa-file-info">
+            <span class="material-symbols-outlined wa-file-icon">
+              {{ getFileIcon(asGroup(ctrl).get('file')?.value) }}
+            </span>
+            <div class="wa-file-meta">
+              <span
+                class="wa-file-name"
+                [title]="asGroup(ctrl).get('file')?.value?.name"
+              >{{ asGroup(ctrl).get('file')?.value?.name }}</span>
+              <span class="wa-file-sub">
+                {{ formatSize(asGroup(ctrl).get('file')?.value?.size) }}
+                <span
+                  *ngIf="asGroup(ctrl).get('uploaded')?.value"
+                  class="wa-status wa-status-ok"
+                >Uploaded</span>
+              </span>
+            </div>
+          </div>
+
+          <!-- Progress bar during immediate uploads -->
+          <div
+            class="wa-progress"
+            *ngIf="asGroup(ctrl).get('uploading')?.value"
+          >
+            <div class="wa-progress-track">
+              <div
+                class="wa-progress-fill"
+                [style.width.%]="asGroup(ctrl).get('progress')?.value ?? 0"
+              ></div>
+            </div>
+            <span class="wa-progress-text">
+              {{ asGroup(ctrl).get('progress')?.value ?? 0 }}%
+            </span>
+          </div>
+
+          <!-- Error + retry row -->
+          <div
+            class="wa-error-row"
+            *ngIf="asGroup(ctrl).get('error')?.value as errMsg"
+            role="alert"
+          >
+            <span class="material-symbols-outlined wa-error-icon">error</span>
+            <span class="wa-error-text">{{ errMsg }}</span>
+            <button
+              type="button"
+              class="wa-btn wa-btn-ghost"
+              (click)="retryUpload(i)"
+              data-testid="wa-retry"
+            >Retry</button>
+          </div>
+
+          <!-- Per-file metadata + remove -->
+          <div class="wa-file-controls">
+            <div class="wa-control-group">
+              <label class="wa-control-label" [for]="'wa-type-' + i">Type</label>
+              <select
+                class="wa-select"
+                [id]="'wa-type-' + i"
+                [ngModel]="asGroup(ctrl).get('type')?.value"
+                [disabled]="asGroup(ctrl).get('uploading')?.value || asGroup(ctrl).get('uploaded')?.value"
+                (ngModelChange)="onTypeChange(i, $event)"
+              >
+                <option *ngFor="let opt of typeOptions" [value]="opt.value">
+                  {{ opt.label }}
+                </option>
+              </select>
+            </div>
+
+            <div class="wa-control-group wa-notes-group">
+              <label class="wa-control-label" [for]="'wa-notes-' + i">Notes</label>
+              <input
+                type="text"
+                class="wa-input"
+                [id]="'wa-notes-' + i"
+                placeholder="Optional notes…"
+                [ngModel]="asGroup(ctrl).get('notes')?.value"
+                [disabled]="asGroup(ctrl).get('uploading')?.value || asGroup(ctrl).get('uploaded')?.value"
+                (ngModelChange)="onNotesChange(i, $event)"
+              />
+            </div>
+
+            <button
+              type="button"
+              class="wa-icon-btn wa-icon-danger"
+              (click)="removeQueued(i)"
+              [disabled]="asGroup(ctrl).get('uploading')?.value"
+              [attr.aria-label]="'Remove ' + asGroup(ctrl).get('file')?.value?.name"
+              title="Remove file"
+            >
+              <span class="material-symbols-outlined">close</span>
+            </button>
+          </div>
+        </li>
+      </ng-container>
+    </ul>
+  </div>
+
+  <!-- Empty state ──────────────────────────────────────────────────────── -->
+  <div
+    class="wa-empty"
+    *ngIf="!isView && existing.length === 0 && queued.length === 0"
+  >
+    <span class="material-symbols-outlined wa-empty-icon">folder_open</span>
+    <p class="wa-empty-text">
+      No files attached yet. Add them now
+      {{ isImmediate ? '' : 'or after saving the load' }}.
+    </p>
+  </div>
+
+  <div
+    class="wa-empty"
+    *ngIf="isView && existing.length === 0"
+  >
+    <span class="material-symbols-outlined wa-empty-icon">folder_off</span>
+    <p class="wa-empty-text">No attachments on this load.</p>
+  </div>
+</section>

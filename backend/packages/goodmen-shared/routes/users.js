@@ -269,6 +269,38 @@ async function generateUniqueUsername(base, dbClient) {
   return `${normalized}.${Date.now()}`;
 }
 
+/**
+ * @openapi
+ * /api/users/me:
+ *   get:
+ *     summary: Get current authenticated user from JWT
+ *     description: Returns basic user profile fields extracted from the JWT payload without any database lookup.
+ *     tags:
+ *       - Users
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Current user profile from token
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean }
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     id: { type: string, format: uuid }
+ *                     username: { type: string }
+ *                     first_name: { type: string, nullable: true }
+ *                     last_name: { type: string, nullable: true }
+ *                     email: { type: string, nullable: true }
+ *                     role: { type: string, nullable: true }
+ *                     driver_id: { type: string, nullable: true }
+ *       401:
+ *         description: Unauthorized — missing or invalid token
+ */
 // Get current user (from JWT payload, no DB dependency)
 router.get('/me', baseAuth, (req, res) => {
   const payload = req.user || {};
@@ -287,6 +319,51 @@ router.get('/me', baseAuth, (req, res) => {
   res.json({ success: true, data });
 });
 
+/**
+ * @openapi
+ * /api/users:
+ *   get:
+ *     summary: List all users for the current tenant
+ *     description: Returns tenant-scoped user list enriched with RBAC role assignments. Requires users.view, users.manage, or roles.manage permission.
+ *     tags:
+ *       - Users
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Array of users with roles
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean }
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       id: { type: string, format: uuid }
+ *                       username: { type: string }
+ *                       first_name: { type: string, nullable: true }
+ *                       last_name: { type: string, nullable: true }
+ *                       email: { type: string, nullable: true }
+ *                       role: { type: string }
+ *                       tenant_id: { type: string, format: uuid }
+ *                       is_active: { type: boolean }
+ *                       created_at: { type: string, format: date-time }
+ *                       roles:
+ *                         type: array
+ *                         items:
+ *                           type: object
+ *                           properties:
+ *                             code: { type: string }
+ *                             name: { type: string }
+ *       403:
+ *         description: Forbidden — insufficient permissions
+ *       503:
+ *         description: Database not available
+ */
 // Tenant-scoped users list (admin/RBAC)
 router.get('/', rbac, requireAnyPermission(['users.view', 'users.manage', 'roles.manage']), async (req, res) => {
   try {
@@ -339,6 +416,50 @@ router.get('/', rbac, requireAnyPermission(['users.view', 'users.manage', 'roles
   }
 });
 
+/**
+ * @openapi
+ * /api/users/operating-entities:
+ *   get:
+ *     summary: List operating entities for the current tenant
+ *     description: Returns all operating entities (carriers/brokers) belonging to the tenant. Requires Multi-MC plan and users.manage or roles.manage permission.
+ *     tags:
+ *       - Users
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Array of operating entities
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean }
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       id: { type: string, format: uuid }
+ *                       tenant_id: { type: string, format: uuid }
+ *                       entity_type: { type: string }
+ *                       name: { type: string }
+ *                       legal_name: { type: string, nullable: true }
+ *                       dba_name: { type: string, nullable: true }
+ *                       mc_number: { type: string, nullable: true }
+ *                       dot_number: { type: string, nullable: true }
+ *                       address_line1: { type: string, nullable: true }
+ *                       city: { type: string, nullable: true }
+ *                       state: { type: string, nullable: true }
+ *                       zip_code: { type: string, nullable: true }
+ *                       is_active: { type: boolean }
+ *                       created_at: { type: string, format: date-time }
+ *                       updated_at: { type: string, format: date-time }
+ *       403:
+ *         description: Forbidden — tenant context missing or plan does not support multi-MC
+ *       503:
+ *         description: Database not available
+ */
 // Operating entities list for admin management
 router.get('/operating-entities', rbac, requireMultiMcPlan, requireAnyPermission(['users.manage', 'roles.manage']), async (req, res) => {
   try {
@@ -374,6 +495,45 @@ router.get('/operating-entities', rbac, requireMultiMcPlan, requireAnyPermission
   }
 });
 
+/**
+ * @openapi
+ * /api/users/operating-entities:
+ *   post:
+ *     summary: Create a new operating entity
+ *     description: Creates a new operating entity (carrier/broker) for the tenant. Requires Multi-MC plan and users.manage or roles.manage permission.
+ *     tags:
+ *       - Users
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [name]
+ *             properties:
+ *               name: { type: string }
+ *               legal_name: { type: string }
+ *               dba_name: { type: string }
+ *               mc_number: { type: string }
+ *               dot_number: { type: string }
+ *               address_line1: { type: string }
+ *               city: { type: string }
+ *               state: { type: string }
+ *               zip_code: { type: string }
+ *               entity_type: { type: string, default: carrier }
+ *               is_active: { type: boolean, default: true }
+ *     responses:
+ *       201:
+ *         description: Operating entity created
+ *       400:
+ *         description: Validation error — name is required
+ *       403:
+ *         description: Forbidden — tenant context missing or plan does not support multi-MC
+ *       409:
+ *         description: MC/DOT already exists
+ */
 router.post('/operating-entities', rbac, requireMultiMcPlan, requireAnyPermission(['users.manage', 'roles.manage']), async (req, res) => {
   try {
     if (!knex) return res.status(503).json({ success: false, error: 'Database not available' });
@@ -424,6 +584,50 @@ router.post('/operating-entities', rbac, requireMultiMcPlan, requireAnyPermissio
   }
 });
 
+/**
+ * @openapi
+ * /api/users/operating-entities/{entityId}:
+ *   put:
+ *     summary: Update an operating entity
+ *     description: Updates fields on an existing operating entity. Requires Multi-MC plan and users.manage or roles.manage permission.
+ *     tags:
+ *       - Users
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: entityId
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *         description: Operating entity ID
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               name: { type: string }
+ *               legal_name: { type: string }
+ *               dba_name: { type: string }
+ *               mc_number: { type: string }
+ *               dot_number: { type: string }
+ *               address_line1: { type: string }
+ *               city: { type: string }
+ *               state: { type: string }
+ *               zip_code: { type: string }
+ *               entity_type: { type: string }
+ *               is_active: { type: boolean }
+ *     responses:
+ *       200:
+ *         description: Operating entity updated
+ *       400:
+ *         description: No fields to update
+ *       404:
+ *         description: Operating entity not found
+ *       409:
+ *         description: MC/DOT already exists
+ */
 router.put('/operating-entities/:entityId', rbac, requireMultiMcPlan, requireAnyPermission(['users.manage', 'roles.manage']), async (req, res) => {
   try {
     if (!knex) return res.status(503).json({ success: false, error: 'Database not available' });
@@ -468,6 +672,50 @@ router.put('/operating-entities/:entityId', rbac, requireMultiMcPlan, requireAny
   }
 });
 
+/**
+ * @openapi
+ * /api/users/{id}/operating-entities:
+ *   get:
+ *     summary: Get operating entity assignments for a user
+ *     description: Returns all tenant operating entities with assigned/default flags for the specified user. Used by the admin user-management UI.
+ *     tags:
+ *       - Users
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *         description: User ID
+ *     responses:
+ *       200:
+ *         description: User operating entity assignments
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean }
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     userId: { type: string, format: uuid }
+ *                     entities:
+ *                       type: array
+ *                       items:
+ *                         type: object
+ *                         properties:
+ *                           id: { type: string, format: uuid }
+ *                           name: { type: string }
+ *                           mc_number: { type: string, nullable: true }
+ *                           dot_number: { type: string, nullable: true }
+ *                           is_active: { type: boolean }
+ *                           assigned: { type: boolean }
+ *                           is_default: { type: boolean }
+ *       404:
+ *         description: User not found
+ */
 // User operating entity access list (for admin assign UI)
 router.get('/:id/operating-entities', rbac, requireMultiMcPlan, requireAnyPermission(['users.manage', 'roles.manage']), async (req, res) => {
   try {
@@ -501,6 +749,44 @@ router.get('/:id/operating-entities', rbac, requireMultiMcPlan, requireAnyPermis
   }
 });
 
+/**
+ * @openapi
+ * /api/users/{id}/operating-entities:
+ *   put:
+ *     summary: Replace operating entity assignments for a user
+ *     description: Replaces all operating entity access for the specified user. Accepts a list of entity IDs and an optional default entity ID.
+ *     tags:
+ *       - Users
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *         description: User ID
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               operatingEntityIds:
+ *                 type: array
+ *                 items: { type: string, format: uuid }
+ *               defaultOperatingEntityId:
+ *                 type: string
+ *                 format: uuid
+ *                 description: Must be included in operatingEntityIds
+ *     responses:
+ *       200:
+ *         description: Updated operating entity assignments
+ *       400:
+ *         description: Invalid entity IDs or default not in list
+ *       404:
+ *         description: User not found
+ */
 // Replace user operating entity access and default
 router.put('/:id/operating-entities', rbac, requireMultiMcPlan, requireAnyPermission(['users.manage', 'roles.manage']), async (req, res) => {
   try {
@@ -556,6 +842,38 @@ router.put('/:id/operating-entities', rbac, requireMultiMcPlan, requireAnyPermis
   }
 });
 
+/**
+ * @openapi
+ * /api/users/technicians:
+ *   get:
+ *     summary: List technicians for dropdown selection
+ *     description: Returns users with safety or fleet roles for use in technician assignment dropdowns.
+ *     tags:
+ *       - Users
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Array of technician users
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean }
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       id: { type: string, format: uuid }
+ *                       username: { type: string }
+ *                       first_name: { type: string, nullable: true }
+ *                       last_name: { type: string, nullable: true }
+ *                       email: { type: string, nullable: true }
+ *       500:
+ *         description: Failed to fetch technicians
+ */
 // Get all technicians (for dropdown selection)
 router.get('/technicians', async (req, res) => {
   try {
@@ -569,6 +887,54 @@ router.get('/technicians', async (req, res) => {
   }
 });
 
+/**
+ * @openapi
+ * /api/users/{id}/access:
+ *   get:
+ *     summary: Get RBAC access details for a user
+ *     description: Returns the role and location assignments for a specific user. Used by the admin user-management UI.
+ *     tags:
+ *       - Users
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *         description: User ID
+ *     responses:
+ *       200:
+ *         description: User access details
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean }
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     userId: { type: string, format: uuid }
+ *                     roles:
+ *                       type: array
+ *                       items:
+ *                         type: object
+ *                         properties:
+ *                           id: { type: string, format: uuid }
+ *                           code: { type: string }
+ *                           name: { type: string }
+ *                     locations:
+ *                       type: array
+ *                       items:
+ *                         type: object
+ *                         properties:
+ *                           id: { type: string, format: uuid }
+ *                           code: { type: string }
+ *                           name: { type: string }
+ *       404:
+ *         description: User not found
+ */
 // ---- RBAC: user access (must be before /:id) ----
 router.get('/:id/access', rbac, requireAnyPermission(['users.manage', 'roles.manage']), async (req, res) => {
   try {
@@ -593,6 +959,45 @@ router.get('/:id/access', rbac, requireAnyPermission(['users.manage', 'roles.man
   }
 });
 
+/**
+ * @openapi
+ * /api/users/{id}/roles:
+ *   put:
+ *     summary: Replace role assignments for a user
+ *     description: Replaces all RBAC role assignments for the specified user. Validates roles against the tenant subscription plan.
+ *     tags:
+ *       - Users
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *         description: User ID
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               roleIds:
+ *                 type: array
+ *                 items: { type: string, format: uuid }
+ *                 description: Array of role IDs to assign
+ *               roleCodes:
+ *                 type: array
+ *                 items: { type: string }
+ *                 description: Optional role codes for plan validation
+ *     responses:
+ *       200:
+ *         description: Updated role list for the user
+ *       400:
+ *         description: Role not allowed by subscription plan
+ *       404:
+ *         description: User not found
+ */
 router.put('/:id/roles', rbac, requirePermission('users.manage'), async (req, res) => {
   try {
     if (!knex) return res.status(503).json({ success: false, error: 'Database not available' });
@@ -627,6 +1032,42 @@ router.put('/:id/roles', rbac, requirePermission('users.manage'), async (req, re
   }
 });
 
+/**
+ * @openapi
+ * /api/users/{id}/locations:
+ *   put:
+ *     summary: Replace location assignments for a user
+ *     description: Replaces all location assignments for the specified user. Only available on Advanced and Enterprise plans.
+ *     tags:
+ *       - Users
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *         description: User ID
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               locationIds:
+ *                 type: array
+ *                 items: { type: string, format: uuid }
+ *     responses:
+ *       200:
+ *         description: Updated location list for the user
+ *       400:
+ *         description: One or more locations are invalid for this tenant
+ *       403:
+ *         description: Location assignment not available on current plan
+ *       404:
+ *         description: User not found
+ */
 router.put('/:id/locations', rbac, requirePermission('users.manage'), async (req, res) => {
   try {
     if (!knex) return res.status(503).json({ success: false, error: 'Database not available' });
@@ -668,6 +1109,41 @@ router.put('/:id/locations', rbac, requirePermission('users.manage'), async (req
   }
 });
 
+/**
+ * @openapi
+ * /api/users/{id}/status:
+ *   patch:
+ *     summary: Activate or deactivate a user
+ *     description: Toggles user active status. Prevents deactivating the last admin or yourself. Reactivation checks seat limits.
+ *     tags:
+ *       - Users
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *         description: User ID
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [is_active]
+ *             properties:
+ *               is_active: { type: boolean }
+ *     responses:
+ *       200:
+ *         description: Updated user record
+ *       400:
+ *         description: Validation error (e.g. cannot deactivate self or last admin)
+ *       404:
+ *         description: User not found
+ *       409:
+ *         description: Seat limit reached when reactivating
+ */
 router.patch('/:id/status', rbac, requirePermission('users.manage'), async (req, res) => {
   try {
     if (!knex) return res.status(503).json({ success: false, error: 'Database not available' });
@@ -730,6 +1206,28 @@ router.patch('/:id/status', rbac, requirePermission('users.manage'), async (req,
   }
 });
 
+/**
+ * @openapi
+ * /api/users/{id}:
+ *   get:
+ *     summary: Get a single user by ID
+ *     description: Returns user details including RBAC role assignments. Scoped to the current tenant.
+ *     tags:
+ *       - Users
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *         description: User ID
+ *     responses:
+ *       200:
+ *         description: User record with roles
+ *       404:
+ *         description: User not found
+ */
 router.get('/:id', rbac, requireAnyPermission(['users.view', 'users.manage', 'roles.manage']), async (req, res) => {
   try {
     if (!knex) return res.status(503).json({ success: false, error: 'Database not available' });
@@ -767,6 +1265,49 @@ router.get('/:id', rbac, requireAnyPermission(['users.view', 'users.manage', 'ro
   }
 });
 
+/**
+ * @openapi
+ * /api/users/{id}:
+ *   put:
+ *     summary: Update a user
+ *     description: Updates user profile fields (username, name, email, roles, active status). Validates roles against subscription plan. Prevents deactivating the last admin.
+ *     tags:
+ *       - Users
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *         description: User ID
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               username: { type: string }
+ *               firstName: { type: string }
+ *               lastName: { type: string }
+ *               email: { type: string, format: email }
+ *               is_active: { type: boolean }
+ *               role: { type: string, description: Single legacy role code }
+ *               roles:
+ *                 type: array
+ *                 items: { type: string }
+ *                 description: Canonical role codes (takes precedence over role)
+ *     responses:
+ *       200:
+ *         description: Updated user with roles
+ *       400:
+ *         description: Validation error or role not allowed by plan
+ *       404:
+ *         description: User not found
+ *       409:
+ *         description: Username or email already exists, or seat limit reached
+ */
 router.put('/:id', rbac, requirePermission('users.manage'), async (req, res) => {
   try {
     if (!knex) return res.status(503).json({ success: false, error: 'Database not available' });
@@ -939,6 +1480,53 @@ router.put('/:id', rbac, requirePermission('users.manage'), async (req, res) => 
   }
 });
 
+/**
+ * @openapi
+ * /api/users:
+ *   post:
+ *     summary: Create a new user
+ *     description: Creates a new user with role and optional location assignments. Validates against subscription plan seat limits and allowed roles. Only admin role can create users.
+ *     tags:
+ *       - Users
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [password]
+ *             properties:
+ *               username: { type: string, description: Auto-generated from name if omitted }
+ *               password: { type: string }
+ *               role: { type: string, description: Legacy role code (single) }
+ *               roles:
+ *                 type: array
+ *                 items: { type: string }
+ *                 description: Canonical role codes (takes precedence over role)
+ *               firstName: { type: string }
+ *               lastName: { type: string }
+ *               email: { type: string, format: email }
+ *               locationIds:
+ *                 type: array
+ *                 items: { type: string, format: uuid }
+ *                 description: Only for Advanced/Enterprise plans
+ *     responses:
+ *       201:
+ *         description: User created successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message: { type: string }
+ *                 username: { type: string }
+ *       400:
+ *         description: Validation error (missing password/role, invalid role, invalid locations)
+ *       409:
+ *         description: Username/email already exists or seat limit reached
+ */
 // Only admin can create users (legacy role check; RBAC users.manage can be added later)
 router.post('/', authWithRole(['admin']), async (req, res) => {
   const { username, password, role, firstName, lastName, email, locationIds } = req.body;

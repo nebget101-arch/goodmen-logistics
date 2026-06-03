@@ -1,0 +1,335 @@
+/* ─────────────────────────────────────────────────────────────────────────────
+   Load Wizard Step 3 — Driver & Equipment (FN-879)
+   Styling mirrors the legacy wizard-step-driver component for visual
+   consistency while the two wizards co-exist (S10 removes the legacy one).
+   ───────────────────────────────────────────────────────────────────────────── */
+
+.driver-equipment-step {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+/* ── Section card ──────────────────────────────────────────────────────────── */
+
+.step-section {
+  background: rgba(15, 23, 42, 0.55);
+  border: 1px solid rgba(51, 65, 85, 0.45);
+  border-radius: 12px;
+  padding: 16px 18px;
+  margin-bottom: 14px;
+
+  &:last-of-type {
+    margin-bottom: 0;
+  }
+}
+
+.step-section-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+
+  .material-symbols-outlined {
+    font-size: 1.1rem;
+    color: #38bdf8;
+  }
+
+  h3 {
+    margin: 0;
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: #e2e8f0;
+    flex: 1;
+  }
+}
+
+.req {
+  color: #f87171;
+  font-weight: 700;
+  margin-left: 2px;
+}
+
+.optional-label {
+  font-size: 0.78rem;
+  font-weight: 400;
+  color: #64748b;
+  margin-left: 4px;
+}
+
+/* ── Autocomplete field ────────────────────────────────────────────────────── */
+
+.autocomplete-wrap {
+  position: relative;
+}
+
+.autocomplete-field {
+  display: flex;
+  align-items: center;
+  background: rgba(15, 23, 42, 0.7);
+  border: 1px solid rgba(51, 65, 85, 0.6);
+  border-radius: 8px;
+  padding: 0 10px;
+  gap: 6px;
+  transition: border-color 0.15s;
+
+  &:focus-within {
+    border-color: #38bdf8;
+    box-shadow: 0 0 0 2px rgba(56, 189, 248, 0.12);
+  }
+
+  &.has-value {
+    border-color: rgba(56, 189, 248, 0.35);
+  }
+}
+
+.field-prefix-icon {
+  font-size: 1rem;
+  color: #475569;
+  flex-shrink: 0;
+}
+
+.autocomplete-input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: #e2e8f0;
+  font-size: 0.875rem;
+  padding: 10px 0;
+  min-width: 0;
+
+  &::placeholder {
+    color: #475569;
+  }
+
+  &:disabled {
+    cursor: not-allowed;
+    color: #94a3b8;
+  }
+}
+
+.field-clear-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: #475569;
+  padding: 2px;
+  display: flex;
+  align-items: center;
+  border-radius: 4px;
+  flex-shrink: 0;
+  transition: color 0.13s;
+
+  .material-symbols-outlined {
+    font-size: 0.9rem;
+  }
+
+  &:hover {
+    color: #f87171;
+  }
+}
+
+.field-caret {
+  font-size: 1rem;
+  color: #475569;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: color 0.13s;
+
+  &:hover {
+    color: #94a3b8;
+  }
+}
+
+/* ── Owner badge ───────────────────────────────────────────────────────────── */
+
+.owner-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  background: rgba(234, 179, 8, 0.12);
+  border: 1px solid rgba(234, 179, 8, 0.3);
+  color: #fde047;
+  white-space: nowrap;
+  max-width: 100px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex-shrink: 0;
+}
+
+.owner-badge--sm {
+  font-size: 0.65rem;
+  padding: 1px 6px;
+  max-width: 80px;
+}
+
+/* ── Autocomplete dropdown ─────────────────────────────────────────────────── */
+
+.autocomplete-dropdown {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  z-index: 200;
+  background: rgba(10, 17, 34, 0.98);
+  border: 1px solid rgba(51, 65, 85, 0.7);
+  border-radius: 10px;
+  max-height: 220px;
+  overflow-y: auto;
+  box-shadow: 0 8px 24px rgba(5, 10, 25, 0.75);
+  padding: 4px 0;
+}
+
+.dropdown-loading,
+.dropdown-empty {
+  padding: 10px 14px;
+  font-size: 0.82rem;
+  color: #64748b;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.dropdown-item {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+  color: #cbd5e1;
+  font-size: 0.875rem;
+  transition: background 0.1s;
+
+  &:hover {
+    background: rgba(56, 189, 248, 0.07);
+    color: #e2e8f0;
+  }
+
+  &.is-selected {
+    background: rgba(56, 189, 248, 0.1);
+    color: #7dd3fc;
+  }
+}
+
+.dropdown-item-icon {
+  font-size: 0.95rem;
+  color: #475569;
+  flex-shrink: 0;
+}
+
+.dropdown-item-label {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dropdown-item-check {
+  font-size: 0.9rem;
+  color: #38bdf8;
+  flex-shrink: 0;
+  margin-left: auto;
+}
+
+/* ── Driver info row ───────────────────────────────────────────────────────── */
+
+.driver-info-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.driver-info-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 0.8rem;
+  color: #94a3b8;
+  background: rgba(30, 41, 59, 0.6);
+  border: 1px solid rgba(51, 65, 85, 0.4);
+  border-radius: 8px;
+  padding: 4px 10px;
+
+  .material-symbols-outlined {
+    font-size: 0.9rem;
+    color: #38bdf8;
+  }
+
+  strong {
+    color: #e2e8f0;
+  }
+
+  &--note {
+    .material-symbols-outlined {
+      color: #a78bfa;
+    }
+  }
+}
+
+/* ── Show all toggle ───────────────────────────────────────────────────────── */
+
+.show-all-btn {
+  background: transparent;
+  border: 1px solid rgba(56, 189, 248, 0.3);
+  color: #38bdf8;
+  font-size: 0.75rem;
+  padding: 3px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.13s, border-color 0.13s;
+  margin-left: auto;
+
+  &:hover {
+    background: rgba(56, 189, 248, 0.08);
+  }
+
+  &--active {
+    border-color: rgba(100, 116, 139, 0.4);
+    color: #64748b;
+  }
+}
+
+/* ── Validation hint ───────────────────────────────────────────────────────── */
+
+.step-hint-msg {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 14px;
+  background: rgba(59, 130, 246, 0.06);
+  border: 1px solid rgba(59, 130, 246, 0.2);
+  border-radius: 8px;
+  margin-top: 14px;
+  font-size: 0.82rem;
+  color: #7dd3fc;
+
+  .material-symbols-outlined {
+    font-size: 1rem;
+  }
+}
+
+/* ── Spinner ───────────────────────────────────────────────────────────────── */
+
+.spin-sm {
+  animation: spin-sm 0.75s linear infinite;
+  display: inline-block;
+  font-size: 0.95rem;
+}
+
+@keyframes spin-sm {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}

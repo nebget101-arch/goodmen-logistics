@@ -1,0 +1,72 @@
+<ng-container *ngIf="open">
+  <div class="chat-overlay" (click)="onOverlayClick()" aria-hidden="true"></div>
+
+  <aside
+    #drawerRoot
+    class="chat-drawer"
+    role="dialog"
+    aria-modal="true"
+    [attr.aria-label]="('Ask AI about ' + (reportTitle || 'this report'))">
+    <header class="chat-header">
+      <div class="chat-title">
+        <span class="material-symbols-outlined header-icon" aria-hidden="true">forum</span>
+        <div>
+          <h3>Ask about this report</h3>
+          <p *ngIf="reportTitle">{{ reportTitle }}</p>
+        </div>
+      </div>
+      <button
+        type="button"
+        class="chat-close"
+        (click)="requestClose()"
+        aria-label="Close chat drawer">
+        <span class="material-symbols-outlined" aria-hidden="true">close</span>
+      </button>
+    </header>
+
+    <div class="chat-messages" role="log" aria-live="polite">
+      <div *ngIf="messages.length === 0" class="chat-empty">
+        Ask a question about the data shown — for example,
+        "Which dispatcher had the lowest margin?" or "Why did revenue dip in week 3?".
+      </div>
+      <article
+        *ngFor="let msg of messages; trackBy: trackByIndex"
+        class="chat-msg"
+        [class.from-user]="msg.role === 'user'"
+        [class.from-assistant]="msg.role === 'assistant'">
+        <span class="chat-msg-role">{{ msg.role === 'user' ? 'You' : 'AI' }}</span>
+        <p class="chat-msg-body">{{ msg.content }}</p>
+      </article>
+      <div *ngIf="isSending" class="chat-msg from-assistant chat-typing" aria-live="polite">
+        <span class="chat-msg-role">AI</span>
+        <p class="chat-msg-body"><em>Thinking…</em></p>
+      </div>
+    </div>
+
+    <p *ngIf="error" class="chat-error" role="alert">
+      <span class="material-symbols-outlined" aria-hidden="true">error</span>
+      {{ error }}
+    </p>
+
+    <footer class="chat-input-row">
+      <label for="report-chat-input" class="visually-hidden">Type a question about this report</label>
+      <textarea
+        #messageInput
+        id="report-chat-input"
+        class="chat-input"
+        rows="2"
+        placeholder="Ask a question about this report…"
+        [(ngModel)]="inputValue"
+        [disabled]="isSending"
+        (keydown)="onInputKeydown($event)"></textarea>
+      <button
+        type="button"
+        class="chat-send"
+        [disabled]="isSending || !inputValue.trim()"
+        (click)="send()"
+        aria-label="Send message">
+        <span class="material-symbols-outlined" aria-hidden="true">send</span>
+      </button>
+    </footer>
+  </aside>
+</ng-container>

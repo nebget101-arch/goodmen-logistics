@@ -132,10 +132,11 @@ async function calculateCompositeScore(tid, driverId) {
   let hosRows = [];
   const hasHosTable = await knex.schema.hasTable('hos_records');
   if (hasHosTable) {
+    // violations is text[] in schema (baseline hos_records); never compare to jsonb (FN-513).
     hosRows = await knex('hos_records')
       .where({ driver_id: driverId })
       .where('record_date', '>=', cutoff)
-      .whereRaw("violations IS NOT NULL AND violations != '[]'::jsonb")
+      .whereRaw('violations IS NOT NULL AND cardinality(violations) > 0')
       .select('id', 'record_date', 'violations');
   }
 
@@ -345,6 +346,13 @@ router.get('/fleet-summary', canView, async (req, res) => {
           trend: r.trend,
           calculated_at: r.calculated_at,
         })),
+      // FN-504: all scored drivers for cross-module risk badges
+      all_scores: rows.map((r) => ({
+        driver_id: r.driver_id,
+        score: parseFloat(r.score),
+        risk_level: r.risk_level,
+        trend: r.trend,
+      })),
     };
 
     res.json(summary);

@@ -44,11 +44,37 @@ export interface LoadListItem {
   delivery_state: string | null;
   delivery_zip?: string | null;
   driver_name: string | null;
+  /** FN-1042: dispatcher display name (joined from users in backend list query). */
+  dispatcher_name?: string | null;
   broker_name: string | null;
   po_number?: string | null;
   attachment_count: number;
   attachment_types: LoadAttachmentType[];
   notes?: string | null;
+  /** FN-746: true when AI-created load needs dispatcher review before approval. */
+  needs_review?: boolean;
+  /** FN-762: how this load was created — e.g. 'manual', 'ai_extraction', 'email', 'import'. */
+  source?: string | null;
+  /** FN-789 / FN-818: persisted confidence from AI extraction (populated by FN-816/FN-817). */
+  ai_metadata?: AiMetadata | null;
+}
+
+/**
+ * FN-789 / FN-818 — AI extraction confidence payload stored on loads.ai_metadata (JSONB).
+ * Populated by the AI extractor when a load originates from `source='ai_extraction'` or `'email'`.
+ * Shape is intentionally loose since the DB column is JSONB and future extractors may add fields.
+ */
+export interface AiMetadata {
+  /** 0–100 overall confidence of the extraction. */
+  overall_confidence?: number | null;
+  /** Per-field confidence keyed by camelCase StepBasicsData / LoadListItem field name. */
+  fields?: Record<string, number> | null;
+  /** Source document descriptor — e.g. 'rate confirmation PDF', inbound email subject, etc. */
+  source_label?: string | null;
+  /** ISO timestamp of extraction, used in tooltips. */
+  extracted_at?: string | null;
+  /** Allow forward-compatible additions without breaking the type. */
+  [key: string]: unknown;
 }
 
 export interface LoadStop {
@@ -56,12 +82,15 @@ export interface LoadStop {
   load_id?: string;
   stop_type: LoadStopType;
   stop_date?: string | null;
+  stop_time?: string | null;
   city?: string | null;
   state?: string | null;
   zip?: string | null;
   address1?: string | null;
   address2?: string | null;
   sequence?: number | null;
+  facility_name?: string | null;
+  notes?: string | null;
 }
 
 export interface LoadAttachment {
@@ -108,6 +137,15 @@ export interface LoadDetail extends LoadListItem {
   prev_delivery_city?: string | null;
   /** Previous load's last delivery state (for empty miles origin context). */
   prev_delivery_state?: string | null;
+  /** FN-762: inbound email preview for loads with source = 'email'. */
+  inbound_email?: {
+    id?: string;
+    from_email?: string | null;
+    subject?: string | null;
+    received_at?: string | null;
+    body_text?: string | null;
+    body_html?: string | null;
+  } | null;
 }
 
 export interface LoadsListResponse {
@@ -160,6 +198,13 @@ export interface LoadAiEndpointExtraction {
     pickup?: number;
     delivery?: number;
   };
+  /**
+   * FN-887 — per-field confidence scores (0–1 range) used by the AI-Extract
+   * wizard flow to render `<app-confidence-badge variant="field">` next to
+   * low-confidence field labels. Keys are form field paths (e.g. `brokerName`,
+   * `pickup.city`, `stops[0].date`). Tiers: red < 0.6, amber 0.6–0.85, none ≥ 0.85.
+   */
+  fieldConfidences?: Record<string, number>;
   rawTextSnippet?: string | null;
   provider?: string;
   model?: string;

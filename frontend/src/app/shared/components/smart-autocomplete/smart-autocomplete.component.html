@@ -1,0 +1,76 @@
+<div class="sa-container">
+  <div class="sa-input-wrapper">
+    <span class="sa-search-icon">&#128269;</span>
+    <input
+      #inputEl
+      type="text"
+      class="form-control sa-input"
+      [placeholder]="placeholder"
+      [value]="searchText"
+      (input)="onInputChange($any($event.target).value)"
+      (focus)="onInputFocus()"
+      (keydown)="onKeydown($event)"
+      autocomplete="off"
+    />
+    <span *ngIf="loading" class="sa-spinner"></span>
+  </div>
+
+  <div class="sa-dropdown" *ngIf="showDropdown && !loading">
+    <!-- Recently Used -->
+    <div *ngIf="filteredRecent.length" class="sa-section">
+      <div class="sa-section-header">Recently Used</div>
+      <div
+        *ngFor="let item of filteredRecent; let i = index; trackBy: trackById"
+        class="sa-item"
+        [class.sa-item-active]="isActive(i)"
+        (click)="selectItem(item)"
+        (mouseenter)="activeIndex = i"
+      >
+        <ng-container *ngIf="itemTemplate; else defaultRecent">
+          <ng-container *ngTemplateOutlet="itemTemplate; context: { $implicit: item }"></ng-container>
+        </ng-container>
+        <ng-template #defaultRecent>
+          <span class="sa-item-text">{{ getDisplayValue(item) }}</span>
+        </ng-template>
+      </div>
+      <div class="sa-divider"></div>
+    </div>
+
+    <!-- All Results -->
+    <div *ngIf="filteredItems.length" class="sa-section">
+      <div class="sa-section-header" *ngIf="filteredRecent.length">All Results</div>
+      <div
+        *ngFor="let item of filteredItems; let i = index; trackBy: trackById"
+        class="sa-item"
+        [class.sa-item-active]="isActive(filteredRecent.length + i)"
+        (click)="selectItem(item)"
+        (mouseenter)="activeIndex = filteredRecent.length + i"
+      >
+        <ng-container *ngIf="itemTemplate; else defaultItem">
+          <ng-container *ngTemplateOutlet="itemTemplate; context: { $implicit: item }"></ng-container>
+        </ng-container>
+        <ng-template #defaultItem>
+          <span class="sa-item-text">{{ getDisplayValue(item) }}</span>
+        </ng-template>
+      </div>
+    </div>
+
+    <!-- Truncation Note -->
+    <div *ngIf="totalMatches > maxResults" class="sa-truncation">
+      Showing {{ filteredItems.length + filteredRecent.length }} of {{ totalMatches }} matches &mdash; refine your search
+    </div>
+
+    <!-- Empty State -->
+    <div *ngIf="!filteredItems.length && !filteredRecent.length && searchText" class="sa-empty">
+      No matches found
+    </div>
+  </div>
+
+  <!-- Loading Dropdown -->
+  <div class="sa-dropdown" *ngIf="showDropdown && loading">
+    <div class="sa-loading">
+      <span class="sa-spinner"></span>
+      <span>Loading...</span>
+    </div>
+  </div>
+</div>

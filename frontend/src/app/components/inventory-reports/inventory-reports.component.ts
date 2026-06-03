@@ -32,6 +32,10 @@ export class InventoryReportsComponent implements OnInit {
     notes: string;
   } | null = null;
 
+  // ── FN-705: Inventory item inline edit ──────────────────────────────────────
+  editingItem: any = null;
+  showEditDialog = false;
+
   constructor(private api: ApiService) {}
 
   ngOnInit(): void {
@@ -112,6 +116,32 @@ export class InventoryReportsComponent implements OnInit {
         this.loadingTx = false;
       }
     });
+  }
+
+  // ── FN-705: Edit dialog methods ────────────────────────────────────────────
+
+  openEditDialog(item: any): void {
+    this.editingItem    = item;
+    this.showEditDialog = true;
+  }
+
+  closeEditDialog(): void {
+    this.showEditDialog = false;
+    this.editingItem    = null;
+  }
+
+  /** Merge the updated item back into the onHandRows array. */
+  onItemSaved(updatedItem: any): void {
+    const idx = this.onHandRows.findIndex(r => r.id === updatedItem.id);
+    if (idx !== -1) {
+      this.onHandRows = [
+        ...this.onHandRows.slice(0, idx),
+        { ...this.onHandRows[idx], ...updatedItem },
+        ...this.onHandRows.slice(idx + 1)
+      ];
+    }
+    this.showEditDialog = false;
+    this.editingItem    = null;
   }
 
   loadAiRecommendations(): void {

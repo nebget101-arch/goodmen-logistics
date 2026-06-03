@@ -1,0 +1,50 @@
+/* FN-1353: Driver chip — initials avatar + name.
+   Tokens-only. No hex literals introduced. */
+
+.driver-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.driver-chip__avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 999px;
+  background: rgba(103, 232, 249, 0.18);
+  border: 1px solid rgba(103, 232, 249, 0.4);
+  color: var(--ai-accent-cyan);
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  flex-shrink: 0;
+
+  .material-symbols-outlined {
+    font-size: 0.95rem;
+  }
+}
+
+.driver-chip__avatar--placeholder {
+  background: rgba(15, 23, 42, 0.55);
+  border-color: rgba(51, 65, 85, 0.6);
+  color: var(--ai-text-muted);
+}
+
+.driver-chip__name {
+  display: inline-block;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--ai-text-body);
+  font-size: 0.85rem;
+}
+
+.driver-chip--empty .driver-chip__name {
+  color: var(--ai-text-muted);
+}

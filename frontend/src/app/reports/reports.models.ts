@@ -8,15 +8,19 @@ export type ReportKey =
   | 'expenses'
   | 'gross-profit'
   | 'gross-profit-per-load'
-  | 'profit-loss';
+  | 'profit-loss'
+  | 'direct-load-profit'
+  | 'fully-loaded-profit';
 
 export interface ReportFilters {
   startDate?: string;
   endDate?: string;
   dispatcherId?: string;
   driverId?: string;
+  truckId?: string;
   status?: string;
   period?: 'day' | 'week' | 'month';
+  groupBy?: 'load' | 'truck' | 'driver';
   limit?: number;
   offset?: number;
   // legacy keys
@@ -57,6 +61,93 @@ export interface ReportPageConfig {
   subtitle: string;
   endpoint: string;
   columns: ReportColumn[];
+}
+
+// FN-1183: Drill-down deep-link contracts. URL contracts are documented in
+// docs/reports/drilldown-contracts.md. A null target means "no drill-down" —
+// callers should render the cell/card plain (no hover affordance).
+export type DrilldownDestination = 'loads' | 'drivers' | 'customers';
+
+export interface DrilldownTarget {
+  destination: DrilldownDestination;
+  commands: unknown[];
+  queryParams?: Record<string, string>;
+}
+
+export type RowDrilldownFn = (row: Record<string, unknown>) => DrilldownTarget | null;
+export type CardDrilldownFn = (card: ReportCard | { key: string }) => DrilldownTarget | null;
+
+export type ReportAnomalySeverity = 'info' | 'warning' | 'critical';
+
+export interface ReportAnomaly {
+  metric: string;
+  value: number;
+  deltaPct: number;
+  severity: ReportAnomalySeverity;
+  context?: string;
+}
+
+export interface ReportAnomaliesResponse {
+  anomalies: ReportAnomaly[];
+}
+
+export interface ReportAnomaliesRequest {
+  data: Record<string, unknown>[];
+  filters: ReportFilters;
+  priorPeriod?: Record<string, unknown>;
+}
+
+export interface ReportNarrativeRequest {
+  cards?: ReportCard[];
+  data?: Record<string, unknown>[];
+  filters?: ReportFilters;
+  priorPeriod?: Record<string, unknown>;
+}
+
+export interface ReportNarrative {
+  narrative: string;
+  generatedAt: string;
+}
+
+export interface ReportChatMessage {
+  role: 'user' | 'assistant';
+  content: string;
+  timestamp?: string;
+}
+
+export interface ReportChatRequest {
+  reportKey: string;
+  filters: ReportFilters;
+  data: Array<Record<string, unknown>>;
+  history: ReportChatMessage[];
+  message: string;
+  summary?: Record<string, unknown>;
+}
+
+export interface ReportChatUsage {
+  cache_read_input_tokens?: number;
+  cache_creation_input_tokens?: number;
+  input_tokens?: number;
+  output_tokens?: number;
+  _truncated?: boolean;
+}
+
+export interface ReportChatResponse {
+  reply: string;
+  generatedAt?: string;
+  usage?: ReportChatUsage;
+}
+
+export interface NlParseRequest {
+  reportKey: ReportKey;
+  naturalQuery: string;
+  currentFilters: ReportFilters;
+}
+
+export interface NlParseResponse {
+  filters: ReportFilters;
+  unmatchedTokens: string[];
+  confidence: number;
 }
 
 // Legacy compatibility interfaces retained for old reports components.

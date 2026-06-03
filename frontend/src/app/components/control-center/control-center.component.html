@@ -1,0 +1,92 @@
+<section class="control-center" [attr.data-role]="role">
+  <header class="control-center__header">
+    <div class="control-center__heading">
+      <h2 class="control-center__title">Your Control Center</h2>
+      <p class="control-center__subtitle">
+        {{ role | titlecase }} default · drag cards to reorder
+      </p>
+    </div>
+    <div class="control-center__header-actions">
+      <app-window-selector></app-window-selector>
+      <app-preset-switcher
+        [disabled]="loading || saving"
+        [activePresetKey]="activePresetKey"
+        (presetApplied)="onPresetApplied($event)"
+        (presetApplyFailed)="onPresetApplyFailed($event)"
+      ></app-preset-switcher>
+      <button
+        *ngIf="hiddenCount > 0"
+        type="button"
+        class="control-center__show-hidden"
+        (click)="toggleShowHidden()"
+        [disabled]="loading || saving"
+        data-testid="control-center-show-hidden"
+        [attr.aria-pressed]="showHidden ? 'true' : 'false'"
+      >
+        {{ showHidden ? 'Hide ' + hiddenCount + ' card' + (hiddenCount === 1 ? '' : 's') : 'Show hidden cards (' + hiddenCount + ')' }}
+      </button>
+      <button
+        type="button"
+        class="control-center__reset"
+        (click)="resetToDefault()"
+        [disabled]="loading || saving"
+        data-testid="control-center-reset"
+      >
+        Reset to default
+      </button>
+    </div>
+  </header>
+
+  <app-kpi-strip class="control-center__kpis"></app-kpi-strip>
+
+  <div *ngIf="errorMessage" class="control-center__error" role="alert">
+    {{ errorMessage }}
+  </div>
+
+  <div *ngIf="loading" class="control-center__loading" aria-live="polite">
+    Loading layout…
+  </div>
+
+  <ul
+    *ngIf="!loading"
+    class="control-center__grid"
+    cdkDropList
+    (cdkDropListDropped)="onDrop($event)"
+    data-testid="control-center-grid"
+  >
+    <li
+      *ngFor="let id of visibleWidgets; trackBy: trackById"
+      cdkDrag
+      class="control-center__card"
+      [class.control-center__card--hidden-restored]="showHidden && hidden.includes(id)"
+      [attr.data-widget-id]="id"
+    >
+      <button
+        type="button"
+        class="control-center__handle"
+        cdkDragHandle
+        aria-label="Drag to reorder"
+      >
+        <span aria-hidden="true">⋮⋮</span>
+      </button>
+      <ng-container [ngSwitch]="id">
+        <app-daily-briefing
+          *ngSwitchCase="'daily-briefing'"
+          (visibilityChange)="onBriefingVisibility($event)"
+        ></app-daily-briefing>
+        <app-action-queue *ngSwitchCase="'action-queue'"></app-action-queue>
+        <app-predictive-insights
+          *ngSwitchCase="'predictive-insights'"
+          (visibilityChange)="onInsightsVisibility($event)"
+        ></app-predictive-insights>
+        <div *ngSwitchCase="'quick-actions'" class="control-center__quick-actions">
+          <h3 class="control-center__quick-actions-title">Quick actions</h3>
+          <app-quick-actions
+            [actions]="quickActions"
+            [ariaLabel]="'Quick actions for ' + role"
+          ></app-quick-actions>
+        </div>
+      </ng-container>
+    </li>
+  </ul>
+</section>

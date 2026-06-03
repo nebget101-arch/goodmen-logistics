@@ -22,6 +22,44 @@
     </select>
   </div>
 
+  <!-- ─── Extract with AI (vision) ───────────────────────────────────────────── -->
+  <div class="vision-panel" data-testid="vision-panel">
+    <div class="vision-panel-header">
+      <span class="material-symbols-outlined">auto_awesome</span>
+      <div>
+        <strong>Extract from invoice image with AI</strong>
+        <small>Drop a toll invoice image (JPG, PNG, WebP, GIF) — Max 10 MB</small>
+      </div>
+    </div>
+
+    <div class="vision-row">
+      <label class="browse-btn">
+        Choose Invoice Image
+        <input type="file"
+               accept="image/jpeg,image/png,image/webp,image/gif"
+               data-testid="vision-file-input"
+               (change)="onVisionFileChange($event)" hidden>
+      </label>
+      <span class="vision-file" *ngIf="visionFile" data-testid="vision-file-name">
+        {{ visionFile.name }} ({{ formatFileSize(visionFile.size) }})
+        <button class="link-btn" type="button" (click)="clearVisionFile()" [disabled]="visionLoading">Remove</button>
+      </span>
+      <button class="btn btn-primary"
+              type="button"
+              data-testid="extract-with-ai-btn"
+              [disabled]="!visionFile || visionLoading"
+              (click)="extractWithAi()">
+        <span *ngIf="visionLoading" class="spinner"></span>
+        {{ visionLoading ? 'Extracting line items…' : 'Extract with AI' }}
+      </button>
+    </div>
+
+    <div class="error-banner" *ngIf="visionError" data-testid="vision-error">{{ visionError }}</div>
+    <div class="success-banner" *ngIf="visionToast" data-testid="vision-toast">{{ visionToast }}</div>
+  </div>
+
+  <div class="vision-divider"><span>or upload a CSV</span></div>
+
   <div class="drop-zone"
        [class.drag-over]="dragOver"
        (dragover)="onDragOver($event)"

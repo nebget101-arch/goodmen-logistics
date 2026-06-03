@@ -6,8 +6,27 @@ const axios = require('axios');
 const authMiddleware = require('../middleware/auth-middleware');
 const dtLogger = require('../utils/logger');
 const { query, getClient } = require('../internal/db');
-const { extractLoadFromPdf } = require('../services/load-ai-extractor');
+const { extractLoadFromPdf, buildAiMetadata } = require('../services/load-ai-extractor');
 const { uploadBuffer, getSignedDownloadUrl, deleteObject } = require('../storage/r2-storage');
+const { calculateTripMetrics } = require('../services/trip-metrics');
+const { emitToTenant } = require('../services/websocket.service');
+
+// FN-811: fire-and-forget WS emit. emitToTenant never throws, but wrap in
+// Promise.resolve().then so the response path stays zero-latency even if the
+// gateway bridge is slow or unreachable.
+function emitLoadEvent(tenantId, event, payload) {
+  if (!tenantId || !event) return;
+  Promise.resolve()
+    .then(() => emitToTenant({ tenantId, event, payload }))
+    .catch((err) => {
+      dtLogger.warn('load_ws_emit_failed', { event, tenantId, error: err?.message });
+    });
+}
+
+// FN-1303: shape-check ids before they reach `WHERE id = $1::uuid` so a typo
+// or a stray static path (e.g. `/api/loads/throughput`) returns 404 instead of
+// crashing the query with `invalid input syntax for type uuid`.
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 const LOAD_STATUSES = ['DRAFT', 'NEW', 'CANCELLED', 'CANCELED', 'TONU', 'DISPATCHED', 'EN_ROUTE', 'PICKED_UP', 'IN_TRANSIT', 'DELIVERED', 'COMPLETED'];
 const BILLING_STATUSES = ['PENDING', 'CANCELLED', 'CANCELED', 'BOL_RECEIVED', 'INVOICED', 'SENT_TO_FACTORING', 'FUNDED', 'PAID'];
@@ -57,6 +76,13 @@ async function getDrivingDistanceMiles(fromZip, toZip) {
   }
 }
 
+/**
+ * Resolve lat/lon for each stop using OSRM-backed driving distance when
+ * possible, falling back to the pure Haversine helper in trip-metrics.js.
+ *
+ * This wrapper keeps all DB and network I/O in the route file while the
+ * actual metric arithmetic lives in the shared service.
+ */
 async function computeTripMetrics(exec, loadId, loadRow, stops) {
   const stopList = stops || [];
   const pickups = stopList.filter((s) => (s.stop_type || s.stopType || '').toString().trim().toUpperCase() === 'PICKUP');
@@ -67,12 +93,12 @@ async function computeTripMetrics(exec, loadId, loadRow, stops) {
   const pickupZip = (firstPickup?.zip || '').toString().trim() || null;
   const deliveryZip = (lastDelivery?.zip || '').toString().trim() || null;
 
+  // ── Look up the driver's previous delivery location (DB I/O) ──────────────
   let prevZip = null;
   let prevCity = null;
   let prevState = null;
   if (loadRow?.driver_id) {
     try {
-      // Find the effective date of the current load (earliest pickup stop or load created_at)
       const currentLoadDate = firstPickup?.stop_date || loadRow.pickup_date || loadRow.created_at || null;
 
       const prevResult = await exec(
@@ -98,6 +124,9 @@ async function computeTripMetrics(exec, loadId, loadRow, stops) {
     }
   }
 
+  // ── Use OSRM for driving distances (network I/O) ──────────────────────────
+  // OSRM gives road-distance accuracy; the pure Haversine helper in
+  // trip-metrics.js is used elsewhere when OSRM is unavailable.
   let emptyMiles = 0;
   let loadedMiles = 0;
 
@@ -110,7 +139,9 @@ async function computeTripMetrics(exec, loadId, loadRow, stops) {
 
   const totalMiles = (emptyMiles || 0) + (loadedMiles || 0);
   const rateValue = loadRow && loadRow.rate != null ? Number(loadRow.rate) : null;
-  const ratePerMile = totalMiles > 0 && rateValue != null ? Number(rateValue) / totalMiles : null;
+  const ratePerMile = totalMiles > 0 && rateValue != null
+    ? Number((Number(rateValue) / totalMiles).toFixed(2))
+    : null;
 
   return {
     prev_zip: prevZip,
@@ -177,6 +208,8 @@ function normalizeNullable(value) {
   if (typeof value === 'string' && value.trim() === '') return null;
   return value;
 }
+
+const { normalizeStateCode } = require('../utils/state-code');
 
 async function generateLoadNumber(client) {
   for (let i = 0; i < 10; i += 1) {
@@ -246,6 +279,371 @@ function applyLoadScope(where, params, context) {
   }
 }
 
+// FN-797: Smart filter chips ---------------------------------------------
+// Pre-built one-click filters surfaced above the loads table.
+// Schema adaptations (no `loads.source`/`loads.created_by` columns exist):
+//   ai_drafts    -> needs_review = true AND status = 'DRAFT' (FN-746 convention)
+//   my_drafts    -> dispatcher_user_id = current_user AND status = 'DRAFT'
+//                   (dispatcher_user_id is set from req.user.id on create)
+//   from_email   -> EXISTS inbound_emails row (FN-759) linked to the load
+const SMART_FILTER_CHIPS = [
+  'ai_drafts',
+  'overdue',
+  'high_value',
+  'from_email',
+  'missing_docs',
+  'my_drafts'
+];
+
+// Returns a SQL predicate referencing the `l` (loads) alias, and in some
+// cases the `delivery` lateral join (last delivery stop). Callers must
+// provide those joins. May push bind parameters onto `params`.
+function buildSmartFilterPredicate(chip, params, ctx) {
+  switch (chip) {
+    case 'ai_drafts':
+      return `(l.needs_review = true AND UPPER(l.status::text) = 'DRAFT')`;
+    case 'overdue':
+      return `(
+        UPPER(l.status::text) NOT IN ('DELIVERED','COMPLETED','CANCELLED','CANCELED','TONU')
+        AND COALESCE(delivery.stop_date, l.completed_date) IS NOT NULL
+        AND COALESCE(delivery.stop_date, l.completed_date)::date < CURRENT_DATE
+      )`;
+    case 'high_value': {
+      // Compare rate against tenant's (+operating entity's) 75th-percentile
+      // rate over the last 30 days. Tenant/OE params are pushed here so the
+      // subquery stays self-contained regardless of outer WHERE param order.
+      params.push(ctx.tenantId || null);
+      const tenantIdx = params.length;
+      params.push(ctx.operatingEntityId || null);
+      const oeIdx = params.length;
+      return `(l.rate IS NOT NULL AND l.rate > COALESCE((
+        SELECT percentile_cont(0.75) WITHIN GROUP (ORDER BY rate)
+        FROM loads
+        WHERE ($${tenantIdx}::uuid IS NULL OR tenant_id = $${tenantIdx})
+          AND ($${oeIdx}::uuid IS NULL OR operating_entity_id = $${oeIdx})
+          AND created_at >= NOW() - INTERVAL '30 days'
+          AND rate IS NOT NULL AND rate > 0
+      ), 0))`;
+    }
+    case 'from_email':
+      return `EXISTS (SELECT 1 FROM inbound_emails ie WHERE ie.load_id = l.id)`;
+    case 'missing_docs':
+      return `(
+        (UPPER(l.status::text) IN ('DELIVERED','COMPLETED')
+         AND NOT EXISTS (
+           SELECT 1 FROM load_attachments la
+           WHERE la.load_id = l.id
+             AND UPPER(la.type::text) IN ('PROOF_OF_DELIVERY','POD')
+         ))
+        OR
+        (UPPER(l.status::text) IN ('PICKED_UP','IN_TRANSIT')
+         AND NOT EXISTS (
+           SELECT 1 FROM load_attachments la
+           WHERE la.load_id = l.id AND UPPER(la.type::text) = 'BOL'
+         ))
+      )`;
+    case 'my_drafts':
+      params.push(ctx.userId || null);
+      return `(UPPER(l.status::text) = 'DRAFT' AND l.dispatcher_user_id = $${params.length})`;
+    default:
+      return null;
+  }
+}
+
+function parseSmartFilterList(value) {
+  if (value == null) return [];
+  return String(value)
+    .split(',')
+    .map((s) => s.trim().toLowerCase())
+    .filter((s) => SMART_FILTER_CHIPS.includes(s));
+}
+// ------------------------------------------------------------------------
+
+/** FN-801: parsed NLQ filter cache per tenant (not list results). */
+const NLQ_FILTER_CACHE_TTL_MS = 5 * 60 * 1000;
+const nlqFilterCache = new Map();
+
+function nlqCacheKey(tenantId, queryText) {
+  return `${tenantId || 'none'}::${String(queryText).trim().toLowerCase()}`;
+}
+
+function getNlqCached(tenantId, queryText) {
+  const k = nlqCacheKey(tenantId, queryText);
+  const row = nlqFilterCache.get(k);
+  if (!row) return null;
+  if (Date.now() > row.expiresAt) {
+    nlqFilterCache.delete(k);
+    return null;
+  }
+  return row.value;
+}
+
+function setNlqCached(tenantId, queryText, value) {
+  nlqFilterCache.set(nlqCacheKey(tenantId, queryText), {
+    value,
+    expiresAt: Date.now() + NLQ_FILTER_CACHE_TTL_MS
+  });
+}
+
+/**
+ * Shared loads list for GET /api/loads and POST /api/loads/search/nlq (FN-801).
+ * @returns {Promise<{ ok: true, data: any[], meta: { page: number, pageSize: number, total: number } } | { ok: false, status: number, error: string }>}
+ */
+async function executeLoadsListQuery(listSpec) {
+  const {
+    context,
+    role,
+    user,
+    status: statusRaw,
+    billingStatus: billingRaw,
+    driverId: driverIdRaw,
+    brokerId: brokerIdRaw,
+    q: qRaw,
+    dateFrom: dateFromRaw,
+    dateTo: dateToRaw,
+    needsReview,
+    smartFilterQuery,
+    page: pageRaw,
+    pageSize: pageSizeRaw,
+    sortBy: sortByRaw,
+    sortDir: sortDirRaw,
+    keywordIncludesNotes,
+    nlqContains
+  } = listSpec;
+
+  const isDriver = role === 'driver';
+  if (isDriver && !user?.driver_id) {
+    return { ok: false, status: 403, error: 'Driver account not linked to a driver record' };
+  }
+
+  const status = normalizeEnum(statusRaw);
+  const billingStatus = normalizeEnum(billingRaw);
+  let driverId = (driverIdRaw || '').toString().trim();
+  if (isDriver) driverId = (user.driver_id || '').toString().trim();
+  const brokerId = (brokerIdRaw || '').toString().trim();
+  const q = (qRaw || '').toString().trim();
+  const dateFrom = (dateFromRaw || '').toString().trim();
+  const dateTo = (dateToRaw || '').toString().trim();
+
+  if (status && !LOAD_STATUSES.includes(status)) {
+    return { ok: false, status: 400, error: 'Invalid status filter' };
+  }
+  if (billingStatus && !BILLING_STATUSES.includes(billingStatus)) {
+    return { ok: false, status: 400, error: 'Invalid billing status filter' };
+  }
+
+  const page = Math.max(parseInt(pageRaw || '1', 10), 1);
+  const pageSize = Math.min(Math.max(parseInt(pageSizeRaw || '25', 10), 1), 200);
+  const sortBy = (sortByRaw || '').toString().trim().toLowerCase();
+  const defaultSortDir = sortBy === 'pickup_date' ? 'asc' : 'desc';
+  const sortDirLow = (sortDirRaw || defaultSortDir).toString().trim().toLowerCase();
+  const sortDir = sortDirLow === 'asc' ? 'asc' : 'desc';
+  const offset = (page - 1) * pageSize;
+
+  const where = [];
+  const params = [];
+
+  applyLoadScope(where, params, context || null);
+
+  if (status) {
+    params.push(status);
+    where.push(`UPPER(l.status::text) = $${params.length}`);
+  }
+  if (billingStatus) {
+    params.push(billingStatus);
+    where.push(`UPPER(l.billing_status::text) = $${params.length}`);
+  }
+  if (driverId) {
+    params.push(driverId);
+    where.push(`l.driver_id = $${params.length}`);
+  }
+  if (brokerId) {
+    params.push(brokerId);
+    where.push(`l.broker_id = $${params.length}`);
+  }
+  if (q) {
+    params.push(`%${q}%`);
+    const idx = params.length;
+    const noteClause = keywordIncludesNotes ? `OR l.notes ILIKE $${idx}` : '';
+    where.push(`(
+        l.load_number ILIKE $${idx}
+        OR COALESCE(b.legal_name, b.name, l.broker_name, '') ILIKE $${idx}
+        OR concat_ws(' ', d.first_name, d.last_name) ILIKE $${idx}
+        ${noteClause}
+      )`);
+  }
+
+  const n = nlqContains && typeof nlqContains === 'object' ? nlqContains : {};
+  if (n.loadNumberContains) {
+    params.push(`%${String(n.loadNumberContains).trim()}%`);
+    where.push(`l.load_number ILIKE $${params.length}`);
+  }
+  if (n.brokerNameContains) {
+    params.push(`%${String(n.brokerNameContains).trim()}%`);
+    where.push(`COALESCE(b.legal_name, b.name, l.broker_name, '') ILIKE $${params.length}`);
+  }
+  if (n.driverNameContains) {
+    params.push(`%${String(n.driverNameContains).trim()}%`);
+    where.push(`concat_ws(' ', d.first_name, d.last_name) ILIKE $${params.length}`);
+  }
+  if (n.pickupState) {
+    params.push(String(n.pickupState).trim().toUpperCase().slice(0, 2));
+    where.push(`UPPER(TRIM(COALESCE(pickup.state::text, ''))) = $${params.length}`);
+  }
+  if (n.deliveryState) {
+    params.push(String(n.deliveryState).trim().toUpperCase().slice(0, 2));
+    where.push(`UPPER(TRIM(COALESCE(delivery.state::text, ''))) = $${params.length}`);
+  }
+  if (n.pickupCity) {
+    params.push(`%${String(n.pickupCity).trim()}%`);
+    where.push(`pickup.city ILIKE $${params.length}`);
+  }
+  if (n.deliveryCity) {
+    params.push(`%${String(n.deliveryCity).trim()}%`);
+    where.push(`delivery.city ILIKE $${params.length}`);
+  }
+  if (n.rateMin != null && Number.isFinite(Number(n.rateMin))) {
+    params.push(Number(n.rateMin));
+    where.push(`l.rate >= $${params.length}`);
+  }
+  if (n.rateMax != null && Number.isFinite(Number(n.rateMax))) {
+    params.push(Number(n.rateMax));
+    where.push(`l.rate <= $${params.length}`);
+  }
+
+  if (needsReview) {
+    where.push('l.needs_review = true');
+  }
+
+  const smartFilters = parseSmartFilterList(smartFilterQuery);
+  const smartFilterCtx = {
+    tenantId: context?.tenantId || null,
+    operatingEntityId: context?.operatingEntityId || null,
+    userId: user?.id || null
+  };
+  for (const chip of smartFilters) {
+    const predicate = buildSmartFilterPredicate(chip, params, smartFilterCtx);
+    if (predicate) where.push(predicate);
+  }
+
+  if (dateFrom && dateTo) {
+    params.push(dateFrom);
+    const idxFrom = params.length;
+    params.push(dateTo);
+    const idxTo = params.length;
+    where.push(`(
+        (pickup.stop_date::date >= $${idxFrom} AND pickup.stop_date::date <= $${idxTo})
+        OR (COALESCE(delivery.stop_date, l.completed_date, l.created_at)::date >= $${idxFrom} AND COALESCE(delivery.stop_date, l.completed_date, l.created_at)::date <= $${idxTo})
+      )`);
+  } else if (dateFrom) {
+    params.push(dateFrom);
+    where.push(`(pickup.stop_date::date >= $${params.length} OR COALESCE(delivery.stop_date, l.completed_date, l.created_at)::date >= $${params.length})`);
+  } else if (dateTo) {
+    params.push(dateTo);
+    where.push(`(pickup.stop_date::date <= $${params.length} OR COALESCE(delivery.stop_date, l.completed_date, l.created_at)::date <= $${params.length})`);
+  }
+
+  const whereClause = where.length ? `WHERE ${where.join(' AND ')}` : '';
+
+  const baseSql = `
+      FROM loads l
+      LEFT JOIN drivers d ON l.driver_id = d.id AND d.tenant_id = l.tenant_id AND (l.operating_entity_id IS NULL OR d.operating_entity_id = l.operating_entity_id)
+      LEFT JOIN brokers b ON l.broker_id = b.id
+      LEFT JOIN users u ON l.dispatcher_user_id = u.id
+      LEFT JOIN operating_entities oe ON oe.id = l.operating_entity_id
+      LEFT JOIN LATERAL (
+        SELECT city, state, zip, stop_date
+        FROM load_stops
+        WHERE load_id = l.id AND stop_type = 'PICKUP'
+        ORDER BY sequence ASC
+        LIMIT 1
+      ) pickup ON true
+      LEFT JOIN LATERAL (
+        SELECT city, state, zip, stop_date
+        FROM load_stops
+        WHERE load_id = l.id AND stop_type = 'DELIVERY'
+        ORDER BY sequence DESC
+        LIMIT 1
+      ) delivery ON true
+      LEFT JOIN (
+        SELECT load_id,
+               COUNT(*) as attachment_count,
+               array_agg(DISTINCT type) as attachment_types
+        FROM load_attachments
+        GROUP BY load_id
+      ) att ON att.load_id = l.id
+      ${whereClause}
+    `;
+
+  try {
+    const countResult = await query(`SELECT COUNT(*) as total ${baseSql}`, params);
+    const total = parseInt(countResult.rows[0].total, 10) || 0;
+
+    params.push(pageSize);
+    params.push(offset);
+    const sortMap = {
+      load_number: 'l.load_number',
+      pickup_date: 'pickup.stop_date',
+      rate: 'l.rate',
+      completed_date: 'COALESCE(delivery.stop_date, l.completed_date, l.created_at)',
+      created_at: 'l.created_at'
+    };
+    const orderBy = sortMap[sortBy] || 'l.created_at';
+    const draftFirst = !status ? 'CASE WHEN UPPER(l.status::text) = \'DRAFT\' THEN 0 ELSE 1 END, ' : '';
+
+    const dataSql = `
+      SELECT
+        l.id,
+        l.driver_id,
+        l.load_number,
+        UPPER(l.status::text) as status,
+        UPPER(l.billing_status::text) as billing_status,
+        l.rate,
+        l.completed_date,
+        pickup.stop_date as pickup_date,
+        delivery.stop_date as delivery_date,
+        pickup.city as pickup_city,
+        pickup.state as pickup_state,
+        pickup.zip as pickup_zip,
+        delivery.city as delivery_city,
+        delivery.state as delivery_state,
+        delivery.zip as delivery_zip,
+        COALESCE(NULLIF(concat_ws(' ', d.first_name, d.last_name), ''), l.driver_name) as driver_name,
+        COALESCE(b.legal_name, b.name, l.broker_name) as broker_name,
+        COALESCE(NULLIF(concat_ws(' ', u.first_name, u.last_name), ''), u.username) as dispatcher_name,
+        l.po_number,
+        l.notes,
+        l.operating_entity_id,
+        oe.name as operating_entity_name,
+        COALESCE(att.attachment_count, 0) as attachment_count,
+        COALESCE(att.attachment_types, ARRAY[]::text[]) as attachment_types,
+        COALESCE(l.needs_review, false) as needs_review,
+        l.ai_metadata
+      ${baseSql}
+      ORDER BY ${draftFirst}${orderBy} ${sortDir}
+      LIMIT $${params.length - 1} OFFSET $${params.length}
+    `;
+    const result = await query(dataSql, params);
+    return {
+      ok: true,
+      data: result.rows || [],
+      meta: { page, pageSize, total }
+    };
+  } catch (error) {
+    const message = (error && error.message) ? String(error.message) : '';
+    const code = error && error.code ? String(error.code) : '';
+    if (code === '42P01' || message.includes('relation') || message.includes('does not exist')) {
+      return {
+        ok: true,
+        data: [],
+        meta: { page, pageSize, total: 0 }
+      };
+    }
+    dtLogger.error('loads_list_failed', error);
+    return { ok: false, status: 500, error: 'Failed to fetch loads' };
+  }
+}
+
 async function getLoadDetail(clientOrQuery, loadId, context = null) {
   const exec = clientOrQuery.query ? clientOrQuery.query.bind(clientOrQuery) : query;
   const detailParams = [loadId];
@@ -261,11 +659,13 @@ async function getLoadDetail(clientOrQuery, loadId, context = null) {
 
   const loadResult = await exec(
     `SELECT l.*,
-            concat_ws(' ', d.first_name, d.last_name) as driver_name,
-            COALESCE(b.legal_name, b.name, l.broker_name) as broker_display_name
+            COALESCE(NULLIF(concat_ws(' ', d.first_name, d.last_name), ''), l.driver_name) as driver_name,
+            COALESCE(b.legal_name, b.name, l.broker_name) as broker_display_name,
+            COALESCE(NULLIF(concat_ws(' ', u.first_name, u.last_name), ''), u.username) as dispatcher_name
      FROM loads l
      LEFT JOIN drivers d ON l.driver_id = d.id
      LEFT JOIN brokers b ON l.broker_id = b.id
+     LEFT JOIN users u ON l.dispatcher_user_id = u.id
      ${whereSql}`,
     detailParams
   );
@@ -313,213 +713,400 @@ async function getLoadDetail(clientOrQuery, loadId, context = null) {
  * @openapi
  * /api/loads:
  *   get:
- *     summary: List loads
+ *     summary: List loads with filtering, sorting, and pagination
+ *     description: >
+ *       Returns a paginated list of loads. Supports filtering by load status, billing status,
+ *       driver, broker, date range, and free-text search. Drivers are scoped to their own loads.
+ *       Load statuses: DRAFT, NEW, CANCELLED, CANCELED, TONU, DISPATCHED, EN_ROUTE, PICKED_UP,
+ *       IN_TRANSIT, DELIVERED, COMPLETED. Billing statuses: PENDING, CANCELLED, CANCELED,
+ *       BOL_RECEIVED, INVOICED, SENT_TO_FACTORING, FUNDED, PAID. DRAFT loads appear first
+ *       when no status filter is applied.
  *     tags:
  *       - Loads
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: status
+ *         schema:
+ *           type: string
+ *           enum: [DRAFT, NEW, CANCELLED, CANCELED, TONU, DISPATCHED, EN_ROUTE, PICKED_UP, IN_TRANSIT, DELIVERED, COMPLETED]
+ *         description: Filter by load status
+ *       - in: query
+ *         name: billingStatus
+ *         schema:
+ *           type: string
+ *           enum: [PENDING, CANCELLED, CANCELED, BOL_RECEIVED, INVOICED, SENT_TO_FACTORING, FUNDED, PAID]
+ *         description: Filter by billing status
+ *       - in: query
+ *         name: driverId
+ *         schema:
+ *           type: string
+ *         description: Filter by driver ID (ignored for driver role; auto-scoped)
+ *       - in: query
+ *         name: brokerId
+ *         schema:
+ *           type: string
+ *         description: Filter by broker ID
+ *       - in: query
+ *         name: q
+ *         schema:
+ *           type: string
+ *         description: Free-text search on load number, broker name, or driver name
+ *       - in: query
+ *         name: dateFrom
+ *         schema:
+ *           type: string
+ *           format: date
+ *         description: Filter loads with pickup or delivery date on or after this date
+ *       - in: query
+ *         name: dateTo
+ *         schema:
+ *           type: string
+ *           format: date
+ *         description: Filter loads with pickup or delivery date on or before this date
+ *       - in: query
+ *         name: page
+ *         schema:
+ *           type: integer
+ *           default: 1
+ *         description: Page number (1-based)
+ *       - in: query
+ *         name: pageSize
+ *         schema:
+ *           type: integer
+ *           default: 25
+ *           maximum: 200
+ *         description: Number of loads per page (max 200)
+ *       - in: query
+ *         name: smart_filter
+ *         schema:
+ *           type: string
+ *         description: >
+ *           FN-797: Comma-separated list of smart filter chips to AND together.
+ *           Allowed values: ai_drafts, overdue, high_value, from_email,
+ *           missing_docs, my_drafts. Unknown values are ignored.
+ *       - in: query
+ *         name: sortBy
+ *         schema:
+ *           type: string
+ *           enum: [load_number, pickup_date, rate, completed_date, created_at]
+ *         description: Column to sort by (default created_at)
+ *       - in: query
+ *         name: sortDir
+ *         schema:
+ *           type: string
+ *           enum: [asc, desc]
+ *         description: Sort direction (default desc; pickup_date defaults to asc)
  *     responses:
  *       200:
- *         description: Loads list returned
- *   post:
- *     summary: Create load
- *     tags:
- *       - Loads
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             description: Load payload
- *             additionalProperties: true
- *     responses:
- *       201:
- *         description: Load created
+ *         description: Paginated list of loads
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                 meta:
+ *                   type: object
+ *                   properties:
+ *                     page:
+ *                       type: integer
+ *                     pageSize:
+ *                       type: integer
+ *                     total:
+ *                       type: integer
+ *       400:
+ *         description: Invalid status or billing status filter
+ *       403:
+ *         description: Forbidden - insufficient role or driver not linked
+ *       500:
+ *         description: Server error
  */
 // GET /api/loads
 router.get('/', async (req, res) => {
   const startTime = Date.now();
   try {
     const role = (req.user?.role || '').toString().trim().toLowerCase();
-    const isDriver = role === 'driver';
-    if (isDriver && !req.user?.driver_id) {
-      return res.status(403).json({ success: false, error: 'Driver account not linked to a driver record' });
-    }
-    const status = normalizeEnum(req.query.status);
-    const billingStatus = normalizeEnum(req.query.billingStatus);
-    let driverId = (req.query.driverId || '').toString().trim();
-    if (isDriver) driverId = (req.user.driver_id || '').toString().trim();
-    const brokerId = (req.query.brokerId || '').toString().trim();
-    const q = (req.query.q || '').toString().trim();
-    const dateFrom = (req.query.dateFrom || '').toString().trim();
-    const dateTo = (req.query.dateTo || '').toString().trim();
-
-    if (status && !LOAD_STATUSES.includes(status)) {
-      return res.status(400).json({ success: false, error: 'Invalid status filter' });
-    }
-    if (billingStatus && !BILLING_STATUSES.includes(billingStatus)) {
-      return res.status(400).json({ success: false, error: 'Invalid billing status filter' });
-    }
-
-    const page = Math.max(parseInt(req.query.page || '1', 10), 1);
-    const pageSize = Math.min(Math.max(parseInt(req.query.pageSize || '25', 10), 1), 200);
-    const sortBy = (req.query.sortBy || '').toString().trim().toLowerCase();
-    // Default pickup_date to asc so nearest (earliest) date appears first
-    const defaultSortDir = sortBy === 'pickup_date' ? 'asc' : 'desc';
-    const sortDirRaw = (req.query.sortDir || defaultSortDir).toString().trim().toLowerCase();
-    const sortDir = sortDirRaw === 'asc' ? 'asc' : 'desc';
-    const offset = (page - 1) * pageSize;
-
-    const where = [];
-    const params = [];
-
-    applyLoadScope(where, params, req.context || null);
-
-    if (status) {
-      params.push(status);
-      where.push(`UPPER(l.status::text) = $${params.length}`);
-    }
-    if (billingStatus) {
-      params.push(billingStatus);
-      where.push(`UPPER(l.billing_status::text) = $${params.length}`);
-    }
-    if (driverId) {
-      params.push(driverId);
-      where.push(`l.driver_id = $${params.length}`);
-    }
-    if (brokerId) {
-      params.push(brokerId);
-      where.push(`l.broker_id = $${params.length}`);
-    }
-    if (q) {
-      params.push(`%${q}%`);
-      where.push(`(
-        l.load_number ILIKE $${params.length}
-        OR COALESCE(b.legal_name, b.name, l.broker_name, '') ILIKE $${params.length}
-        OR concat_ws(' ', d.first_name, d.last_name) ILIKE $${params.length}
-      )`);
-    }
-    if (dateFrom && dateTo) {
-      params.push(dateFrom);
-      const idxFrom = params.length;
-      params.push(dateTo);
-      const idxTo = params.length;
-      where.push(`(
-        (pickup.stop_date::date >= $${idxFrom} AND pickup.stop_date::date <= $${idxTo})
-        OR (COALESCE(delivery.stop_date, l.completed_date, l.created_at)::date >= $${idxFrom} AND COALESCE(delivery.stop_date, l.completed_date, l.created_at)::date <= $${idxTo})
-      )`);
-    } else if (dateFrom) {
-      params.push(dateFrom);
-      where.push(`(pickup.stop_date::date >= $${params.length} OR COALESCE(delivery.stop_date, l.completed_date, l.created_at)::date >= $${params.length})`);
-    } else if (dateTo) {
-      params.push(dateTo);
-      where.push(`(pickup.stop_date::date <= $${params.length} OR COALESCE(delivery.stop_date, l.completed_date, l.created_at)::date <= $${params.length})`);
-    }
-
-    const whereClause = where.length ? `WHERE ${where.join(' AND ')}` : '';
-
-    const baseSql = `
-      FROM loads l
-      LEFT JOIN drivers d ON l.driver_id = d.id AND d.tenant_id = l.tenant_id AND (l.operating_entity_id IS NULL OR d.operating_entity_id = l.operating_entity_id)
-      LEFT JOIN brokers b ON l.broker_id = b.id
-      LEFT JOIN operating_entities oe ON oe.id = l.operating_entity_id
-      LEFT JOIN LATERAL (
-        SELECT city, state, zip, stop_date
-        FROM load_stops
-        WHERE load_id = l.id AND stop_type = 'PICKUP'
-        ORDER BY sequence ASC
-        LIMIT 1
-      ) pickup ON true
-      LEFT JOIN LATERAL (
-        SELECT city, state, zip, stop_date
-        FROM load_stops
-        WHERE load_id = l.id AND stop_type = 'DELIVERY'
-        ORDER BY sequence DESC
-        LIMIT 1
-      ) delivery ON true
-      LEFT JOIN (
-        SELECT load_id,
-               COUNT(*) as attachment_count,
-               array_agg(DISTINCT type) as attachment_types
-        FROM load_attachments
-        GROUP BY load_id
-      ) att ON att.load_id = l.id
-      ${whereClause}
-    `;
-
-    const countResult = await query(`SELECT COUNT(*) as total ${baseSql}`, params);
-    const total = parseInt(countResult.rows[0].total, 10) || 0;
-
-    params.push(pageSize);
-    params.push(offset);
-    const sortMap = {
-      load_number: 'l.load_number',
-      pickup_date: 'pickup.stop_date',
-      rate: 'l.rate',
-      // Sort "Completed" by delivery date when present, then completed_date, then created_at
-      completed_date: 'COALESCE(delivery.stop_date, l.completed_date, l.created_at)',
-      created_at: 'l.created_at'
+    const listSpec = {
+      context: req.context || null,
+      role,
+      user: req.user,
+      status: req.query.status,
+      billingStatus: req.query.billingStatus,
+      driverId: req.query.driverId,
+      brokerId: req.query.brokerId,
+      q: req.query.q,
+      dateFrom: req.query.dateFrom,
+      dateTo: req.query.dateTo,
+      needsReview: req.query.needsReview === 'true',
+      smartFilterQuery: req.query.smart_filter,
+      page: req.query.page,
+      pageSize: req.query.pageSize,
+      sortBy: req.query.sortBy,
+      sortDir: req.query.sortDir,
+      keywordIncludesNotes: false,
+      nlqContains: null
     };
-    const orderBy = sortMap[sortBy] || 'l.created_at';
-    // Put DRAFT loads first when viewing all statuses
-    const draftFirst = !status ? 'CASE WHEN UPPER(l.status::text) = \'DRAFT\' THEN 0 ELSE 1 END, ' : '';
 
-    const dataSql = `
-      SELECT
-        l.id,
-        l.driver_id,
-        l.load_number,
-        UPPER(l.status::text) as status,
-        UPPER(l.billing_status::text) as billing_status,
-        l.rate,
-        l.completed_date,
-        pickup.stop_date as pickup_date,
-        delivery.stop_date as delivery_date,
-        pickup.city as pickup_city,
-        pickup.state as pickup_state,
-        pickup.zip as pickup_zip,
-        delivery.city as delivery_city,
-        delivery.state as delivery_state,
-        delivery.zip as delivery_zip,
-        concat_ws(' ', d.first_name, d.last_name) as driver_name,
-        COALESCE(b.legal_name, b.name, l.broker_name) as broker_name,
-        l.po_number,
-        l.notes,
-        l.operating_entity_id,
-        oe.name as operating_entity_name,
-        COALESCE(att.attachment_count, 0) as attachment_count,
-        COALESCE(att.attachment_types, ARRAY[]::text[]) as attachment_types
-      ${baseSql}
-      ORDER BY ${draftFirst}${orderBy} ${sortDir}
-      LIMIT $${params.length - 1} OFFSET $${params.length}
-    `;
-    const result = await query(dataSql, params);
+    const result = await executeLoadsListQuery(listSpec);
+    if (!result.ok) {
+      const duration = Date.now() - startTime;
+      dtLogger.trackRequest('GET', '/api/loads', result.status, duration);
+      return res.status(result.status).json({ success: false, error: result.error });
+    }
 
     const duration = Date.now() - startTime;
-    dtLogger.trackRequest('GET', '/api/loads', 200, duration, { count: result.rows.length });
+    dtLogger.trackRequest('GET', '/api/loads', 200, duration, { count: result.data.length });
     res.json({
       success: true,
-      data: result.rows || [],
-      meta: { page, pageSize, total }
+      data: result.data,
+      meta: result.meta
     });
   } catch (error) {
     const duration = Date.now() - startTime;
-    const message = (error && error.message) ? String(error.message) : '';
-    const code = error && error.code ? String(error.code) : '';
-    // If loads tables/views are missing (not yet migrated), treat as "no data" instead of failing
-    if (code === '42P01' || message.includes('relation') || message.includes('does not exist')) {
-      dtLogger.trackRequest('GET', '/api/loads', 200, duration, { count: 0 });
-      return res.json({
-        success: true,
-        data: [],
-        meta: { page: 1, pageSize: parseInt(req.query.pageSize || '25', 10) || 25, total: 0 }
-      });
-    }
     dtLogger.error('loads_list_failed', error);
     dtLogger.trackRequest('GET', '/api/loads', 500, duration);
     res.status(500).json({ success: false, error: 'Failed to fetch loads' });
   }
 });
 
+// POST /api/loads/search/nlq — FN-801 + FN-800 (ai-service snake_case filters)
+router.post('/search/nlq', async (req, res) => {
+  const startTime = Date.now();
+  try {
+    const role = (req.user?.role || '').toString().trim().toLowerCase();
+    const body = req.body || {};
+    const qText = (body.query || '').toString().trim();
+    if (!qText) {
+      return res.status(400).json({ success: false, error: 'query is required' });
+    }
+
+    const tenantId = req.context?.tenantId || null;
+    let nlqCacheHit = false;
+    let aiJson = getNlqCached(tenantId, qText);
+    if (aiJson) {
+      nlqCacheHit = true;
+    } else {
+      const aiServiceUrl = process.env.AI_SERVICE_URL || 'http://localhost:4100';
+      const signal =
+        typeof AbortSignal !== 'undefined' && typeof AbortSignal.timeout === 'function'
+          ? AbortSignal.timeout(25000)
+          : undefined;
+      try {
+        const aiRes = await fetch(`${aiServiceUrl}/api/ai/loads/nlq`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ query: qText }),
+          signal
+        });
+        if (!aiRes.ok) {
+          const snippet = await aiRes.text().catch(() => '');
+          dtLogger.error('loads_nlq_ai_http', { status: aiRes.status, snippet: snippet.slice(0, 200) });
+          aiJson = { success: true, fallback: true, meta: { reason: `ai_http_${aiRes.status}` } };
+        } else {
+          aiJson = await aiRes.json();
+        }
+        if (aiJson && aiJson.success !== false) {
+          setNlqCached(tenantId, qText, aiJson);
+        }
+      } catch (fetchErr) {
+        dtLogger.error('loads_nlq_ai_fetch_failed', { err: fetchErr.message || String(fetchErr) });
+        aiJson = { success: true, fallback: true, meta: { reason: 'ai_unreachable' } };
+      }
+    }
+
+    const fallback = !!(aiJson && aiJson.fallback);
+    const aiFilters =
+      !fallback && aiJson && aiJson.filters && typeof aiJson.filters === 'object' ? aiJson.filters : {};
+
+    const page = Math.max(parseInt(body.page ?? '1', 10), 1);
+    const pageSize = Math.min(Math.max(parseInt(body.pageSize ?? '25', 10), 1), 200);
+    const sortBy = (body.sortBy || '').toString().trim().toLowerCase();
+    const defaultSortDir = sortBy === 'pickup_date' ? 'asc' : 'desc';
+    const sortDirRaw = (body.sortDir || defaultSortDir).toString().trim().toLowerCase();
+    const sortDir = sortDirRaw === 'asc' ? 'asc' : 'desc';
+
+    const f = aiFilters;
+    const nlqContains = {};
+    if (!fallback) {
+      const loadNum = f.loadNumberContains ?? f.load_number;
+      if (loadNum) nlqContains.loadNumberContains = loadNum;
+      const brokerN = f.brokerNameContains ?? f.broker_name;
+      if (brokerN) nlqContains.brokerNameContains = brokerN;
+      const driverN = f.driverNameContains ?? f.driver_name;
+      if (driverN) nlqContains.driverNameContains = driverN;
+      const pState = f.pickupState ?? f.pickup_state;
+      if (pState) nlqContains.pickupState = pState;
+      const dState = f.deliveryState ?? f.delivery_state;
+      if (dState) nlqContains.deliveryState = dState;
+      const pCity = f.pickupCity ?? f.pickup_city;
+      if (pCity) nlqContains.pickupCity = pCity;
+      const dCity = f.deliveryCity ?? f.delivery_city;
+      if (dCity) nlqContains.deliveryCity = dCity;
+      const rmin = f.rateMin ?? f.rate_min;
+      if (rmin != null) nlqContains.rateMin = rmin;
+      const rmax = f.rateMax ?? f.rate_max;
+      if (rmax != null) nlqContains.rateMax = rmax;
+    }
+
+    const listSpec = {
+      context: req.context || null,
+      role,
+      user: req.user,
+      status: fallback ? null : f.status || null,
+      billingStatus: fallback ? null : ((f.billingStatus ?? f.billing_status) || null),
+      driverId: fallback ? null : (f.driverId ?? null),
+      brokerId: fallback ? null : (f.brokerId ?? null),
+      q: fallback ? qText : (f.q || null),
+      dateFrom: fallback ? null : ((f.dateFrom ?? f.date_from) || null),
+      dateTo: fallback ? null : ((f.dateTo ?? f.date_to) || null),
+      needsReview: false,
+      smartFilterQuery: '',
+      page,
+      pageSize,
+      sortBy,
+      sortDir,
+      keywordIncludesNotes: fallback,
+      nlqContains: fallback ? null : nlqContains
+    };
+
+    const listResult = await executeLoadsListQuery(listSpec);
+    if (!listResult.ok) {
+      const duration = Date.now() - startTime;
+      dtLogger.trackRequest('POST', '/api/loads/search/nlq', listResult.status, duration);
+      return res.status(listResult.status).json({ success: false, error: listResult.error });
+    }
+
+    const filtersOut = fallback
+      ? { q: qText, keywordIncludesNotes: true }
+      : { ...aiFilters };
+
+    const duration = Date.now() - startTime;
+    dtLogger.trackRequest('POST', '/api/loads/search/nlq', 200, duration, {
+      count: listResult.data.length,
+      nlqCacheHit,
+      fallback
+    });
+
+    res.json({
+      success: true,
+      fallback,
+      filters: filtersOut,
+      loads: listResult.data,
+      meta: { ...listResult.meta, nlqCacheHit }
+    });
+  } catch (error) {
+    const duration = Date.now() - startTime;
+    dtLogger.error('loads_nlq_failed', error);
+    dtLogger.trackRequest('POST', '/api/loads/search/nlq', 500, duration);
+    res.status(500).json({ success: false, error: 'Failed to search loads' });
+  }
+});
+
+/**
+ * @openapi
+ * /api/loads:
+ *   post:
+ *     summary: Create a new load
+ *     description: >
+ *       Creates a new load with stops, driver/truck/trailer assignments, and broker info.
+ *       Requires admin or dispatch role. The load is created with the given status (default NEW)
+ *       and billing status (default PENDING). Both PICKUP and DELIVERY stops are required.
+ *       A load number is auto-generated if not provided (PO number is used as load number when
+ *       available). Load status workflow: DRAFT -> NEW -> DISPATCHED -> EN_ROUTE -> PICKED_UP ->
+ *       IN_TRANSIT -> DELIVERED -> COMPLETED. Loads can also be CANCELLED or TONU at any point.
+ *     tags:
+ *       - Loads
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               status:
+ *                 type: string
+ *                 enum: [DRAFT, NEW, CANCELLED, CANCELED, TONU, DISPATCHED, EN_ROUTE, PICKED_UP, IN_TRANSIT, DELIVERED, COMPLETED]
+ *                 default: NEW
+ *               billingStatus:
+ *                 type: string
+ *                 enum: [PENDING, CANCELLED, CANCELED, BOL_RECEIVED, INVOICED, SENT_TO_FACTORING, FUNDED, PAID]
+ *                 default: PENDING
+ *               loadNumber:
+ *                 type: string
+ *               poNumber:
+ *                 type: string
+ *               driverId:
+ *                 type: string
+ *               truckId:
+ *                 type: string
+ *               trailerId:
+ *                 type: string
+ *               brokerId:
+ *                 type: string
+ *               brokerName:
+ *                 type: string
+ *               dispatcherUserId:
+ *                 type: string
+ *               rate:
+ *                 type: number
+ *               notes:
+ *                 type: string
+ *               completedDate:
+ *                 type: string
+ *                 format: date
+ *               stops:
+ *                 type: array
+ *                 description: Array of stop objects (PICKUP and DELIVERY required)
+ *                 items:
+ *                   type: object
+ *                   properties:
+ *                     stopType:
+ *                       type: string
+ *                       enum: [PICKUP, DELIVERY]
+ *                     date:
+ *                       type: string
+ *                       format: date
+ *                     city:
+ *                       type: string
+ *                     state:
+ *                       type: string
+ *                     zip:
+ *                       type: string
+ *                     address1:
+ *                       type: string
+ *                     address2:
+ *                       type: string
+ *                     sequence:
+ *                       type: integer
+ *     responses:
+ *       201:
+ *         description: Load created successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *                   description: Full load detail with stops, attachments, and trip metrics
+ *       400:
+ *         description: Invalid status, billing status, or stops
+ *       403:
+ *         description: Forbidden - insufficient role or missing operating entity context
+ *       500:
+ *         description: Server error
+ */
 // POST /api/loads (admin, dispatch only; driver cannot create)
 router.post('/', requireRole(['admin', 'dispatch']), async (req, res) => {
   const startTime = Date.now();
@@ -622,7 +1209,7 @@ router.post('/', requireRole(['admin', 'dispatch']), async (req, res) => {
           stopType,
           normalizeNullable(stop.date || stop.stopDate || stop.stop_date),
           normalizeNullable(stop.city),
-          normalizeNullable(stop.state),
+          normalizeStateCode(stop.state),
           normalizeNullable(stop.zip),
           normalizeNullable(stop.address1),
           normalizeNullable(stop.address2),
@@ -633,6 +1220,7 @@ router.post('/', requireRole(['admin', 'dispatch']), async (req, res) => {
 
     await client.query('COMMIT');
     const created = await getLoadDetail(client, loadId);
+    emitLoadEvent(tenantId, 'load:created', created);
     const duration = Date.now() - startTime;
     dtLogger.trackRequest('POST', '/api/loads', 201, duration);
     res.status(201).json({ success: true, data: created });
@@ -765,7 +1353,7 @@ async function processSingleRateConfirmation(file, req, dispatcherUserId) {
       await client.query(
         `INSERT INTO load_stops (load_id, stop_type, stop_date, city, state, zip, address1, sequence)
          VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
-        [loadId, stop.stopType, normalizeNullable(stop.date), normalizeNullable(stop.city), normalizeNullable(stop.state), normalizeNullable(stop.zip), normalizeNullable(stop.address1 || null), stop.sequence]
+        [loadId, stop.stopType, normalizeNullable(stop.date), normalizeNullable(stop.city), normalizeStateCode(stop.state), normalizeNullable(stop.zip), normalizeNullable(stop.address1 || null), stop.sequence]
       );
     }
 
@@ -776,6 +1364,20 @@ async function processSingleRateConfirmation(file, req, dispatcherUserId) {
   } finally {
     // Always release the client back to the pool before the R2 upload
     try { client.release(); } catch (_) {}
+  }
+
+  // Step 2b: Persist AI confidence payload (FN-817). Separate UPDATE so a
+  // missing `ai_metadata` column (migration lag) does not roll back the load.
+  try {
+    const aiMetadata = buildAiMetadata(data, file.originalname || null);
+    if (aiMetadata) {
+      await query(
+        'UPDATE loads SET ai_metadata = $1::jsonb WHERE id = $2',
+        [JSON.stringify(aiMetadata), loadId]
+      );
+    }
+  } catch (metaErr) {
+    dtLogger.warn('loads_ai_metadata_write_failed', { loadId, error: metaErr?.message });
   }
 
   // Step 3: Upload PDF to R2 — DB connection already returned to pool
@@ -799,6 +1401,66 @@ async function processSingleRateConfirmation(file, req, dispatcherUserId) {
   return { success: true, data: created, filename: file.originalname };
 }
 
+/**
+ * @openapi
+ * /api/loads/bulk-rate-confirmations:
+ *   post:
+ *     summary: Bulk upload rate confirmation PDFs to create draft loads
+ *     description: >
+ *       Accepts up to 10 PDF rate confirmation files. Each PDF is processed via AI extraction
+ *       to create a new load in DRAFT status with PENDING billing status. The extracted data
+ *       includes broker, rate, pickup/delivery stops, and PO/load numbers. Each file is uploaded
+ *       to R2 storage and linked as a RATE_CONFIRMATION attachment. Files are processed
+ *       concurrently for performance. Requires admin or dispatch role.
+ *     tags:
+ *       - Loads
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - files
+ *             properties:
+ *               files:
+ *                 type: array
+ *                 items:
+ *                   type: string
+ *                   format: binary
+ *                 description: PDF files (max 10, max 15 MB each)
+ *     responses:
+ *       200:
+ *         description: Bulk upload results (each file reports success or failure individually)
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 results:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       success:
+ *                         type: boolean
+ *                       data:
+ *                         type: object
+ *                       filename:
+ *                         type: string
+ *                       error:
+ *                         type: string
+ *       400:
+ *         description: No files uploaded, too many files, or non-PDF files
+ *       403:
+ *         description: Forbidden - insufficient role
+ *       500:
+ *         description: Server error
+ */
 // POST /api/loads/bulk-rate-confirmations (admin, dispatch only; max 10 PDFs)
 router.post('/bulk-rate-confirmations', requireRole(['admin', 'dispatch']), upload.array('files', BULK_MAX_FILES), async (req, res) => {
   const startTime = Date.now();
@@ -840,6 +1502,105 @@ router.post('/bulk-rate-confirmations', requireRole(['admin', 'dispatch']), uplo
   }
 });
 
+/**
+ * @openapi
+ * /api/loads/{id}/approve-draft:
+ *   patch:
+ *     summary: Approve a draft load and transition to DISPATCHED
+ *     description: >
+ *       Transitions a DRAFT load to DISPATCHED status. Optionally accepts load field updates
+ *       (rate, broker, driver, stops, notes, etc.) to persist form changes and transition
+ *       status in a single transaction. Only DRAFT loads can be approved. This is a key
+ *       status workflow step: DRAFT -> DISPATCHED. Requires admin or dispatch role.
+ *     tags:
+ *       - Loads
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Load ID
+ *     requestBody:
+ *       required: false
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               loadNumber:
+ *                 type: string
+ *               billingStatus:
+ *                 type: string
+ *                 enum: [PENDING, CANCELLED, CANCELED, BOL_RECEIVED, INVOICED, SENT_TO_FACTORING, FUNDED, PAID]
+ *               dispatcherUserId:
+ *                 type: string
+ *               driverId:
+ *                 type: string
+ *               truckId:
+ *                 type: string
+ *               trailerId:
+ *                 type: string
+ *               brokerId:
+ *                 type: string
+ *               brokerName:
+ *                 type: string
+ *               poNumber:
+ *                 type: string
+ *               rate:
+ *                 type: number
+ *               notes:
+ *                 type: string
+ *               completedDate:
+ *                 type: string
+ *                 format: date
+ *               stops:
+ *                 type: array
+ *                 items:
+ *                   type: object
+ *                   properties:
+ *                     stopType:
+ *                       type: string
+ *                       enum: [PICKUP, DELIVERY]
+ *                     date:
+ *                       type: string
+ *                       format: date
+ *                     city:
+ *                       type: string
+ *                     state:
+ *                       type: string
+ *                     zip:
+ *                       type: string
+ *                     address1:
+ *                       type: string
+ *                     address2:
+ *                       type: string
+ *                     sequence:
+ *                       type: integer
+ *     responses:
+ *       200:
+ *         description: Load approved and transitioned to DISPATCHED
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *                   description: Full load detail with stops, attachments, and trip metrics
+ *       400:
+ *         description: Load is not in DRAFT status, or invalid billing status / stops
+ *       403:
+ *         description: Forbidden - insufficient role
+ *       404:
+ *         description: Load not found
+ *       500:
+ *         description: Server error
+ */
 // PATCH /api/loads/:id/approve-draft (admin, dispatch only; DRAFT -> DISPATCHED)
 // Accepts optional body with load fields (rate, broker, stops, driver, notes, etc.)
 // to persist form changes AND transition status in a single transaction.
@@ -933,7 +1694,7 @@ router.patch('/:id/approve-draft', requireRole(['admin', 'dispatch']), async (re
               stopType,
               normalizeNullable(stopDate),
               normalizeNullable(stop.city),
-              normalizeNullable(stop.state),
+              normalizeStateCode(stop.state),
               normalizeNullable(stop.zip),
               normalizeNullable(stop.address1),
               normalizeNullable(stop.address2),
@@ -975,6 +1736,15 @@ router.patch('/:id/approve-draft', requireRole(['admin', 'dispatch']), async (re
 
     await client.query('COMMIT');
     const data = await getLoadDetail(client, req.params.id);
+    // FN-811: DRAFT → DISPATCHED is always a status transition
+    const tenantId = req.context?.tenantId || null;
+    emitLoadEvent(tenantId, 'load:status_changed', {
+      id: req.params.id,
+      previousStatus: 'DRAFT',
+      status: 'DISPATCHED',
+      load: data
+    });
+    emitLoadEvent(tenantId, 'load:updated', data);
     res.json({ success: true, data });
   } catch (error) {
     await client.query('ROLLBACK');
@@ -985,6 +1755,310 @@ router.patch('/:id/approve-draft', requireRole(['admin', 'dispatch']), async (re
   }
 });
 
+/**
+ * @openapi
+ * /api/loads/bulk-update:
+ *   post:
+ *     summary: Bulk-update multiple loads transactionally (FN-768)
+ *     description: >
+ *       Apply the same field changes to many loads in a single transaction.
+ *       All loads must belong to the caller's tenant/operating entity; any
+ *       that do not are reported in `notFound` and the transaction is rolled
+ *       back. Supported fields: `status`, `billingStatus`, `driverId`, `truckId`.
+ *     tags:
+ *       - Loads
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [ids, changes]
+ *             properties:
+ *               ids:
+ *                 type: array
+ *                 items: { type: string }
+ *                 minItems: 1
+ *                 maxItems: 500
+ *               changes:
+ *                 type: object
+ *                 properties:
+ *                   status:         { type: string }
+ *                   billingStatus:  { type: string }
+ *                   driverId:       { type: string, nullable: true }
+ *                   truckId:        { type: string, nullable: true }
+ *     responses:
+ *       200:
+ *         description: All loads updated
+ *       400:
+ *         description: Invalid payload (empty ids, unknown fields, invalid enum value, missing loads)
+ *       403:
+ *         description: Forbidden — insufficient role
+ *       500:
+ *         description: Server error
+ */
+// POST /api/loads/bulk-update — FN-768 (admin, dispatch only; transactional)
+router.post('/bulk-update', requireRole(['admin', 'dispatch']), async (req, res) => {
+  const body = req.body || {};
+  const ids = Array.isArray(body.ids) ? body.ids.filter((id) => typeof id === 'string' && id.trim()) : [];
+  const changes = body.changes && typeof body.changes === 'object' ? body.changes : null;
+
+  if (!ids.length) {
+    return res.status(400).json({ success: false, error: 'ids must be a non-empty array' });
+  }
+  if (ids.length > 500) {
+    return res.status(400).json({ success: false, error: 'At most 500 ids per request' });
+  }
+  if (!changes || !Object.keys(changes).length) {
+    return res.status(400).json({ success: false, error: 'changes must be a non-empty object' });
+  }
+
+  // Whitelist of allowed bulk-editable columns.
+  const fieldMap = {
+    status: 'status',
+    billingStatus: 'billing_status',
+    driverId: 'driver_id',
+    truckId: 'truck_id',
+  };
+
+  const status = changes.status != null ? normalizeEnum(changes.status) : null;
+  const billingStatus = changes.billingStatus != null ? normalizeEnum(changes.billingStatus) : null;
+  if (status != null && !LOAD_STATUSES.includes(status)) {
+    return res.status(400).json({ success: false, error: 'Invalid status' });
+  }
+  if (billingStatus != null && !BILLING_STATUSES.includes(billingStatus)) {
+    return res.status(400).json({ success: false, error: 'Invalid billing status' });
+  }
+
+  const updates = [];
+  const values = [];
+  let idx = 1;
+  for (const key of Object.keys(fieldMap)) {
+    if (changes[key] === undefined) { continue; }
+    const column = fieldMap[key];
+    let value;
+    if (key === 'status') { value = status; }
+    else if (key === 'billingStatus') { value = billingStatus; }
+    else { value = normalizeNullable(changes[key]); }
+    updates.push(`${column} = $${idx}`);
+    values.push(value);
+    idx += 1;
+  }
+  if (!updates.length) {
+    return res.status(400).json({ success: false, error: 'No editable fields in changes. Allowed: status, billingStatus, driverId, truckId' });
+  }
+
+  const tenantId = req.context?.tenantId || null;
+  const operatingEntityId = req.context?.operatingEntityId || null;
+
+  const client = await getClient();
+  try {
+    await client.query('BEGIN');
+
+    // Verify every id belongs to this tenant/operating entity before writing.
+    const idsParamIdx = idx;
+    const verifyRes = await client.query(
+      `SELECT id FROM loads
+         WHERE id = ANY($${idsParamIdx}::uuid[])
+           AND tenant_id = $${idsParamIdx + 1}
+           AND operating_entity_id = $${idsParamIdx + 2}`,
+      [ids, tenantId, operatingEntityId]
+    );
+    const foundIds = new Set(verifyRes.rows.map((r) => r.id));
+    const notFound = ids.filter((id) => !foundIds.has(id));
+    if (notFound.length) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({
+        success: false,
+        error: `Some loads were not found or belong to a different operating entity: ${notFound.join(', ')}`,
+        notFound,
+      });
+    }
+
+    // Apply the update to the full set in one statement — either every row
+    // changes or none do.
+    await client.query(
+      `UPDATE loads
+         SET ${updates.join(', ')}, updated_at = CURRENT_TIMESTAMP
+       WHERE id = ANY($${idsParamIdx}::uuid[])
+         AND tenant_id = $${idsParamIdx + 1}
+         AND operating_entity_id = $${idsParamIdx + 2}`,
+      [...values, ids, tenantId, operatingEntityId]
+    );
+
+    // Mirror the single-PUT behaviour: DELIVERED/COMPLETED auto-fills completed_date.
+    if (status === 'DELIVERED' || status === 'COMPLETED') {
+      await client.query(
+        `UPDATE loads
+           SET completed_date = COALESCE(completed_date, delivery_date, CURRENT_DATE),
+               updated_at = CURRENT_TIMESTAMP
+         WHERE id = ANY($1::uuid[]) AND completed_date IS NULL`,
+        [ids]
+      );
+    }
+
+    await client.query('COMMIT');
+    // FN-811: emit one load:updated per affected id; emit load:status_changed
+    // too when the bulk op changed status (full payload not fetched here to
+    // avoid N round-trips — subscribers that need detail refetch on event).
+    for (const id of ids) {
+      emitLoadEvent(tenantId, 'load:updated', { id, changes });
+      if (status) {
+        emitLoadEvent(tenantId, 'load:status_changed', { id, status });
+      }
+    }
+    res.json({ success: true, updated: ids.length });
+  } catch (error) {
+    await client.query('ROLLBACK');
+    dtLogger.error('loads_bulk_update_failed', error, { ids, changes });
+    res.status(500).json({ success: false, error: 'Failed to bulk-update loads' });
+  } finally {
+    client.release();
+  }
+});
+
+/**
+ * @openapi
+ * /api/loads/bulk-delete-drafts:
+ *   post:
+ *     summary: Delete many DRAFT loads transactionally (FN-768)
+ *     description: >
+ *       Deletes only loads in DRAFT status. If any id refers to a load that is
+ *       missing, belongs to a different tenant, or is past DRAFT, the entire
+ *       transaction is rolled back and the offending ids are returned.
+ *     tags:
+ *       - Loads
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [ids]
+ *             properties:
+ *               ids:
+ *                 type: array
+ *                 items: { type: string }
+ *                 minItems: 1
+ *                 maxItems: 500
+ *     responses:
+ *       200:
+ *         description: All selected drafts deleted
+ *       400:
+ *         description: At least one id is not a DRAFT (or not found)
+ *       403:
+ *         description: Forbidden
+ *       500:
+ *         description: Server error
+ */
+// POST /api/loads/bulk-delete-drafts — FN-768 (admin, dispatch only; DRAFT only)
+router.post('/bulk-delete-drafts', requireRole(['admin', 'dispatch']), async (req, res) => {
+  const body = req.body || {};
+  const ids = Array.isArray(body.ids) ? body.ids.filter((id) => typeof id === 'string' && id.trim()) : [];
+  if (!ids.length) {
+    return res.status(400).json({ success: false, error: 'ids must be a non-empty array' });
+  }
+  if (ids.length > 500) {
+    return res.status(400).json({ success: false, error: 'At most 500 ids per request' });
+  }
+
+  const tenantId = req.context?.tenantId || null;
+  const operatingEntityId = req.context?.operatingEntityId || null;
+
+  const client = await getClient();
+  try {
+    await client.query('BEGIN');
+
+    const check = await client.query(
+      `SELECT id, status FROM loads
+         WHERE id = ANY($1::uuid[])
+           AND tenant_id = $2
+           AND operating_entity_id = $3`,
+      [ids, tenantId, operatingEntityId]
+    );
+    const foundIds = new Set(check.rows.map((r) => r.id));
+    const notFound = ids.filter((id) => !foundIds.has(id));
+    const nonDraft = check.rows
+      .filter((r) => normalizeEnum(r.status) !== 'DRAFT')
+      .map((r) => r.id);
+
+    if (notFound.length || nonDraft.length) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({
+        success: false,
+        error: 'Only DRAFT loads can be bulk-deleted',
+        notFound,
+        nonDraft,
+      });
+    }
+
+    await client.query(
+      `DELETE FROM loads
+         WHERE id = ANY($1::uuid[])
+           AND tenant_id = $2
+           AND operating_entity_id = $3
+           AND status = 'DRAFT'`,
+      [ids, tenantId, operatingEntityId]
+    );
+
+    await client.query('COMMIT');
+    // FN-811: emit one load:deleted per affected id
+    for (const id of ids) {
+      emitLoadEvent(tenantId, 'load:deleted', { id });
+    }
+    res.json({ success: true, deleted: ids.length });
+  } catch (error) {
+    await client.query('ROLLBACK');
+    dtLogger.error('loads_bulk_delete_drafts_failed', error, { ids });
+    res.status(500).json({ success: false, error: 'Failed to bulk-delete drafts' });
+  } finally {
+    client.release();
+  }
+});
+
+/**
+ * @openapi
+ * /api/loads/{id}:
+ *   delete:
+ *     summary: Delete a load
+ *     description: >
+ *       Permanently deletes a load. Only loads in DRAFT or NEW status can be deleted.
+ *       Loads that have progressed beyond NEW (e.g., DISPATCHED, IN_TRANSIT, DELIVERED)
+ *       cannot be deleted and should be CANCELLED instead. Requires admin or dispatch role.
+ *     tags:
+ *       - Loads
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Load ID
+ *     responses:
+ *       200:
+ *         description: Load deleted successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *       400:
+ *         description: Load is not in DRAFT or NEW status
+ *       403:
+ *         description: Forbidden - insufficient role
+ *       404:
+ *         description: Load not found
+ *       500:
+ *         description: Server error
+ */
 // DELETE /api/loads/:id (admin, dispatch only; only NEW or DRAFT loads)
 router.delete('/:id', requireRole(['admin', 'dispatch']), async (req, res) => {
   try {
@@ -997,7 +2071,10 @@ router.delete('/:id', requireRole(['admin', 'dispatch']), async (req, res) => {
     if (status !== 'DRAFT' && status !== 'NEW') {
       return res.status(400).json({ success: false, error: 'Only New or Draft loads can be deleted' });
     }
-    await query('DELETE FROM loads WHERE id = $1 AND tenant_id = $2 AND operating_entity_id = $3', [req.params.id, req.context?.tenantId || null, req.context?.operatingEntityId || null]);
+    const tenantId = req.context?.tenantId || null;
+    await query('DELETE FROM loads WHERE id = $1 AND tenant_id = $2 AND operating_entity_id = $3', [req.params.id, tenantId, req.context?.operatingEntityId || null]);
+    // FN-811: emit load:deleted after successful delete
+    emitLoadEvent(tenantId, 'load:deleted', { id: req.params.id });
     res.json({ success: true });
   } catch (error) {
     dtLogger.error('loads_delete_failed', error, { loadId: req.params.id });
@@ -1005,8 +2082,947 @@ router.delete('/:id', requireRole(['admin', 'dispatch']), async (req, res) => {
   }
 });
 
+// ─── FN-793: AI insights + intelligence-panel metrics ────────────────────────
+
+const AI_INSIGHTS_PERIODS = ['today', 'week', 'month', 'all'];
+const IN_TRANSIT_STATUSES = ['EN_ROUTE', 'PICKED_UP', 'IN_TRANSIT', 'DISPATCHED'];
+const DELIVERED_STATUSES = ['DELIVERED', 'COMPLETED'];
+const EXCLUDED_FROM_OVERDUE = ['DELIVERED', 'COMPLETED', 'CANCELLED', 'CANCELED', 'DRAFT', 'TONU'];
+
+function computeInsightsWindow(period) {
+  const startOfTodayUtc = new Date();
+  startOfTodayUtc.setUTCHours(0, 0, 0, 0);
+  const msDay = 24 * 60 * 60 * 1000;
+  const toIso = (d) => d.toISOString().slice(0, 10);
+
+  if (period === 'today') {
+    const from = startOfTodayUtc;
+    const to = startOfTodayUtc;
+    const prevFrom = new Date(from.getTime() - msDay);
+    const prevTo = new Date(to.getTime() - msDay);
+    return { from: toIso(from), to: toIso(to), prevFrom: toIso(prevFrom), prevTo: toIso(prevTo), days: 1 };
+  }
+  if (period === 'week') {
+    const from = new Date(startOfTodayUtc.getTime() - 6 * msDay);
+    const to = startOfTodayUtc;
+    const prevFrom = new Date(from.getTime() - 7 * msDay);
+    const prevTo = new Date(to.getTime() - 7 * msDay);
+    return { from: toIso(from), to: toIso(to), prevFrom: toIso(prevFrom), prevTo: toIso(prevTo), days: 7 };
+  }
+  if (period === 'month') {
+    const from = new Date(startOfTodayUtc.getTime() - 29 * msDay);
+    const to = startOfTodayUtc;
+    const prevFrom = new Date(from.getTime() - 30 * msDay);
+    const prevTo = new Date(to.getTime() - 30 * msDay);
+    return { from: toIso(from), to: toIso(to), prevFrom: toIso(prevFrom), prevTo: toIso(prevTo), days: 30 };
+  }
+  // 'all'
+  return { from: null, to: null, prevFrom: null, prevTo: null, days: null };
+}
+
+function deltaPct(current, previous) {
+  const cur = Number(current) || 0;
+  const prev = Number(previous) || 0;
+  if (prev === 0) return cur === 0 ? 0 : null;
+  return Number((((cur - prev) / prev) * 100).toFixed(2));
+}
+
+/**
+ * @openapi
+ * /api/loads/ai-insights:
+ *   get:
+ *     summary: Intelligence-panel metrics and rule-based insights
+ *     description: >
+ *       Returns the 4 dashboard metric cards (gross, delivered, in_transit,
+ *       needs_attention) with previous-period comparison plus a list of
+ *       rule-based insights (drafts_ready, overdue, rate_anomaly,
+ *       missing_documents, driver_idle, high_margin, low_margin). Queries
+ *       are tenant + operating-entity scoped via req.context.
+ *     tags:
+ *       - Loads
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: period
+ *         schema:
+ *           type: string
+ *           enum: [today, week, month, all]
+ *         description: Time window for metrics and period-scoped insights.
+ *     responses:
+ *       200:
+ *         description: Metrics + insights payload
+ *       400:
+ *         description: Invalid period
+ *       500:
+ *         description: Server error
+ */
+// GET /api/loads/ai-insights?period=today|week|month|all  (FN-793)
+router.get('/ai-insights', requireRole(['admin', 'dispatch']), async (req, res) => {
+  try {
+    const periodRaw = (req.query.period || 'week').toString().trim().toLowerCase();
+    const period = AI_INSIGHTS_PERIODS.includes(periodRaw) ? periodRaw : null;
+    if (!period) {
+      return res.status(400).json({ success: false, error: `Invalid period; expected one of ${AI_INSIGHTS_PERIODS.join(', ')}` });
+    }
+
+    const { from, to, prevFrom, prevTo } = computeInsightsWindow(period);
+
+    const tenantId = req.context?.tenantId || null;
+    const operatingEntityId = req.context?.operatingEntityId || null;
+
+    // ── Shared scope args: $1 = tenantId, $2 = operatingEntityId ────────────
+    // Every query below binds these two first; additional $ positions follow
+    // per query. Null scope args mean the caller is unscoped (dev/admin).
+    const scopeSql = `
+      (l.tenant_id = $1 OR $1::uuid IS NULL)
+      AND (l.operating_entity_id = $2 OR $2::uuid IS NULL)
+    `;
+
+    // Effective "period anchor date" for a load: completed_date (for delivered)
+    // or first-pickup stop_date (otherwise) or created_at.
+    const effectiveDateSql = `
+      COALESCE(
+        l.completed_date,
+        (SELECT stop_date FROM load_stops s WHERE s.load_id = l.id AND s.stop_type = 'PICKUP' ORDER BY s.sequence ASC LIMIT 1)::date,
+        l.created_at::date
+      )
+    `;
+
+    const metricsSql = `
+      SELECT
+        COALESCE(SUM(
+          CASE WHEN UPPER(l.status::text) = ANY($3::text[])
+                AND ($4::date IS NULL OR ${effectiveDateSql} BETWEEN $4::date AND $5::date)
+               THEN l.rate ELSE 0 END
+        ), 0) AS gross,
+        COALESCE(SUM(
+          CASE WHEN UPPER(l.status::text) = ANY($3::text[])
+                AND ($6::date IS NULL OR ${effectiveDateSql} BETWEEN $6::date AND $7::date)
+               THEN l.rate ELSE 0 END
+        ), 0) AS gross_prev,
+        COUNT(*) FILTER (
+          WHERE UPPER(l.status::text) = ANY($3::text[])
+            AND ($4::date IS NULL OR ${effectiveDateSql} BETWEEN $4::date AND $5::date)
+        ) AS delivered,
+        COUNT(*) FILTER (
+          WHERE UPPER(l.status::text) = ANY($3::text[])
+            AND ($6::date IS NULL OR ${effectiveDateSql} BETWEEN $6::date AND $7::date)
+        ) AS delivered_prev,
+        COUNT(*) FILTER (
+          WHERE UPPER(l.status::text) = ANY($8::text[])
+            AND ($4::date IS NULL OR ${effectiveDateSql} BETWEEN $4::date AND $5::date)
+        ) AS in_transit,
+        COUNT(*) FILTER (
+          WHERE UPPER(l.status::text) = ANY($8::text[])
+            AND ($6::date IS NULL OR ${effectiveDateSql} BETWEEN $6::date AND $7::date)
+        ) AS in_transit_prev
+      FROM loads l
+      WHERE ${scopeSql}
+    `;
+    const metricsParams = [
+      tenantId, operatingEntityId,
+      DELIVERED_STATUSES,
+      from, to,
+      prevFrom, prevTo,
+      IN_TRANSIT_STATUSES
+    ];
+
+    // ── 1. drafts_ready: DRAFT + needs_review older than 2h ──────────────────
+    const draftsSql = `
+      SELECT COUNT(*)::int AS count
+      FROM loads l
+      WHERE ${scopeSql}
+        AND UPPER(l.status::text) = 'DRAFT'
+        AND l.needs_review = true
+        AND l.created_at < NOW() - INTERVAL '2 hours'
+    `;
+
+    // ── 2. overdue: past delivery date AND not delivered/cancelled ──────────
+    const overdueSql = `
+      SELECT COUNT(*)::int AS count
+      FROM loads l
+      LEFT JOIN LATERAL (
+        SELECT stop_date
+        FROM load_stops
+        WHERE load_id = l.id AND stop_type = 'DELIVERY'
+        ORDER BY sequence DESC
+        LIMIT 1
+      ) delivery ON true
+      WHERE ${scopeSql}
+        AND UPPER(l.status::text) <> ALL($3::text[])
+        AND delivery.stop_date IS NOT NULL
+        AND delivery.stop_date::date < NOW()::date
+    `;
+    const overdueParams = [tenantId, operatingEntityId, EXCLUDED_FROM_OVERDUE];
+
+    // ── 3. rate_anomaly: rate < 70% of broker's 30d avg (min 3 prior loads) ─
+    const rateAnomalySql = `
+      WITH scoped AS (
+        SELECT l.id, l.broker_id, l.rate, l.created_at
+        FROM loads l
+        WHERE ${scopeSql}
+          AND l.broker_id IS NOT NULL
+          AND l.rate IS NOT NULL
+          AND l.rate > 0
+          AND ($3::date IS NULL OR l.created_at::date BETWEEN $3::date AND $4::date)
+      ),
+      broker_stats AS (
+        SELECT l.broker_id, AVG(l.rate) AS avg_rate, COUNT(*) AS n
+        FROM loads l
+        WHERE ${scopeSql}
+          AND l.broker_id IS NOT NULL
+          AND l.rate IS NOT NULL
+          AND l.rate > 0
+          AND l.created_at >= NOW() - INTERVAL '30 days'
+        GROUP BY l.broker_id
+        HAVING COUNT(*) >= 3
+      )
+      SELECT COUNT(*)::int AS count
+      FROM scoped s
+      JOIN broker_stats bs ON bs.broker_id = s.broker_id
+      WHERE s.rate < (bs.avg_rate * 0.7)
+    `;
+    const rateAnomalyParams = [tenantId, operatingEntityId, from, to];
+
+    // ── 4. missing_documents: delivered without POD OR picked-up without BOL ─
+    const missingDocsSql = `
+      SELECT COUNT(*)::int AS count
+      FROM loads l
+      WHERE ${scopeSql}
+        AND (
+          (UPPER(l.status::text) = 'DELIVERED'
+           AND NOT EXISTS (
+             SELECT 1 FROM load_attachments la
+             WHERE la.load_id = l.id AND la.type = 'PROOF_OF_DELIVERY'
+           ))
+          OR (UPPER(l.status::text) IN ('PICKED_UP', 'IN_TRANSIT', 'EN_ROUTE')
+              AND NOT EXISTS (
+                SELECT 1 FROM load_attachments la
+                WHERE la.load_id = l.id AND la.type = 'BOL'
+              ))
+        )
+    `;
+
+    // ── 5. driver_idle: active drivers with no non-draft load in last 24h ──
+    const driverIdleSql = `
+      SELECT COUNT(*)::int AS count
+      FROM drivers d
+      WHERE (d.tenant_id = $1 OR $1::uuid IS NULL)
+        AND (d.operating_entity_id = $2 OR $2::uuid IS NULL)
+        AND LOWER(COALESCE(d.status, '')) = 'active'
+        AND NOT EXISTS (
+          SELECT 1
+          FROM loads l
+          WHERE l.driver_id = d.id
+            AND (l.tenant_id = $1 OR $1::uuid IS NULL)
+            AND (l.operating_entity_id = $2 OR $2::uuid IS NULL)
+            AND UPPER(l.status::text) NOT IN ('DRAFT', 'CANCELLED', 'CANCELED', 'DELIVERED', 'COMPLETED', 'TONU')
+            AND l.updated_at >= NOW() - INTERVAL '24 hours'
+        )
+    `;
+
+    // ── 6. high_margin / low_margin: fuel ratio on period-window loads ──────
+    // Margin proxy: fuel_total / rate. Low margin if >35%; high margin if <15%.
+    // Only considers loads that have at least one matched fuel transaction.
+    const marginSql = `
+      WITH load_fuel AS (
+        SELECT l.id, l.rate,
+               COALESCE(SUM(ft.amount), 0) AS fuel_total
+        FROM loads l
+        LEFT JOIN fuel_transactions ft
+          ON ft.load_id = l.id
+         AND (ft.tenant_id = $1 OR $1::uuid IS NULL)
+        WHERE ${scopeSql}
+          AND l.rate IS NOT NULL
+          AND l.rate > 0
+          AND ($3::date IS NULL OR ${effectiveDateSql} BETWEEN $3::date AND $4::date)
+        GROUP BY l.id, l.rate
+        HAVING COALESCE(SUM(ft.amount), 0) > 0
+      )
+      SELECT
+        COUNT(*) FILTER (WHERE fuel_total / rate > 0.35)::int AS low_margin_count,
+        COUNT(*) FILTER (WHERE fuel_total / rate < 0.15)::int AS high_margin_count
+      FROM load_fuel
+    `;
+    const marginParams = [tenantId, operatingEntityId, from, to];
+
+    // Run queries. Margin query depends on fuel_transactions being present —
+    // gracefully degrade if the table isn't available yet.
+    const [
+      metricsRes,
+      draftsRes,
+      overdueRes,
+      rateAnomalyRes,
+      missingDocsRes,
+      driverIdleRes,
+      marginRes
+    ] = await Promise.all([
+      query(metricsSql, metricsParams),
+      query(draftsSql, [tenantId, operatingEntityId]),
+      query(overdueSql, overdueParams),
+      query(rateAnomalySql, rateAnomalyParams),
+      query(missingDocsSql, [tenantId, operatingEntityId]),
+      query(driverIdleSql, [tenantId, operatingEntityId]),
+      query(marginSql, marginParams).catch((err) => {
+        dtLogger.warn?.('loads_ai_insights_margin_degraded', { message: err.message });
+        return { rows: [{ low_margin_count: 0, high_margin_count: 0 }] };
+      })
+    ]);
+
+    const m = metricsRes.rows[0] || {};
+    const draftsCount = draftsRes.rows[0]?.count || 0;
+    const overdueCount = overdueRes.rows[0]?.count || 0;
+    const rateAnomalyCount = rateAnomalyRes.rows[0]?.count || 0;
+    const missingDocsCount = missingDocsRes.rows[0]?.count || 0;
+    const driverIdleCount = driverIdleRes.rows[0]?.count || 0;
+    const lowMarginCount = marginRes.rows[0]?.low_margin_count || 0;
+    const highMarginCount = marginRes.rows[0]?.high_margin_count || 0;
+
+    const needsAttention = draftsCount + overdueCount + missingDocsCount;
+
+    const insights = [];
+    if (draftsCount > 0) {
+      insights.push({
+        type: 'drafts_ready',
+        severity: 'info',
+        count: draftsCount,
+        message: `${draftsCount} AI draft${draftsCount === 1 ? '' : 's'} ready for review`,
+        action_url: '/loads?needsReview=true',
+        action_label: 'Review drafts'
+      });
+    }
+    if (overdueCount > 0) {
+      insights.push({
+        type: 'overdue',
+        severity: 'critical',
+        count: overdueCount,
+        message: `${overdueCount} load${overdueCount === 1 ? '' : 's'} past delivery date`,
+        action_url: '/loads?status=IN_TRANSIT',
+        action_label: 'View overdue'
+      });
+    }
+    if (rateAnomalyCount > 0) {
+      insights.push({
+        type: 'rate_anomaly',
+        severity: 'warn',
+        count: rateAnomalyCount,
+        message: `${rateAnomalyCount} load${rateAnomalyCount === 1 ? '' : 's'} priced >30% below broker average`,
+        action_url: '/loads',
+        action_label: 'Review rates'
+      });
+    }
+    if (missingDocsCount > 0) {
+      insights.push({
+        type: 'missing_documents',
+        severity: 'warn',
+        count: missingDocsCount,
+        message: `${missingDocsCount} load${missingDocsCount === 1 ? '' : 's'} missing POD or BOL`,
+        action_url: '/loads',
+        action_label: 'Upload documents'
+      });
+    }
+    if (driverIdleCount > 0) {
+      insights.push({
+        type: 'driver_idle',
+        severity: 'info',
+        count: driverIdleCount,
+        message: `${driverIdleCount} driver${driverIdleCount === 1 ? '' : 's'} idle >24h`,
+        action_url: '/drivers?status=available',
+        action_label: 'Assign load'
+      });
+    }
+    if (highMarginCount > 0) {
+      insights.push({
+        type: 'high_margin',
+        severity: 'info',
+        count: highMarginCount,
+        message: `${highMarginCount} high-margin load${highMarginCount === 1 ? '' : 's'} (fuel < 15% of rate)`,
+        action_url: '/loads',
+        action_label: 'View high-margin'
+      });
+    }
+    if (lowMarginCount > 0) {
+      insights.push({
+        type: 'low_margin',
+        severity: 'warn',
+        count: lowMarginCount,
+        message: `${lowMarginCount} low-margin load${lowMarginCount === 1 ? '' : 's'} (fuel > 35% of rate)`,
+        action_url: '/loads',
+        action_label: 'Review margin'
+      });
+    }
+
+    const gross = Number(m.gross) || 0;
+    const grossPrev = Number(m.gross_prev) || 0;
+    const delivered = Number(m.delivered) || 0;
+    const deliveredPrev = Number(m.delivered_prev) || 0;
+    const inTransit = Number(m.in_transit) || 0;
+    const inTransitPrev = Number(m.in_transit_prev) || 0;
+
+    return res.json({
+      success: true,
+      period,
+      window: { from, to, prev_from: prevFrom, prev_to: prevTo },
+      metrics: {
+        gross: { value: gross, previous: grossPrev, delta_pct: deltaPct(gross, grossPrev) },
+        delivered: { value: delivered, previous: deliveredPrev, delta_pct: deltaPct(delivered, deliveredPrev) },
+        in_transit: { value: inTransit, previous: inTransitPrev, delta_pct: deltaPct(inTransit, inTransitPrev) },
+        needs_attention: { value: needsAttention, previous: null, delta_pct: null }
+      },
+      insights
+    });
+  } catch (error) {
+    dtLogger.error('loads_ai_insights_failed', error, { period: req.query.period });
+    res.status(500).json({ success: false, error: 'Failed to compute insights' });
+  }
+});
+
+/**
+ * @openapi
+ * /api/loads/smart-filter-counts:
+ *   get:
+ *     summary: Aggregated counts for smart filter chips (FN-797)
+ *     description: >
+ *       Single round-trip endpoint returning per-chip counts for the pre-built
+ *       smart filter chips shown above the loads table. Tenant- and
+ *       operating-entity-scoped. Driver role is scoped to their own loads.
+ *       Chip definitions:
+ *         - ai_drafts: loads flagged needs_review with status DRAFT
+ *         - overdue: last delivery stop_date (or completed_date) < today AND
+ *           status not in (DELIVERED, COMPLETED, CANCELLED, CANCELED, TONU)
+ *         - high_value: rate above tenant's 75th-percentile rate computed
+ *           over loads created in the last 30 days (rate > 0)
+ *         - from_email: loads created from an inbound email (inbound_emails row)
+ *         - missing_docs: delivered/completed without POD, or picked-up/in-transit without BOL
+ *         - my_drafts: DRAFT loads where dispatcher_user_id = current user
+ *     tags:
+ *       - Loads
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Per-chip counts
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     ai_drafts:    { type: integer }
+ *                     overdue:      { type: integer }
+ *                     high_value:   { type: integer }
+ *                     from_email:   { type: integer }
+ *                     missing_docs: { type: integer }
+ *                     my_drafts:    { type: integer }
+ *       403:
+ *         description: Forbidden - driver not linked
+ *       500:
+ *         description: Server error
+ */
+// GET /api/loads/smart-filter-counts — must be registered BEFORE /:id
+router.get('/smart-filter-counts', async (req, res) => {
+  const startTime = Date.now();
+  try {
+    const role = (req.user?.role || '').toString().trim().toLowerCase();
+    const isDriver = role === 'driver';
+    if (isDriver && !req.user?.driver_id) {
+      return res.status(403).json({ success: false, error: 'Driver account not linked to a driver record' });
+    }
+    const tenantId = req.context?.tenantId || null;
+    const operatingEntityId = req.context?.operatingEntityId || null;
+    const userId = req.user?.id || null;
+    const driverId = isDriver ? (req.user?.driver_id || null) : null;
+
+    const params = [];
+    const ctx = { tenantId, operatingEntityId, userId };
+
+    // Build each chip predicate (may push bind params for my_drafts/high_value).
+    const aiDraftsSql = buildSmartFilterPredicate('ai_drafts', params, ctx);
+    const overdueSql = buildSmartFilterPredicate('overdue', params, ctx);
+    const highValueSql = buildSmartFilterPredicate('high_value', params, ctx);
+    const fromEmailSql = buildSmartFilterPredicate('from_email', params, ctx);
+    const missingDocsSql = buildSmartFilterPredicate('missing_docs', params, ctx);
+    const myDraftsSql = buildSmartFilterPredicate('my_drafts', params, ctx);
+
+    // Scope params appended last so predicate indexes remain valid.
+    params.push(tenantId);
+    const tenantIdx = params.length;
+    params.push(operatingEntityId);
+    const oeIdx = params.length;
+    params.push(driverId);
+    const driverIdx = params.length;
+
+    const sql = `
+      SELECT
+        COUNT(*) FILTER (WHERE ${aiDraftsSql})   AS ai_drafts,
+        COUNT(*) FILTER (WHERE ${overdueSql})    AS overdue,
+        COUNT(*) FILTER (WHERE ${highValueSql})  AS high_value,
+        COUNT(*) FILTER (WHERE ${fromEmailSql})  AS from_email,
+        COUNT(*) FILTER (WHERE ${missingDocsSql}) AS missing_docs,
+        COUNT(*) FILTER (WHERE ${myDraftsSql})   AS my_drafts
+      FROM loads l
+      LEFT JOIN LATERAL (
+        SELECT stop_date
+        FROM load_stops
+        WHERE load_id = l.id AND stop_type = 'DELIVERY'
+        ORDER BY sequence DESC
+        LIMIT 1
+      ) delivery ON true
+      WHERE ($${tenantIdx}::uuid IS NULL OR l.tenant_id = $${tenantIdx})
+        AND ($${oeIdx}::uuid IS NULL OR l.operating_entity_id = $${oeIdx})
+        AND ($${driverIdx}::uuid IS NULL OR l.driver_id = $${driverIdx})
+    `;
+
+    const result = await query(sql, params);
+    const row = result.rows[0] || {};
+    const counts = {
+      ai_drafts: parseInt(row.ai_drafts, 10) || 0,
+      overdue: parseInt(row.overdue, 10) || 0,
+      high_value: parseInt(row.high_value, 10) || 0,
+      from_email: parseInt(row.from_email, 10) || 0,
+      missing_docs: parseInt(row.missing_docs, 10) || 0,
+      my_drafts: parseInt(row.my_drafts, 10) || 0
+    };
+
+    const duration = Date.now() - startTime;
+    dtLogger.trackRequest('GET', '/api/loads/smart-filter-counts', 200, duration);
+    res.json({ success: true, data: counts });
+  } catch (error) {
+    const duration = Date.now() - startTime;
+    const message = (error && error.message) ? String(error.message) : '';
+    const code = error && error.code ? String(error.code) : '';
+    // Graceful degradation if supporting tables aren't yet migrated
+    if (code === '42P01' || message.includes('relation') || message.includes('does not exist')) {
+      dtLogger.trackRequest('GET', '/api/loads/smart-filter-counts', 200, duration);
+      return res.json({
+        success: true,
+        data: {
+          ai_drafts: 0,
+          overdue: 0,
+          high_value: 0,
+          from_email: 0,
+          missing_docs: 0,
+          my_drafts: 0
+        }
+      });
+    }
+    dtLogger.error('loads_smart_filter_counts_failed', error);
+    dtLogger.trackRequest('GET', '/api/loads/smart-filter-counts', 500, duration);
+    res.status(500).json({ success: false, error: 'Failed to fetch smart-filter counts' });
+  }
+});
+
+// ─── FN-1303: Daily AI Briefing upstream endpoints ──────────────────────────
+// `briefing-aggregator.js` (gateway) fans out to /throughput and
+// /exceptions/count on every dashboard load. Both must register BEFORE /:id.
+
+const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+function todayUtcIso() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function parseBriefingDate(raw) {
+  if (raw === undefined || raw === null || raw === '') return todayUtcIso();
+  const value = String(raw).trim();
+  if (!ISO_DATE_RE.test(value)) return null;
+  return value;
+}
+
+/**
+ * @openapi
+ * /api/loads/throughput:
+ *   get:
+ *     summary: Daily load throughput totals (FN-1303)
+ *     description: >
+ *       Counts and total revenue for loads anchored to the requested UTC date,
+ *       used by the Daily AI Briefing aggregator. Effective date follows the
+ *       same COALESCE(completed_date, first PICKUP stop_date, created_at) rule
+ *       as `/api/loads/ai-insights`. Tenant + operating-entity scoped.
+ *     tags:
+ *       - Loads
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: date
+ *         schema:
+ *           type: string
+ *           format: date
+ *         description: YYYY-MM-DD (UTC); defaults to today
+ *     responses:
+ *       200:
+ *         description: Throughput payload
+ *       400:
+ *         description: Invalid date
+ *       500:
+ *         description: Server error
+ */
+router.get('/throughput', requireRole(['admin', 'dispatch']), async (req, res) => {
+  const date = parseBriefingDate(req.query.date);
+  if (date === null) {
+    return res.status(400).json({ success: false, error: 'Invalid date; expected YYYY-MM-DD' });
+  }
+
+  const tenantId = req.context?.tenantId || null;
+  const operatingEntityId = req.context?.operatingEntityId || null;
+
+  const scopeSql = `
+    (l.tenant_id = $1 OR $1::uuid IS NULL)
+    AND (l.operating_entity_id = $2 OR $2::uuid IS NULL)
+  `;
+  const effectiveDateSql = `
+    COALESCE(
+      l.completed_date,
+      (SELECT stop_date FROM load_stops s WHERE s.load_id = l.id AND s.stop_type = 'PICKUP' ORDER BY s.sequence ASC LIMIT 1)::date,
+      l.created_at::date
+    )
+  `;
+
+  // Anchor counts to the requested date. exception_count mirrors the
+  // ai-insights `needs_attention` composite (overdue + missing_docs +
+  // drafts_ready) restricted to loads anchored to this date — there is no
+  // load_exceptions table, so this is the closest "open exceptions for the
+  // day" signal the schema can support today.
+  const sql = `
+    SELECT
+      COUNT(*) FILTER (WHERE ${effectiveDateSql} = $3::date)::int AS load_count,
+      COUNT(*) FILTER (
+        WHERE ${effectiveDateSql} = $3::date
+          AND UPPER(l.status::text) = ANY($4::text[])
+      )::int AS delivered_count,
+      COUNT(*) FILTER (
+        WHERE ${effectiveDateSql} = $3::date
+          AND (
+            (UPPER(l.status::text) <> ALL($5::text[])
+             AND EXISTS (
+               SELECT 1
+               FROM load_stops ls
+               WHERE ls.load_id = l.id
+                 AND ls.stop_type = 'DELIVERY'
+                 AND ls.stop_date::date < NOW()::date
+             ))
+            OR (UPPER(l.status::text) = 'DELIVERED'
+                AND NOT EXISTS (
+                  SELECT 1 FROM load_attachments la
+                  WHERE la.load_id = l.id AND la.type = 'PROOF_OF_DELIVERY'
+                ))
+            OR (UPPER(l.status::text) IN ('PICKED_UP', 'IN_TRANSIT', 'EN_ROUTE')
+                AND NOT EXISTS (
+                  SELECT 1 FROM load_attachments la
+                  WHERE la.load_id = l.id AND la.type = 'BOL'
+                ))
+            OR (UPPER(l.status::text) = 'DRAFT'
+                AND l.needs_review = true
+                AND l.created_at < NOW() - INTERVAL '2 hours')
+          )
+      )::int AS exception_count,
+      COALESCE(SUM(
+        CASE WHEN ${effectiveDateSql} = $3::date
+              AND UPPER(l.status::text) = ANY($4::text[])
+             THEN l.rate ELSE 0 END
+      ), 0)::numeric AS total_revenue
+    FROM loads l
+    WHERE ${scopeSql}
+  `;
+
+  try {
+    const result = await query(sql, [
+      tenantId,
+      operatingEntityId,
+      date,
+      DELIVERED_STATUSES,
+      EXCLUDED_FROM_OVERDUE
+    ]);
+    const row = result.rows[0] || {};
+    return res.json({
+      success: true,
+      data: {
+        date,
+        loadCount: Number(row.load_count) || 0,
+        deliveredCount: Number(row.delivered_count) || 0,
+        exceptionCount: Number(row.exception_count) || 0,
+        totalRevenue: Number(row.total_revenue) || 0
+      }
+    });
+  } catch (error) {
+    dtLogger.error('loads_throughput_failed', error, { date });
+    res.status(500).json({ success: false, error: 'Failed to compute throughput' });
+  }
+});
+
+/**
+ * @openapi
+ * /api/loads/exceptions/count:
+ *   get:
+ *     summary: Open exceptions count for a UTC date (FN-1303)
+ *     description: >
+ *       Composite exception count anchored to the requested date. Because
+ *       there is no `load_exceptions` table, the count is derived from
+ *       overdue loads, loads missing POD/BOL, and stale unreviewed AI drafts.
+ *     tags:
+ *       - Loads
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: date
+ *         schema:
+ *           type: string
+ *           format: date
+ *         description: YYYY-MM-DD (UTC); defaults to today
+ *     responses:
+ *       200:
+ *         description: Exception count + breakdown
+ *       400:
+ *         description: Invalid date
+ *       500:
+ *         description: Server error
+ */
+router.get('/exceptions/count', requireRole(['admin', 'dispatch']), async (req, res) => {
+  const date = parseBriefingDate(req.query.date);
+  if (date === null) {
+    return res.status(400).json({ success: false, error: 'Invalid date; expected YYYY-MM-DD' });
+  }
+
+  const tenantId = req.context?.tenantId || null;
+  const operatingEntityId = req.context?.operatingEntityId || null;
+
+  const scopeSql = `
+    (l.tenant_id = $1 OR $1::uuid IS NULL)
+    AND (l.operating_entity_id = $2 OR $2::uuid IS NULL)
+  `;
+  const effectiveDateSql = `
+    COALESCE(
+      l.completed_date,
+      (SELECT stop_date FROM load_stops s WHERE s.load_id = l.id AND s.stop_type = 'PICKUP' ORDER BY s.sequence ASC LIMIT 1)::date,
+      l.created_at::date
+    )
+  `;
+
+  const sql = `
+    SELECT
+      COUNT(*) FILTER (
+        WHERE ${effectiveDateSql} = $3::date
+          AND UPPER(l.status::text) <> ALL($4::text[])
+          AND EXISTS (
+            SELECT 1 FROM load_stops ls
+            WHERE ls.load_id = l.id
+              AND ls.stop_type = 'DELIVERY'
+              AND ls.stop_date::date < NOW()::date
+          )
+      )::int AS overdue,
+      COUNT(*) FILTER (
+        WHERE ${effectiveDateSql} = $3::date
+          AND (
+            (UPPER(l.status::text) = 'DELIVERED'
+             AND NOT EXISTS (
+               SELECT 1 FROM load_attachments la
+               WHERE la.load_id = l.id AND la.type = 'PROOF_OF_DELIVERY'
+             ))
+            OR (UPPER(l.status::text) IN ('PICKED_UP', 'IN_TRANSIT', 'EN_ROUTE')
+                AND NOT EXISTS (
+                  SELECT 1 FROM load_attachments la
+                  WHERE la.load_id = l.id AND la.type = 'BOL'
+                ))
+          )
+      )::int AS missing_docs,
+      COUNT(*) FILTER (
+        WHERE ${effectiveDateSql} = $3::date
+          AND UPPER(l.status::text) = 'DRAFT'
+          AND l.needs_review = true
+          AND l.created_at < NOW() - INTERVAL '2 hours'
+      )::int AS drafts_ready
+    FROM loads l
+    WHERE ${scopeSql}
+  `;
+
+  try {
+    const result = await query(sql, [
+      tenantId,
+      operatingEntityId,
+      date,
+      EXCLUDED_FROM_OVERDUE
+    ]);
+    const row = result.rows[0] || {};
+    const breakdown = {
+      overdue: Number(row.overdue) || 0,
+      missing_docs: Number(row.missing_docs) || 0,
+      drafts_ready: Number(row.drafts_ready) || 0
+    };
+    const count = breakdown.overdue + breakdown.missing_docs + breakdown.drafts_ready;
+    return res.json({
+      success: true,
+      data: { date, count, breakdown }
+    });
+  } catch (error) {
+    dtLogger.error('loads_exceptions_count_failed', error, { date });
+    res.status(500).json({ success: false, error: 'Failed to compute exception count' });
+  }
+});
+
+// ─── FN-1309: Smart Alerts upstream — late-load risk ────────────────────────
+// `smart-alerts-aggregator.js` (gateway) calls this with `?limit=20` on every
+// dashboard load. Must register BEFORE `/:id` for the same reason as the
+// FN-1303 briefing routes: a stray static path like `/late-risk` would
+// otherwise crash on the UUID cast in `/:id`.
+
+function parseAlertsTopLimit(raw) {
+  if (raw === undefined || raw === null || raw === '') return 20;
+  const trimmed = String(raw).trim();
+  if (!/^-?\d+$/.test(trimmed)) return null;
+  const n = parseInt(trimmed, 10);
+  if (Number.isNaN(n)) return null;
+  return Math.max(1, Math.min(100, n));
+}
+
+/**
+ * @openapi
+ * /api/loads/late-risk:
+ *   get:
+ *     summary: Loads at risk of late delivery (FN-1309)
+ *     description: >
+ *       Returns loads whose latest delivery stop appointment is past and the
+ *       load has not yet reached a terminal status. `etaDelta` is the positive
+ *       number of minutes the delivery is currently behind appointment time.
+ *       Schema has no ETA column, so the closest signal is "delivery
+ *       appointment is past and the load is still open" — same overdue
+ *       definition the FN-1303 `/exceptions/count` uses. Tenant +
+ *       operating-entity scoped.
+ *     tags:
+ *       - Loads
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           minimum: 1
+ *           maximum: 100
+ *         description: Number of loads to return (default 20, max 100)
+ *     responses:
+ *       200:
+ *         description: Late-risk load list
+ *       400:
+ *         description: Invalid limit
+ *       500:
+ *         description: Server error
+ */
+router.get('/late-risk', requireRole(['admin', 'dispatch']), async (req, res) => {
+  const limit = parseAlertsTopLimit(req.query.limit);
+  if (limit === null) {
+    return res.status(400).json({ success: false, error: 'Invalid limit; expected positive integer' });
+  }
+
+  const tenantId = req.context?.tenantId || null;
+  const operatingEntityId = req.context?.operatingEntityId || null;
+
+  const sql = `
+    WITH last_delivery AS (
+      SELECT DISTINCT ON (ls.load_id)
+        ls.load_id, ls.stop_date, ls.city, ls.state
+      FROM load_stops ls
+      WHERE ls.stop_type = 'DELIVERY'
+      ORDER BY ls.load_id, ls.sequence DESC
+    )
+    SELECT
+      l.id AS load_id,
+      l.load_number,
+      d.stop_date AS delivery_stop_date,
+      d.city AS delivery_city,
+      d.state AS delivery_state,
+      GREATEST(
+        0,
+        (EXTRACT(EPOCH FROM (NOW() - d.stop_date)) / 60.0)::int
+      ) AS eta_delta_minutes
+    FROM loads l
+    JOIN last_delivery d ON d.load_id = l.id
+    WHERE (l.tenant_id = $1 OR $1::uuid IS NULL)
+      AND (l.operating_entity_id = $2 OR $2::uuid IS NULL)
+      AND UPPER(l.status::text) <> ALL($3::text[])
+      AND d.stop_date IS NOT NULL
+      AND d.stop_date < NOW()
+    ORDER BY d.stop_date ASC
+    LIMIT $4
+  `;
+
+  try {
+    const result = await query(sql, [tenantId, operatingEntityId, EXCLUDED_FROM_OVERDUE, limit]);
+    const data = result.rows.map((row) => {
+      const destination = [row.delivery_city, row.delivery_state]
+        .filter((part) => part != null && String(part).trim() !== '')
+        .join(', ') || null;
+      return {
+        loadId: row.load_id,
+        loadNumber: row.load_number || null,
+        etaDelta: Number(row.eta_delta_minutes) || 0,
+        destination
+      };
+    });
+    return res.json(data);
+  } catch (error) {
+    const code = error?.code ? String(error.code) : '';
+    const message = error?.message ? String(error.message) : '';
+    if (code === '42P01' || message.includes('does not exist')) {
+      dtLogger.warn?.('loads_late_risk_table_missing', { message });
+      return res.json([]);
+    }
+    dtLogger.error('loads_late_risk_failed', error);
+    res.status(500).json({ success: false, error: 'Failed to compute late-load risk' });
+  }
+});
+
+/**
+ * @openapi
+ * /api/loads/{id}:
+ *   get:
+ *     summary: Get load details by ID
+ *     description: >
+ *       Returns the full load detail including stops, attachments (with signed download URLs),
+ *       trip metrics (empty miles, loaded miles, total miles, rate per mile), driver name,
+ *       and broker name. Drivers are scoped to their own loads only.
+ *     tags:
+ *       - Loads
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Load ID
+ *     responses:
+ *       200:
+ *         description: Load detail returned
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *                   description: Full load detail with stops, attachments, and trip metrics
+ *       404:
+ *         description: Load not found (or driver does not have access)
+ *       500:
+ *         description: Server error
+ */
 // GET /api/loads/:id
 router.get('/:id', async (req, res) => {
+  // FN-1303: reject non-UUID ids without hitting the DB so missing static
+  // routes (e.g. `/throughput`) surface as 404, not 500 + loads_get_failed.
+  if (!UUID_RE.test(req.params.id)) {
+    return res.status(404).json({ success: false, error: 'Load not found' });
+  }
   try {
     const data = await getLoadDetail(query, req.params.id, req.context || null);
     if (!data) return res.status(404).json({ success: false, error: 'Load not found' });
@@ -1020,6 +3036,110 @@ router.get('/:id', async (req, res) => {
   }
 });
 
+/**
+ * @openapi
+ * /api/loads/{id}:
+ *   put:
+ *     summary: Update a load
+ *     description: >
+ *       Updates load fields, status, billing status, and/or stops. Only provided fields are
+ *       updated. When stops are provided, existing stops are replaced entirely. When status
+ *       transitions to DELIVERED or COMPLETED, the completed_date is auto-set if not already
+ *       present. Requires admin or dispatch role. Load status workflow: DRAFT -> NEW ->
+ *       DISPATCHED -> EN_ROUTE -> PICKED_UP -> IN_TRANSIT -> DELIVERED -> COMPLETED.
+ *       Loads can also be set to CANCELLED or TONU.
+ *     tags:
+ *       - Loads
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Load ID
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               loadNumber:
+ *                 type: string
+ *               status:
+ *                 type: string
+ *                 enum: [DRAFT, NEW, CANCELLED, CANCELED, TONU, DISPATCHED, EN_ROUTE, PICKED_UP, IN_TRANSIT, DELIVERED, COMPLETED]
+ *               billingStatus:
+ *                 type: string
+ *                 enum: [PENDING, CANCELLED, CANCELED, BOL_RECEIVED, INVOICED, SENT_TO_FACTORING, FUNDED, PAID]
+ *               dispatcherUserId:
+ *                 type: string
+ *               driverId:
+ *                 type: string
+ *               truckId:
+ *                 type: string
+ *               trailerId:
+ *                 type: string
+ *               brokerId:
+ *                 type: string
+ *               brokerName:
+ *                 type: string
+ *               poNumber:
+ *                 type: string
+ *               rate:
+ *                 type: number
+ *               notes:
+ *                 type: string
+ *               completedDate:
+ *                 type: string
+ *                 format: date
+ *               stops:
+ *                 type: array
+ *                 items:
+ *                   type: object
+ *                   properties:
+ *                     stopType:
+ *                       type: string
+ *                       enum: [PICKUP, DELIVERY]
+ *                     date:
+ *                       type: string
+ *                       format: date
+ *                     city:
+ *                       type: string
+ *                     state:
+ *                       type: string
+ *                     zip:
+ *                       type: string
+ *                     address1:
+ *                       type: string
+ *                     address2:
+ *                       type: string
+ *                     sequence:
+ *                       type: integer
+ *     responses:
+ *       200:
+ *         description: Load updated successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *                   description: Full load detail with stops, attachments, and trip metrics
+ *       400:
+ *         description: Invalid status, billing status, or stops
+ *       403:
+ *         description: Forbidden - insufficient role
+ *       404:
+ *         description: Load not found
+ *       500:
+ *         description: Server error
+ */
 // PUT /api/loads/:id (admin, dispatch only; driver cannot update load)
 router.put('/:id', requireRole(['admin', 'dispatch']), async (req, res) => {
   const client = await getClient();
@@ -1035,6 +3155,17 @@ router.put('/:id', requireRole(['admin', 'dispatch']), async (req, res) => {
     }
     if (billingStatus && !BILLING_STATUSES.includes(billingStatus)) {
       return res.status(400).json({ success: false, error: 'Invalid billing status' });
+    }
+
+    // FN-811: capture prior status before the update so we can emit
+    // `load:status_changed` only on an actual transition.
+    let priorStatus = null;
+    if (status) {
+      const priorRow = await client.query(
+        'SELECT status FROM loads WHERE id = $1 AND tenant_id = $2 AND operating_entity_id = $3',
+        [req.params.id, req.context?.tenantId || null, req.context?.operatingEntityId || null]
+      );
+      priorStatus = priorRow.rows[0]?.status ? normalizeEnum(priorRow.rows[0].status) : null;
     }
 
     const fieldMap = {
@@ -1101,7 +3232,7 @@ router.put('/:id', requireRole(['admin', 'dispatch']), async (req, res) => {
             stopType,
             normalizeNullable(stopDate),
             normalizeNullable(stop.city),
-            normalizeNullable(stop.state),
+            normalizeStateCode(stop.state),
             normalizeNullable(stop.zip),
             normalizeNullable(stop.address1),
             normalizeNullable(stop.address2),
@@ -1122,9 +3253,50 @@ router.put('/:id', requireRole(['admin', 'dispatch']), async (req, res) => {
     }
 
     await client.query('COMMIT');
+
+    // FN-817: When the user edits a field that carries an AI confidence score,
+    // strip that field from ai_metadata.fields so the ✦ sparkle disappears
+    // (manually verified). `stops`/`pickup`/`delivery` input clears both pickup
+    // and delivery confidence since both derive from the stops array.
+    try {
+      const editedConfidenceKeys = new Set();
+      const bodyEditableToConfidenceKey = {
+        brokerName: 'brokerName',
+        brokerId: 'brokerName', // broker swap counts as manual broker confirmation
+        poNumber: 'poNumber',
+        rate: 'rate',
+      };
+      for (const bodyKey of Object.keys(bodyEditableToConfidenceKey)) {
+        if (body[bodyKey] !== undefined) editedConfidenceKeys.add(bodyEditableToConfidenceKey[bodyKey]);
+      }
+      if (stopsInput) {
+        editedConfidenceKeys.add('pickup');
+        editedConfidenceKeys.add('delivery');
+      }
+      for (const key of editedConfidenceKeys) {
+        await client.query(
+          'UPDATE loads SET ai_metadata = ai_metadata #- $1::text[] WHERE id = $2 AND ai_metadata IS NOT NULL',
+          [['fields', key], req.params.id]
+        );
+      }
+    } catch (metaErr) {
+      dtLogger.warn('loads_ai_metadata_clear_failed', { loadId: req.params.id, error: metaErr?.message });
+    }
+
     const updated = await getLoadDetail(client, req.params.id, req.context || null);
     if (!updated) {
       return res.status(404).json({ success: false, error: 'Load not found' });
+    }
+    // FN-811: emit updated + (conditionally) status_changed
+    const tenantId = req.context?.tenantId || null;
+    emitLoadEvent(tenantId, 'load:updated', updated);
+    if (status && priorStatus && priorStatus !== status) {
+      emitLoadEvent(tenantId, 'load:status_changed', {
+        id: req.params.id,
+        previousStatus: priorStatus,
+        status,
+        load: updated
+      });
     }
     res.json({ success: true, data: updated });
   } catch (error) {
@@ -1152,6 +3324,82 @@ async function ensureCanAccessLoad(loadId, req, res) {
   return loadResult.rows[0];
 }
 
+/**
+ * @openapi
+ * /api/loads/{id}/attachments:
+ *   post:
+ *     summary: Upload an attachment to a load
+ *     description: >
+ *       Uploads a file (PDF or image) to R2 storage and links it as an attachment to the
+ *       specified load. Requires a valid attachment type. Drivers can only upload to their
+ *       own loads. Max file size is 15 MB.
+ *     tags:
+ *       - Loads
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Load ID
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - file
+ *               - type
+ *             properties:
+ *               file:
+ *                 type: string
+ *                 format: binary
+ *                 description: PDF or image file (max 15 MB)
+ *               type:
+ *                 type: string
+ *                 enum: [RATE_CONFIRMATION, BOL, LUMPER, OTHER, CONFIRMATION, PROOF_OF_DELIVERY, ROADSIDE_MAINTENANCE_RECEIPT]
+ *                 description: Attachment type
+ *               notes:
+ *                 type: string
+ *                 description: Optional notes for the attachment
+ *     responses:
+ *       201:
+ *         description: Attachment uploaded successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     id:
+ *                       type: string
+ *                     load_id:
+ *                       type: string
+ *                     type:
+ *                       type: string
+ *                     file_name:
+ *                       type: string
+ *                     mime_type:
+ *                       type: string
+ *                     size_bytes:
+ *                       type: integer
+ *                     file_url:
+ *                       type: string
+ *                       description: Signed download URL
+ *       400:
+ *         description: No file uploaded or invalid attachment type
+ *       404:
+ *         description: Load not found
+ *       500:
+ *         description: Server error
+ */
 // POST /api/loads/:id/attachments
 router.post('/:id/attachments', upload.single('file'), async (req, res) => {
   try {
@@ -1205,6 +3453,61 @@ router.post('/:id/attachments', upload.single('file'), async (req, res) => {
   }
 });
 
+/**
+ * @openapi
+ * /api/loads/{id}/attachments:
+ *   get:
+ *     summary: List attachments for a load
+ *     description: >
+ *       Returns all attachments for the specified load, ordered by creation date descending.
+ *       Each attachment includes a signed download URL for the file. Drivers can only access
+ *       attachments on their own loads.
+ *     tags:
+ *       - Loads
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Load ID
+ *     responses:
+ *       200:
+ *         description: List of attachments
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       id:
+ *                         type: string
+ *                       load_id:
+ *                         type: string
+ *                       type:
+ *                         type: string
+ *                       file_name:
+ *                         type: string
+ *                       mime_type:
+ *                         type: string
+ *                       size_bytes:
+ *                         type: integer
+ *                       file_url:
+ *                         type: string
+ *                         description: Signed download URL
+ *       404:
+ *         description: Load not found
+ *       500:
+ *         description: Server error
+ */
 // GET /api/loads/:id/attachments
 router.get('/:id/attachments', async (req, res) => {
   try {
@@ -1227,6 +3530,49 @@ router.get('/:id/attachments', async (req, res) => {
   }
 });
 
+/**
+ * @openapi
+ * /api/loads/{id}/attachments/{attachmentId}:
+ *   delete:
+ *     summary: Delete an attachment from a load
+ *     description: >
+ *       Deletes an attachment record from the database and removes the file from R2 storage.
+ *       The DB row is deleted first so the document is removed from the app even if R2
+ *       cleanup fails. Drivers can only delete attachments on their own loads.
+ *     tags:
+ *       - Loads
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Load ID
+ *       - in: path
+ *         name: attachmentId
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Attachment ID
+ *     responses:
+ *       200:
+ *         description: Attachment deleted successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 message:
+ *                   type: string
+ *       404:
+ *         description: Load or attachment not found
+ *       500:
+ *         description: Server error
+ */
 // DELETE /api/loads/:id/attachments/:attachmentId
 router.delete('/:id/attachments/:attachmentId', async (req, res) => {
   const { id: loadId, attachmentId } = req.params;
@@ -1262,6 +3608,86 @@ router.delete('/:id/attachments/:attachmentId', async (req, res) => {
   }
 });
 
+/**
+ * @openapi
+ * /api/loads/{id}/attachments/{attachmentId}:
+ *   put:
+ *     summary: Replace or update an attachment on a load
+ *     description: >
+ *       Updates an existing attachment's metadata (type, notes) and optionally replaces
+ *       the file. When a new file is uploaded, the old file is deleted from R2 storage.
+ *       If no new file is provided, only metadata fields are updated. Drivers can only
+ *       update attachments on their own loads.
+ *     tags:
+ *       - Loads
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Load ID
+ *       - in: path
+ *         name: attachmentId
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Attachment ID
+ *     requestBody:
+ *       required: false
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               file:
+ *                 type: string
+ *                 format: binary
+ *                 description: Replacement file (PDF or image, max 15 MB)
+ *               type:
+ *                 type: string
+ *                 enum: [RATE_CONFIRMATION, BOL, LUMPER, OTHER, CONFIRMATION, PROOF_OF_DELIVERY, ROADSIDE_MAINTENANCE_RECEIPT]
+ *                 description: Attachment type (defaults to existing type if not provided)
+ *               notes:
+ *                 type: string
+ *                 description: Attachment notes (defaults to existing notes if not provided)
+ *     responses:
+ *       200:
+ *         description: Attachment updated successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     id:
+ *                       type: string
+ *                     load_id:
+ *                       type: string
+ *                     type:
+ *                       type: string
+ *                     file_name:
+ *                       type: string
+ *                     mime_type:
+ *                       type: string
+ *                     size_bytes:
+ *                       type: integer
+ *                     file_url:
+ *                       type: string
+ *                       description: Signed download URL
+ *       400:
+ *         description: Invalid attachment type
+ *       404:
+ *         description: Load or attachment not found
+ *       500:
+ *         description: Server error
+ */
 // PUT /api/loads/:id/attachments/:attachmentId (replace file and/or metadata on R2)
 router.put('/:id/attachments/:attachmentId', upload.single('file'), async (req, res) => {
   const { id: loadId, attachmentId } = req.params;
@@ -1328,6 +3754,51 @@ router.put('/:id/attachments/:attachmentId', upload.single('file'), async (req, 
   }
 });
 
+/**
+ * @openapi
+ * /api/loads/ai-extract:
+ *   post:
+ *     summary: Extract load details from a rate confirmation PDF using AI
+ *     description: >
+ *       Accepts a PDF file and uses AI extraction to parse rate confirmation data including
+ *       broker name, rate, PO/load number, and pickup/delivery stop details. Returns the
+ *       extracted data without creating a load (use POST /api/loads or bulk-rate-confirmations
+ *       to persist). Only PDF files are supported.
+ *     tags:
+ *       - Loads
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - file
+ *             properties:
+ *               file:
+ *                 type: string
+ *                 format: binary
+ *                 description: PDF rate confirmation file (max 15 MB)
+ *     responses:
+ *       200:
+ *         description: Extracted load data from the PDF
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *                   description: AI-extracted load fields (brokerName, rate, pickup, delivery, stops, poNumber, loadId, etc.)
+ *       400:
+ *         description: No file uploaded or file is not a PDF
+ *       500:
+ *         description: AI extraction failed (may include rate-limit details)
+ */
 // POST /api/loads/ai-extract
 router.post('/ai-extract', upload.single('file'), async (req, res) => {
   try {
@@ -1375,6 +3846,1071 @@ router.post('/ai-extract', upload.single('file'), async (req, res) => {
       error: 'Failed to extract load details from PDF',
       details: message
     });
+  }
+});
+
+// ─── Granular Stop Endpoints (FN-748) ────────────────────────────────────────
+
+/**
+ * @openapi
+ * /api/loads/{id}/stops:
+ *   post:
+ *     summary: Add a stop to an existing load
+ *     description: >
+ *       Appends a new stop to the load. The stop sequence is auto-assigned as
+ *       max(existing sequences) + 1. Trip metrics are recalculated and returned
+ *       in the full load response. Requires admin or dispatch role.
+ *     tags:
+ *       - Loads
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Load ID
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [stop_type]
+ *             properties:
+ *               stop_type:
+ *                 type: string
+ *                 enum: [PICKUP, DELIVERY]
+ *               stop_date:
+ *                 type: string
+ *                 format: date
+ *               city:
+ *                 type: string
+ *               state:
+ *                 type: string
+ *               zip:
+ *                 type: string
+ *               address1:
+ *                 type: string
+ *               address2:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Full updated load with stops and recalculated trip metrics
+ *       400:
+ *         description: Invalid stop_type
+ *       404:
+ *         description: Load not found
+ *       500:
+ *         description: Server error
+ */
+router.post('/:id/stops', requireRole(['admin', 'dispatch']), async (req, res) => {
+  const loadId = req.params.id;
+  const body = req.body || {};
+  const client = await getClient();
+  try {
+    await client.query('BEGIN');
+    const loadCheck = await client.query(
+      'SELECT id FROM loads WHERE id = $1',
+      [loadId]
+    );
+    if (loadCheck.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ success: false, error: 'Load not found' });
+    }
+    const stopType = normalizeEnum(body.stop_type || body.stopType);
+    if (!STOP_TYPES.includes(stopType)) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ success: false, error: `Invalid stop_type: ${stopType}` });
+    }
+    const seqResult = await client.query(
+      'SELECT COALESCE(MAX(sequence), 0) AS max_seq FROM load_stops WHERE load_id = $1',
+      [loadId]
+    );
+    const nextSeq = (parseInt(seqResult.rows[0]?.max_seq ?? 0, 10)) + 1;
+    await client.query(
+      `INSERT INTO load_stops (load_id, stop_type, stop_date, city, state, zip, address1, address2, sequence)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+      [
+        loadId,
+        stopType,
+        body.stop_date || body.stopDate || null,
+        body.city || null,
+        normalizeStateCode(body.state),
+        body.zip || null,
+        body.address1 || null,
+        body.address2 || null,
+        nextSeq
+      ]
+    );
+    await client.query('COMMIT');
+    const detail = await getLoadDetail(client, loadId, req.context || null);
+    res.json({ success: true, data: detail });
+  } catch (error) {
+    await client.query('ROLLBACK');
+    dtLogger.error('loads_add_stop_failed', error, { loadId });
+    res.status(500).json({ success: false, error: 'Failed to add stop' });
+  } finally {
+    client.release();
+  }
+});
+
+/**
+ * @openapi
+ * /api/loads/{id}/stops/reorder:
+ *   patch:
+ *     summary: Reorder stops on a load
+ *     description: >
+ *       Accepts an array of {stopId, newSequence} pairs and persists the new
+ *       ordering. Trip metrics are recalculated in the response. This route is
+ *       registered BEFORE /:id/stops/:stopId to avoid the literal string
+ *       "reorder" being captured as a stopId parameter. Requires admin or
+ *       dispatch role.
+ *     tags:
+ *       - Loads
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Load ID
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: array
+ *             items:
+ *               type: object
+ *               required: [stopId, newSequence]
+ *               properties:
+ *                 stopId:
+ *                   type: string
+ *                 newSequence:
+ *                   type: integer
+ *     responses:
+ *       200:
+ *         description: Full updated load with stops in new order
+ *       400:
+ *         description: Body must be a non-empty array
+ *       404:
+ *         description: Load not found
+ *       500:
+ *         description: Server error
+ */
+router.patch('/:id/stops/reorder', requireRole(['admin', 'dispatch']), async (req, res) => {
+  const loadId = req.params.id;
+  const body = req.body;
+  if (!Array.isArray(body) || body.length === 0) {
+    return res.status(400).json({ success: false, error: 'Body must be a non-empty array of {stopId, newSequence}' });
+  }
+  const client = await getClient();
+  try {
+    await client.query('BEGIN');
+    const loadCheck = await client.query(
+      'SELECT id FROM loads WHERE id = $1',
+      [loadId]
+    );
+    if (loadCheck.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ success: false, error: 'Load not found' });
+    }
+    for (const item of body) {
+      if (!item.stopId || item.newSequence == null) continue;
+      await client.query(
+        'UPDATE load_stops SET sequence = $1 WHERE id = $2 AND load_id = $3',
+        [item.newSequence, item.stopId, loadId]
+      );
+    }
+    await client.query('COMMIT');
+    const detail = await getLoadDetail(client, loadId, req.context || null);
+    res.json({ success: true, data: detail });
+  } catch (error) {
+    await client.query('ROLLBACK');
+    dtLogger.error('loads_reorder_stops_failed', error, { loadId });
+    res.status(500).json({ success: false, error: 'Failed to reorder stops' });
+  } finally {
+    client.release();
+  }
+});
+
+/**
+ * @openapi
+ * /api/loads/{id}/stops/{stopId}:
+ *   patch:
+ *     summary: Update a single stop on a load
+ *     description: >
+ *       Performs a partial update on one stop. Only the fields provided in the
+ *       request body are changed. Trip metrics are recalculated and returned in
+ *       the full load response. Requires admin or dispatch role.
+ *     tags:
+ *       - Loads
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Load ID
+ *       - in: path
+ *         name: stopId
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Stop ID
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               stop_type:
+ *                 type: string
+ *                 enum: [PICKUP, DELIVERY]
+ *               stop_date:
+ *                 type: string
+ *                 format: date
+ *               city:
+ *                 type: string
+ *               state:
+ *                 type: string
+ *               zip:
+ *                 type: string
+ *               address1:
+ *                 type: string
+ *               address2:
+ *                 type: string
+ *               sequence:
+ *                 type: integer
+ *     responses:
+ *       200:
+ *         description: Full updated load with recalculated trip metrics
+ *       400:
+ *         description: No updatable fields provided, or invalid stop_type
+ *       404:
+ *         description: Stop not found on this load
+ *       500:
+ *         description: Server error
+ */
+router.patch('/:id/stops/:stopId', requireRole(['admin', 'dispatch']), async (req, res) => {
+  const { id: loadId, stopId } = req.params;
+  const body = req.body || {};
+  const client = await getClient();
+  try {
+    await client.query('BEGIN');
+    const stopCheck = await client.query(
+      'SELECT id FROM load_stops WHERE id = $1 AND load_id = $2',
+      [stopId, loadId]
+    );
+    if (stopCheck.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ success: false, error: 'Stop not found on this load' });
+    }
+    const sets = [];
+    const params = [];
+    const addField = (col, val) => {
+      params.push(val);
+      sets.push(`${col} = $${params.length}`);
+    };
+    if (body.stop_type !== undefined || body.stopType !== undefined) {
+      const stopType = normalizeEnum(body.stop_type || body.stopType);
+      if (!STOP_TYPES.includes(stopType)) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({ success: false, error: `Invalid stop_type: ${stopType}` });
+      }
+      addField('stop_type', stopType);
+    }
+    if (body.stop_date !== undefined || body.stopDate !== undefined) {
+      addField('stop_date', body.stop_date ?? body.stopDate ?? null);
+    }
+    if (body.city !== undefined) addField('city', body.city || null);
+    if (body.state !== undefined) addField('state', normalizeStateCode(body.state));
+    if (body.zip !== undefined) addField('zip', body.zip || null);
+    if (body.address1 !== undefined) addField('address1', body.address1 || null);
+    if (body.address2 !== undefined) addField('address2', body.address2 || null);
+    if (body.sequence !== undefined) addField('sequence', body.sequence);
+    if (sets.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ success: false, error: 'No updatable fields provided' });
+    }
+    params.push(stopId);
+    await client.query(
+      `UPDATE load_stops SET ${sets.join(', ')} WHERE id = $${params.length}`,
+      params
+    );
+    await client.query('COMMIT');
+    const detail = await getLoadDetail(client, loadId, req.context || null);
+    res.json({ success: true, data: detail });
+  } catch (error) {
+    await client.query('ROLLBACK');
+    dtLogger.error('loads_update_stop_failed', error, { loadId, stopId });
+    res.status(500).json({ success: false, error: 'Failed to update stop' });
+  } finally {
+    client.release();
+  }
+});
+
+/**
+ * @openapi
+ * /api/loads/{id}/stops/{stopId}:
+ *   delete:
+ *     summary: Remove a stop from a load
+ *     description: >
+ *       Deletes the specified stop and renumbers all remaining stops 1-based
+ *       in their current order (by sequence, then created_at). Trip metrics
+ *       are recalculated and returned in the full load response. Requires
+ *       admin or dispatch role.
+ *     tags:
+ *       - Loads
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Load ID
+ *       - in: path
+ *         name: stopId
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Stop ID to delete
+ *     responses:
+ *       200:
+ *         description: Full updated load with remaining stops renumbered
+ *       404:
+ *         description: Stop not found on this load
+ *       500:
+ *         description: Server error
+ */
+router.delete('/:id/stops/:stopId', requireRole(['admin', 'dispatch']), async (req, res) => {
+  const { id: loadId, stopId } = req.params;
+  const client = await getClient();
+  try {
+    await client.query('BEGIN');
+    const stopCheck = await client.query(
+      'SELECT id FROM load_stops WHERE id = $1 AND load_id = $2',
+      [stopId, loadId]
+    );
+    if (stopCheck.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ success: false, error: 'Stop not found on this load' });
+    }
+    await client.query('DELETE FROM load_stops WHERE id = $1', [stopId]);
+    // Renumber remaining stops 1-based in their existing order
+    const remaining = await client.query(
+      'SELECT id FROM load_stops WHERE load_id = $1 ORDER BY sequence, created_at',
+      [loadId]
+    );
+    for (let i = 0; i < remaining.rows.length; i++) {
+      await client.query(
+        'UPDATE load_stops SET sequence = $1 WHERE id = $2',
+        [i + 1, remaining.rows[i].id]
+      );
+    }
+    await client.query('COMMIT');
+    const detail = await getLoadDetail(client, loadId, req.context || null);
+    res.json({ success: true, data: detail });
+  } catch (error) {
+    await client.query('ROLLBACK');
+    dtLogger.error('loads_delete_stop_failed', error, { loadId, stopId });
+    res.status(500).json({ success: false, error: 'Failed to delete stop' });
+  } finally {
+    client.release();
+  }
+});
+
+/** Build a wizard-compatible draft payload (camelCase) from a source load + its stops. */
+function buildDraftFromLoad(sourceLoad, sourceStops, { clearBroker = false, clearPo = true, clearRate = false, newLoadNumber = null, flipStops = false } = {}) {
+  const stops = (sourceStops || []).map((s) => ({
+    stopType: normalizeEnum(s.stop_type || s.stopType),
+    sequence: s.sequence,
+    city: s.city || null,
+    state: s.state || null,
+    zip: s.zip || null,
+    address1: s.address1 || null,
+    address2: s.address2 || null,
+    date: null,
+    stopDate: null,
+    stop_date: null
+  }));
+
+  let finalStops = stops;
+  if (flipStops) {
+    // Reverse order so last delivery → first, and toggle each stop type so the
+    // return trip picks up where the original dropped off and delivers to the origin.
+    finalStops = stops
+      .slice()
+      .reverse()
+      .map((s, idx) => ({
+        ...s,
+        stopType: s.stopType === 'DELIVERY' ? 'PICKUP' : 'DELIVERY',
+        sequence: idx + 1
+      }));
+  } else {
+    finalStops = stops.map((s, idx) => ({ ...s, sequence: idx + 1 }));
+  }
+
+  return {
+    loadNumber: newLoadNumber,
+    status: 'DRAFT',
+    billingStatus: 'PENDING',
+    poNumber: clearPo ? null : (sourceLoad.po_number || null),
+    rate: clearRate ? null : (sourceLoad.rate != null ? Number(sourceLoad.rate) : null),
+    notes: sourceLoad.notes || null,
+    brokerId: clearBroker ? null : (sourceLoad.broker_id || null),
+    brokerName: clearBroker ? null : (sourceLoad.broker_name || null),
+    driverId: sourceLoad.driver_id || null,
+    truckId: sourceLoad.truck_id || null,
+    trailerId: sourceLoad.trailer_id || null,
+    completedDate: null,
+    stops: finalStops
+  };
+}
+
+/**
+ * @openapi
+ * /api/loads/{id}/clone:
+ *   post:
+ *     summary: Return a clone-ready draft payload (does not persist)
+ *     tags:
+ *       - Loads
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200:
+ *         description: Clone draft payload
+ *       404:
+ *         description: Source load not found
+ */
+router.post('/:id/clone', requireRole(['admin', 'dispatch']), async (req, res) => {
+  const loadId = req.params.id;
+  const client = await getClient();
+  try {
+    const detail = await getLoadDetail(client, loadId, req.context || null);
+    if (!detail) return res.status(404).json({ success: false, error: 'Load not found' });
+    const newLoadNumber = await generateLoadNumber(client);
+    const draft = buildDraftFromLoad(detail, detail.stops, {
+      clearBroker: false,
+      clearPo: true,
+      clearRate: false,
+      newLoadNumber,
+      flipStops: false
+    });
+    draft.source_load_id = detail.id;
+    res.json({ success: true, data: draft });
+  } catch (error) {
+    dtLogger.error('loads_clone_failed', error, { loadId });
+    res.status(500).json({ success: false, error: 'Failed to build clone payload' });
+  } finally {
+    client.release();
+  }
+});
+
+/**
+ * @openapi
+ * /api/loads/{id}/return-load:
+ *   post:
+ *     summary: Return a return-load draft payload with flipped stops (does not persist)
+ *     tags:
+ *       - Loads
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200:
+ *         description: Return-load draft payload
+ *       404:
+ *         description: Source load not found
+ */
+router.post('/:id/return-load', requireRole(['admin', 'dispatch']), async (req, res) => {
+  const loadId = req.params.id;
+  const client = await getClient();
+  try {
+    const detail = await getLoadDetail(client, loadId, req.context || null);
+    if (!detail) return res.status(404).json({ success: false, error: 'Load not found' });
+    const newLoadNumber = await generateLoadNumber(client);
+    const draft = buildDraftFromLoad(detail, detail.stops, {
+      clearBroker: false,
+      clearPo: true,
+      clearRate: true,
+      newLoadNumber,
+      flipStops: true
+    });
+    draft.source_load_id = detail.id;
+    res.json({ success: true, data: draft });
+  } catch (error) {
+    dtLogger.error('loads_return_load_failed', error, { loadId });
+    res.status(500).json({ success: false, error: 'Failed to build return-load payload' });
+  } finally {
+    client.release();
+  }
+});
+
+// FN-1438: AI load-to-driver assignment ----------------------------------
+// Fetches the load + the eligible candidate-driver pool (active, in tenant,
+// positive HOS remaining), caps to the 25 closest by haversine, and proxies
+// to the AI service for ranking. Returns 200 with `{ candidates: [], reasoning }`
+// on AI failure so the dispatcher UI can fall back to manual assignment
+// rather than blocking.
+const RECOMMEND_DRIVER_CAP = 25;
+// Render starter-plan cold starts can push the AI service past 15 s on the
+// first request after spin-down; default to 30 s and let ops override per-env.
+const RECOMMEND_DRIVER_AI_TIMEOUT_MS = (() => {
+  const raw = Number(process.env.RECOMMEND_DRIVER_AI_TIMEOUT_MS);
+  return Number.isFinite(raw) && raw > 0 ? raw : 30000;
+})();
+const HOS_DRIVE_CAP_HOURS_FOR_RECO = 11;
+const HOS_DUTY_CAP_HOURS_FOR_RECO = 14;
+
+function haversineMiles(lat1, lng1, lat2, lng2) {
+  if (lat1 == null || lng1 == null || lat2 == null || lng2 == null) return null;
+  const toRad = (deg) => (deg * Math.PI) / 180;
+  const earthRadiusMi = 3958.7613;
+  const dLat = toRad(lat2 - lat1);
+  const dLng = toRad(lng2 - lng1);
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return earthRadiusMi * c;
+}
+
+router.post('/:id/recommend-driver', requireRole(['admin', 'dispatch']), async (req, res) => {
+  const startTime = Date.now();
+  const loadId = req.params.id;
+  const tenantId = req.context?.tenantId || null;
+  const operatingEntityId = req.context?.operatingEntityId || null;
+
+  if (!loadId || !UUID_RE.test(loadId)) {
+    return res.status(400).json({ success: false, error: 'Invalid load id' });
+  }
+  if (!tenantId) {
+    return res.status(403).json({ success: false, error: 'Forbidden: tenant context required' });
+  }
+
+  try {
+    // Fetch load + first pickup stop + origin lat/lng (resolved via zip_codes).
+    const loadResult = await query(
+      `
+        WITH first_pickup AS (
+          SELECT s.load_id, s.stop_date, s.zip
+          FROM load_stops s
+          WHERE s.load_id = $1 AND s.stop_type = 'PICKUP'
+          ORDER BY s.sequence ASC NULLS LAST, s.created_at ASC NULLS LAST
+          LIMIT 1
+        )
+        SELECT
+          l.id,
+          l.broker_id,
+          l.pickup_date,
+          l.driver_id,
+          l.ai_metadata,
+          fp.zip AS pickup_zip,
+          fp.stop_date AS pickup_stop_date,
+          zc.latitude AS origin_lat,
+          zc.longitude AS origin_lng
+        FROM loads l
+        LEFT JOIN first_pickup fp ON fp.load_id = l.id
+        LEFT JOIN zip_codes zc ON zc.zip = fp.zip
+        WHERE l.id = $1::uuid
+          AND l.tenant_id = $2
+          AND ($3::uuid IS NULL OR l.operating_entity_id = $3)
+      `,
+      [loadId, tenantId, operatingEntityId]
+    );
+
+    if (loadResult.rows.length === 0) {
+      return res.status(404).json({ success: false, error: 'Load not found' });
+    }
+    const loadRow = loadResult.rows[0];
+    const originLat = loadRow.origin_lat != null ? Number(loadRow.origin_lat) : null;
+    const originLng = loadRow.origin_lng != null ? Number(loadRow.origin_lng) : null;
+    const pickupAtRaw = loadRow.pickup_stop_date || loadRow.pickup_date || null;
+    const pickupAt = pickupAtRaw ? new Date(pickupAtRaw).toISOString() : null;
+    const aiMeta = loadRow.ai_metadata && typeof loadRow.ai_metadata === 'object'
+      ? loadRow.ai_metadata
+      : {};
+    const loadEquipmentClass = aiMeta.equipmentClass || aiMeta.equipment_class || null;
+    const customerId = loadRow.broker_id || null;
+
+    // Pre-flight: short-circuit cases where the AI handler will deterministically
+    // return a 400 (per FN-1606 audit). Surface specific reasoning to the user
+    // and skip both the candidate-pool query and the AI roundtrip.
+    if (!loadEquipmentClass) {
+      const duration = Date.now() - startTime;
+      dtLogger.info('loads_recommend_driver_skipped', { loadId, reason: 'no_equipment_class' });
+      dtLogger.trackRequest('POST', `/api/loads/${loadId}/recommend-driver`, 200, duration, {
+        candidates: 0,
+        reason: 'no_equipment_class'
+      });
+      return res.json({
+        success: true,
+        candidates: [],
+        reasoning: 'Load has no equipment class set. Set the equipment class on the load to enable driver suggestions.'
+      });
+    }
+    if (originLat == null || originLng == null) {
+      const duration = Date.now() - startTime;
+      dtLogger.info('loads_recommend_driver_skipped', { loadId, reason: 'no_origin_geocode' });
+      dtLogger.trackRequest('POST', `/api/loads/${loadId}/recommend-driver`, 200, duration, {
+        candidates: 0,
+        reason: 'no_origin_geocode'
+      });
+      return res.json({
+        success: true,
+        candidates: [],
+        reasoning: 'Pickup location is not yet geocoded. Add a PICKUP stop with a US zip code to enable driver suggestions.'
+      });
+    }
+
+    // Pull the candidate-driver pool. Tenant + OE scoped, status=active, plus
+    // each driver's latest HOS, last delivery zip (for current location), the
+    // truck class for equipment matching, and the most recent load they ran
+    // for this broker (treated as "customer" for prior-history rationale).
+    const candParams = [tenantId, operatingEntityId, customerId];
+    const candResult = await query(
+      `
+        WITH latest_hos AS (
+          SELECT DISTINCT ON (driver_id)
+            driver_id, record_date, on_duty_hours, driving_hours
+          FROM hos_records
+          ORDER BY driver_id, record_date DESC
+        ),
+        last_delivery AS (
+          SELECT DISTINCT ON (l.driver_id)
+            l.driver_id, s.zip
+          FROM loads l
+          JOIN load_stops s ON s.load_id = l.id
+          WHERE s.stop_type = 'DELIVERY'
+            AND l.driver_id IS NOT NULL
+            AND l.tenant_id = $1
+          ORDER BY l.driver_id,
+                   COALESCE(s.stop_date, l.completed_date, l.created_at::date) DESC
+        ),
+        last_with_broker AS (
+          SELECT l.driver_id,
+                 MAX(COALESCE(l.completed_date, l.created_at::date)) AS last_with_broker_date
+          FROM loads l
+          WHERE l.driver_id IS NOT NULL
+            AND l.tenant_id = $1
+            AND $3::uuid IS NOT NULL
+            AND l.broker_id = $3::uuid
+          GROUP BY l.driver_id
+        )
+        SELECT
+          d.id AS driver_id,
+          TRIM(CONCAT_WS(' ', d.first_name, d.last_name)) AS name,
+          zc.latitude AS lat,
+          zc.longitude AS lng,
+          h.driving_hours,
+          h.on_duty_hours,
+          v.vehicle_type AS equipment_class,
+          lwb.last_with_broker_date
+        FROM drivers d
+        LEFT JOIN latest_hos h ON h.driver_id = d.id
+        LEFT JOIN last_delivery ld ON ld.driver_id = d.id
+        LEFT JOIN zip_codes zc ON zc.zip = ld.zip
+        LEFT JOIN vehicles v ON v.id = d.truck_id
+        LEFT JOIN last_with_broker lwb ON lwb.driver_id = d.id
+        WHERE d.tenant_id = $1
+          AND ($2::uuid IS NULL OR d.operating_entity_id = $2)
+          AND LOWER(COALESCE(d.status, 'active')) = 'active'
+      `,
+      candParams
+    );
+
+    // Drop drivers with non-positive HOS *before* asking the AI to rank them.
+    // If we have no HOS record at all we keep the driver but report null and
+    // let the AI handler decide — better than silently filtering.
+    const eligible = [];
+    for (const row of candResult.rows) {
+      const drivingHours = row.driving_hours != null ? Number(row.driving_hours) : null;
+      const onDutyHours = row.on_duty_hours != null ? Number(row.on_duty_hours) : null;
+      let hosRemainingHours = null;
+      if (drivingHours != null && onDutyHours != null) {
+        hosRemainingHours = Math.max(
+          0,
+          Math.min(
+            HOS_DRIVE_CAP_HOURS_FOR_RECO - drivingHours,
+            HOS_DUTY_CAP_HOURS_FOR_RECO - onDutyHours
+          )
+        );
+        if (hosRemainingHours <= 0) continue;
+      }
+      const lat = row.lat != null ? Number(row.lat) : null;
+      const lng = row.lng != null ? Number(row.lng) : null;
+      const distanceMiles = haversineMiles(originLat, originLng, lat, lng);
+      eligible.push({
+        driverId: row.driver_id,
+        name: row.name || null,
+        lat,
+        lng,
+        hosRemainingHours,
+        equipmentClass: row.equipment_class || null,
+        lastLoadWithCustomer: row.last_with_broker_date
+          ? new Date(row.last_with_broker_date).toISOString().slice(0, 10)
+          : null,
+        _distanceMiles: distanceMiles
+      });
+    }
+
+    // Cap pool size before paying the LLM cost. Drivers with no resolved
+    // location sort last so they only fill in when we have headroom.
+    eligible.sort((a, b) => {
+      const aDist = a._distanceMiles == null ? Infinity : a._distanceMiles;
+      const bDist = b._distanceMiles == null ? Infinity : b._distanceMiles;
+      return aDist - bDist;
+    });
+    const candidatePool = eligible.slice(0, RECOMMEND_DRIVER_CAP).map((c) => {
+      // strip the internal sort key before sending to the AI service
+      const { _distanceMiles, ...rest } = c;
+      return rest;
+    });
+
+    if (candidatePool.length === 0) {
+      const duration = Date.now() - startTime;
+      dtLogger.trackRequest('POST', `/api/loads/${loadId}/recommend-driver`, 200, duration, {
+        candidates: 0,
+        reason: 'no_eligible_drivers'
+      });
+      return res.json({
+        success: true,
+        candidates: [],
+        reasoning: 'No drivers in this tenant currently have positive HOS remaining.'
+      });
+    }
+
+    const aiServiceUrl = process.env.AI_SERVICE_URL || 'http://localhost:4100';
+    const signal =
+      typeof AbortSignal !== 'undefined' && typeof AbortSignal.timeout === 'function'
+        ? AbortSignal.timeout(RECOMMEND_DRIVER_AI_TIMEOUT_MS)
+        : undefined;
+
+    const aiCallStart = Date.now();
+    let aiPayload;
+    try {
+      const aiRes = await fetch(`${aiServiceUrl}/api/ai/loads/recommend-driver`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          loadId,
+          load: {
+            originLat,
+            originLng,
+            pickupAt,
+            equipmentClass: loadEquipmentClass,
+            customerId
+          },
+          candidateDrivers: candidatePool
+        }),
+        signal
+      });
+      const aiDuration = Date.now() - aiCallStart;
+      if (!aiRes.ok) {
+        const snippet = await aiRes.text().catch(() => '');
+        let parsedError = null;
+        let aiErrorCode = null;
+        try {
+          const parsed = JSON.parse(snippet);
+          if (parsed && typeof parsed === 'object') {
+            parsedError = typeof parsed.error === 'string' ? parsed.error : null;
+            aiErrorCode = typeof parsed.code === 'string' ? parsed.code : null;
+          }
+        } catch (_parseErr) { /* snippet may not be JSON */ }
+
+        const is5xx = aiRes.status >= 500;
+        // 4xx with AI_BAD_REQUEST* code means the route sent a payload the AI
+        // rejected. Pre-flight should make this unreachable — log it loudly
+        // (bug: prefix on the route key) so we can find the regression fast.
+        const isBadRequest = !is5xx && typeof aiErrorCode === 'string' && aiErrorCode.startsWith('AI_BAD_REQUEST');
+        const logKey = isBadRequest
+          ? 'bug:loads_recommend_driver_ai_http'
+          : 'loads_recommend_driver_ai_http';
+        dtLogger.error(logKey, {
+          status: aiRes.status,
+          aiPayloadSnippet: snippet.slice(0, 500),
+          aiErrorCode,
+          aiDurationMs: aiDuration
+        });
+        let reasoning;
+        if (is5xx) {
+          reasoning = `AI service is currently failing (status ${aiRes.status}). Try again in a moment.`;
+        } else if (isBadRequest) {
+          reasoning = `Suggestion request was malformed: ${parsedError || 'unknown validation error'}`;
+        } else {
+          // Non-5xx, non-AI_BAD_REQUEST 4xx — auth / rate-limit / unknown.
+          reasoning = `AI service rejected the request (status ${aiRes.status}). Try again in a moment.`;
+        }
+        return res.json({
+          success: true,
+          candidates: [],
+          reasoning
+        });
+      }
+      aiPayload = await aiRes.json();
+    } catch (fetchErr) {
+      const aiDuration = Date.now() - aiCallStart;
+      const errorName = fetchErr?.name || null;
+      dtLogger.error('loads_recommend_driver_ai_fetch_failed', {
+        err: fetchErr?.message || String(fetchErr),
+        errorName,
+        aiDurationMs: aiDuration
+      });
+      const isTimeout = errorName === 'AbortError' || errorName === 'TimeoutError';
+      const reasoning = isTimeout
+        ? 'AI service is taking too long to respond. Try again in a moment.'
+        : 'AI service is unreachable from logistics-service. Check AI_SERVICE_URL configuration.';
+      return res.json({
+        success: true,
+        candidates: [],
+        reasoning
+      });
+    }
+
+    const candidates = Array.isArray(aiPayload?.candidates) ? aiPayload.candidates : [];
+    const reasoning = typeof aiPayload?.reasoning === 'string' ? aiPayload.reasoning : '';
+
+    const duration = Date.now() - startTime;
+    dtLogger.trackRequest('POST', `/api/loads/${loadId}/recommend-driver`, 200, duration, {
+      candidates: candidates.length,
+      poolSize: candidatePool.length
+    });
+
+    return res.json({ success: true, candidates, reasoning });
+  } catch (error) {
+    const duration = Date.now() - startTime;
+    dtLogger.error('loads_recommend_driver_failed', error, { loadId });
+    dtLogger.trackRequest('POST', `/api/loads/${loadId}/recommend-driver`, 500, duration);
+    return res.status(500).json({ success: false, error: 'Failed to recommend driver' });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// FN-1590 — Spreadsheet → loads import (preview / stage / commit / list / get).
+// ─────────────────────────────────────────────────────────────────────────────
+const loadsImportService = require('../services/loads-import-service');
+
+const importUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 15 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    const allowed = [
+      'text/csv',
+      'application/vnd.ms-excel',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      'application/octet-stream',
+      'text/plain'
+    ];
+    const ext = path.extname(file.originalname || '').toLowerCase().replace('.', '');
+    if (allowed.includes(file.mimetype) || ['csv', 'xlsx', 'xls', 'txt'].includes(ext)) {
+      return cb(null, true);
+    }
+    cb(new Error('Only CSV and XLSX files are accepted'));
+  }
+});
+
+function sendImportError(res, err, fallbackMsg) {
+  const status = err && err.status ? err.status : 500;
+  return res.status(status).json({ success: false, error: err?.message || fallbackMsg });
+}
+
+/**
+ * @openapi
+ * /api/loads/import/preview:
+ *   post:
+ *     summary: Upload and preview a loads spreadsheet (CSV/XLSX)
+ *     description: Hashes the file, stores it in R2, optionally calls the AI service for column mapping, and creates a load_import_batches row in 'pending' status. Returns headers, sample rows, and the AI-suggested mapping.
+ *     tags: [Loads Import]
+ *     security: [{ bearerAuth: [] }]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             required: [file]
+ *             properties:
+ *               file:
+ *                 type: string
+ *                 format: binary
+ *     responses:
+ *       200: { description: Preview result with batchId, headers, sampleRows, columnMapping (or null on AI miss) }
+ *       400: { description: Missing file or unparseable headers }
+ *       413: { description: File exceeds Phase 1 row cap }
+ */
+router.post('/import/preview', requireRole(['admin', 'dispatch']), importUpload.single('file'), async (req, res) => {
+  try {
+    if (!req.file) return res.status(400).json({ success: false, error: 'No file uploaded' });
+    const result = await loadsImportService.previewImport({
+      tenantId: req.context?.tenantId || null,
+      operatingEntityId: req.context?.operatingEntityId || null,
+      userId: req.user?.id || null,
+      buffer: req.file.buffer,
+      fileName: req.file.originalname,
+      fileMime: req.file.mimetype
+    });
+    res.json({ success: true, data: result });
+  } catch (err) {
+    dtLogger.error('loads_import_preview_error', err);
+    sendImportError(res, err, 'Preview failed');
+  }
+});
+
+/**
+ * @openapi
+ * /api/loads/import/stage:
+ *   post:
+ *     summary: Apply a finalized column mapping to a previewed batch
+ *     description: Walks every row deterministically, writes per-row outcomes to load_import_rows, transitions the batch to 'staged'. No AI calls.
+ *     tags: [Loads Import]
+ *     security: [{ bearerAuth: [] }]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [batchId, columnMapping]
+ *             properties:
+ *               batchId:                  { type: string, format: uuid }
+ *               columnMapping:            { type: object }
+ *               statusEnumMapping:        { type: object }
+ *               billingStatusEnumMapping: { type: object }
+ *               multiStopPattern:         { type: string, enum: [single, multi_row, extra_columns, free_text] }
+ *               groupByColumn:            { type: string }
+ *     responses:
+ *       200: { description: Stage summary (totalRows, ok, needsReview, errors) }
+ *       404: { description: Batch not found }
+ *       409: { description: Batch already committed or never previewed }
+ */
+router.post('/import/stage', requireRole(['admin', 'dispatch']), async (req, res) => {
+  try {
+    const body = req.body || {};
+    const result = await loadsImportService.stageBatch({
+      tenantId: req.context?.tenantId || null,
+      operatingEntityId: req.context?.operatingEntityId || null,
+      batchId: body.batchId,
+      columnMapping: body.columnMapping,
+      statusEnumMapping: body.statusEnumMapping || {},
+      billingStatusEnumMapping: body.billingStatusEnumMapping || {},
+      multiStopPattern: body.multiStopPattern || 'single',
+      groupByColumn: body.groupByColumn || null
+    });
+    res.json({ success: true, data: result });
+  } catch (err) {
+    dtLogger.error('loads_import_stage_error', err);
+    sendImportError(res, err, 'Stage failed');
+  }
+});
+
+/**
+ * @openapi
+ * /api/loads/import/commit/{batchId}:
+ *   post:
+ *     summary: Commit a staged loads import batch
+ *     description: Single transaction. Inserts loads + load_stops for `ok` rows, marks duplicates by per-tenant load_number collision, fuzzy-matches broker/driver/truck/trailer, applies the auto-threshold (env LOADS_IMPORT_AUTO_THRESHOLD, default 0.85) to route rows to NEW vs DRAFT+needs_review. Idempotent — re-committing returns the cached result_summary.
+ *     tags: [Loads Import]
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: path
+ *         name: batchId
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200: { description: Commit summary (created, duplicates, errors) }
+ *       404: { description: Batch not found }
+ *       409: { description: Batch is not in staged status }
+ */
+router.post('/import/commit/:batchId', requireRole(['admin', 'dispatch']), async (req, res) => {
+  try {
+    const result = await loadsImportService.commitBatch({
+      tenantId: req.context?.tenantId || null,
+      operatingEntityId: req.context?.operatingEntityId || null,
+      userId: req.user?.id || null,
+      batchId: req.params.batchId,
+      autoThreshold: typeof req.body?.autoThreshold === 'number' ? req.body.autoThreshold : undefined
+    });
+    res.json({ success: true, data: result });
+  } catch (err) {
+    dtLogger.error('loads_import_commit_error', err, { batchId: req.params.batchId });
+    sendImportError(res, err, 'Commit failed');
+  }
+});
+
+/**
+ * @openapi
+ * /api/loads/import/batches:
+ *   get:
+ *     summary: List loads import batches for the tenant
+ *     tags: [Loads Import]
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: query
+ *         name: limit
+ *         schema: { type: integer, default: 50, maximum: 200 }
+ *       - in: query
+ *         name: offset
+ *         schema: { type: integer, default: 0 }
+ *     responses:
+ *       200: { description: Batch list }
+ */
+router.get('/import/batches', requireRole(['admin', 'dispatch']), async (req, res) => {
+  try {
+    const result = await loadsImportService.listBatches({
+      tenantId: req.context?.tenantId || null,
+      operatingEntityId: req.context?.operatingEntityId || null,
+      limit: req.query.limit,
+      offset: req.query.offset
+    });
+    res.json({ success: true, data: result });
+  } catch (err) {
+    dtLogger.error('loads_import_list_error', err);
+    sendImportError(res, err, 'Failed to list batches');
+  }
+});
+
+/**
+ * @openapi
+ * /api/loads/import/batches/{id}:
+ *   get:
+ *     summary: Get a loads import batch with row-level breakdown
+ *     tags: [Loads Import]
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200: { description: Batch detail }
+ *       404: { description: Batch not found }
+ */
+router.get('/import/batches/:id', requireRole(['admin', 'dispatch']), async (req, res) => {
+  try {
+    if (!UUID_RE.test(req.params.id)) return res.status(404).json({ success: false, error: 'Batch not found' });
+    const result = await loadsImportService.getBatchDetail({
+      tenantId: req.context?.tenantId || null,
+      batchId: req.params.id
+    });
+    res.json({ success: true, data: result });
+  } catch (err) {
+    dtLogger.error('loads_import_detail_error', err, { batchId: req.params.id });
+    sendImportError(res, err, 'Failed to fetch batch');
   }
 });
 

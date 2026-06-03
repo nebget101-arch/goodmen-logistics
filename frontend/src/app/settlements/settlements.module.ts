@@ -8,6 +8,7 @@ import { SettlementWizardComponent } from './settlement-wizard/settlement-wizard
 import { SettlementDetailComponent } from './settlement-detail/settlement-detail.component';
 import { ScheduledDeductionsComponent } from './scheduled-deductions/scheduled-deductions.component';
 import { EquipmentOwnersComponent } from './equipment-owners/equipment-owners.component';
+import { BalanceTransferQueueComponent } from './balance-transfer-queue/balance-transfer-queue.component';
 
 @NgModule({
   declarations: [
@@ -15,7 +16,8 @@ import { EquipmentOwnersComponent } from './equipment-owners/equipment-owners.co
     SettlementWizardComponent,
     SettlementDetailComponent,
     ScheduledDeductionsComponent,
-    EquipmentOwnersComponent
+    EquipmentOwnersComponent,
+    BalanceTransferQueueComponent
   ],
   imports: [
     CommonModule,

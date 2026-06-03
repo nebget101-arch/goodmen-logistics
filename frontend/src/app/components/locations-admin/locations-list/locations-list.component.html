@@ -1,0 +1,276 @@
+<div class="locations-admin ai-admin-shell">
+  <header class="ai-header">
+    <div class="header-left">
+      <p class="ai-kicker">FleetNeuron Admin</p>
+      <h1>
+        <span class="material-symbols-outlined title-icon">location_on</span>
+        Locations
+      </h1>
+      <p class="subtitle">Manage all tenant locations — shops, yards, warehouses, and terminals.</p>
+    </div>
+
+    <div class="header-actions">
+      <button type="button" class="btn btn-secondary" [disabled]="loading" (click)="loadLocations()">
+        <span class="material-symbols-outlined">refresh</span>
+        {{ loading ? 'Loading…' : 'Refresh' }}
+      </button>
+      <button type="button" class="btn btn-primary" (click)="onAddLocation()">
+        <span class="material-symbols-outlined">add</span>
+        Add Location
+      </button>
+    </div>
+  </header>
+
+  <!-- Error banner -->
+  <div *ngIf="error" class="alert alert-danger">
+    <span class="material-symbols-outlined">error</span>
+    <span>{{ error }}</span>
+  </div>
+
+  <!-- Filter bar -->
+  <section class="filter-bar">
+    <div class="filter-group filter-group--search">
+      <label for="locSearch" class="filter-label">Search</label>
+      <div class="search-wrap">
+        <span class="material-symbols-outlined search-icon">search</span>
+        <input
+          id="locSearch"
+          type="text"
+          class="filter-input search-input"
+          placeholder="Name, code, city…"
+          [(ngModel)]="searchQuery"
+          (keyup.enter)="onSearch()"
+          (blur)="onSearch()"
+        />
+      </div>
+    </div>
+
+    <div class="filter-group">
+      <label for="locType" class="filter-label">Type</label>
+      <select id="locType" class="filter-select" [(ngModel)]="selectedType" (change)="onFilter()">
+        <option value="">All Types</option>
+        <option *ngFor="let opt of typeOptions" [value]="opt.value">{{ opt.label }}</option>
+      </select>
+    </div>
+
+    <div class="filter-group">
+      <label for="locActive" class="filter-label">Status</label>
+      <select id="locActive" class="filter-select" [(ngModel)]="selectedActive" (change)="onFilter()">
+        <option value="all">All</option>
+        <option value="active">Active</option>
+        <option value="inactive">Inactive</option>
+      </select>
+    </div>
+  </section>
+
+  <!-- Table panel -->
+  <section class="panel ai-panel">
+    <div *ngIf="loading" class="loading ai-loading">
+      <span class="material-symbols-outlined spin">progress_activity</span>
+      Loading locations…
+    </div>
+
+    <div class="table-wrap" *ngIf="!loading">
+      <table class="ai-table">
+        <thead>
+          <tr>
+            <th scope="col" class="col-name sortable" (click)="onSort('name')" (keydown.enter)="onSort('name')" tabindex="0">
+              <span class="th-content">
+                Name / Code
+                <span class="material-symbols-outlined sort-icon">{{ sortIcon('name') }}</span>
+              </span>
+            </th>
+            <th scope="col" class="col-type sortable" (click)="onSort('location_type')" (keydown.enter)="onSort('location_type')" tabindex="0">
+              <span class="th-content">
+                Type
+                <span class="material-symbols-outlined sort-icon">{{ sortIcon('location_type') }}</span>
+              </span>
+            </th>
+            <th scope="col" class="col-city sortable" (click)="onSort('city')" (keydown.enter)="onSort('city')" tabindex="0">
+              <span class="th-content">
+                City / State
+                <span class="material-symbols-outlined sort-icon">{{ sortIcon('city') }}</span>
+              </span>
+            </th>
+            <th scope="col" class="col-phone col-secondary">Phone</th>
+            <th scope="col" class="col-count col-secondary" title="Active bins">
+              <span class="th-content">
+                <span class="material-symbols-outlined col-count-icon">shelves</span>
+                Bins
+              </span>
+            </th>
+            <th scope="col" class="col-count col-secondary" title="Assigned users">
+              <span class="th-content">
+                <span class="material-symbols-outlined col-count-icon">group</span>
+                Users
+              </span>
+            </th>
+            <th scope="col" class="col-status sortable" (click)="onSort('active')" (keydown.enter)="onSort('active')" tabindex="0">
+              <span class="th-content">
+                Status
+                <span class="material-symbols-outlined sort-icon">{{ sortIcon('active') }}</span>
+              </span>
+            </th>
+            <th scope="col" class="col-actions">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngIf="locations.length === 0">
+            <td colspan="8" class="empty-state">
+              <span class="material-symbols-outlined">location_off</span>
+              No locations found.
+            </td>
+          </tr>
+          <tr *ngFor="let loc of locations">
+            <!-- Name + Code -->
+            <td class="col-name name-cell">
+              <span class="loc-name">{{ loc.name }}</span>
+              <span class="loc-code" *ngIf="loc.code">{{ loc.code }}</span>
+            </td>
+
+            <!-- Type chip -->
+            <td class="col-type">
+              <span [ngClass]="getTypeBadgeClass(loc.location_type)">
+                {{ getTypeLabel(loc.location_type) }}
+              </span>
+            </td>
+
+            <!-- City / State -->
+            <td class="col-city">
+              <ng-container *ngIf="loc.city || loc.state; else noCityState">
+                <span class="city-state">
+                  {{ loc.city || '' }}{{ loc.city && loc.state ? ', ' : '' }}{{ loc.state || '' }}
+                </span>
+              </ng-container>
+              <ng-template #noCityState><span class="muted">—</span></ng-template>
+            </td>
+
+            <!-- Phone -->
+            <td class="col-phone col-secondary">
+              <span *ngIf="loc.phone; else noPhone" class="loc-phone">{{ loc.phone }}</span>
+              <ng-template #noPhone><span class="muted">—</span></ng-template>
+            </td>
+
+            <!-- # Bins -->
+            <td class="col-count col-secondary">
+              <span *ngIf="loc.bin_count != null" class="count-badge">{{ loc.bin_count }}</span>
+              <span *ngIf="loc.bin_count == null" class="muted">—</span>
+            </td>
+
+            <!-- # Users -->
+            <td class="col-count col-secondary">
+              <span *ngIf="loc.user_count != null" class="count-badge">{{ loc.user_count }}</span>
+              <span *ngIf="loc.user_count == null" class="muted">—</span>
+            </td>
+
+            <!-- Active status pill -->
+            <td class="col-status">
+              <span class="status-pill" [class.status-active]="loc.active" [class.status-inactive]="!loc.active">
+                {{ loc.active ? 'Active' : 'Inactive' }}
+              </span>
+            </td>
+
+            <!-- Actions -->
+            <td class="col-actions">
+              <div class="action-group">
+                <!-- Edit (details) -->
+                <button
+                  type="button"
+                  class="btn-icon"
+                  [disabled]="actionLoadingId === loc.id"
+                  (click)="onEditLocation(loc)"
+                  title="Edit location details"
+                  aria-label="Edit location details"
+                >
+                  <span class="material-symbols-outlined">edit</span>
+                </button>
+
+                <!-- Manage Bins -->
+                <button
+                  type="button"
+                  class="btn-icon"
+                  [disabled]="actionLoadingId === loc.id"
+                  (click)="onManageBins(loc)"
+                  title="Manage bins"
+                  aria-label="Manage bins"
+                >
+                  <span class="material-symbols-outlined">shelves</span>
+                </button>
+
+                <!-- Manage Users -->
+                <button
+                  type="button"
+                  class="btn-icon"
+                  [disabled]="actionLoadingId === loc.id"
+                  (click)="onManageUsers(loc)"
+                  title="Manage users"
+                  aria-label="Manage users"
+                >
+                  <span class="material-symbols-outlined">manage_accounts</span>
+                </button>
+
+                <!-- Delete -->
+                <button
+                  type="button"
+                  class="btn-icon btn-icon-danger"
+                  [disabled]="actionLoadingId === loc.id"
+                  (click)="onDeleteLocation(loc)"
+                  title="Delete location"
+                  aria-label="Delete location"
+                >
+                  <span class="material-symbols-outlined">delete</span>
+                </button>
+              </div>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Pagination -->
+    <div class="pagination" *ngIf="!loading && total > 0">
+      <button
+        type="button"
+        class="btn-sm btn-outline"
+        [disabled]="page <= 1"
+        (click)="onPageChange(page - 1)"
+      >
+        <span class="material-symbols-outlined">chevron_left</span>
+        Prev
+      </button>
+
+      <span class="page-info">
+        Page {{ page }} of {{ totalPages }}
+        <span class="total-count">({{ total }} total)</span>
+      </span>
+
+      <button
+        type="button"
+        class="btn-sm btn-outline"
+        [disabled]="page >= totalPages"
+        (click)="onPageChange(page + 1)"
+      >
+        Next
+        <span class="material-symbols-outlined">chevron_right</span>
+      </button>
+    </div>
+  </section>
+</div>
+
+<!-- Edit / Add location dialog -->
+<app-location-edit-dialog
+  [location]="editingLocation"
+  [isOpen]="showEditDialog"
+  [initialTab]="editDialogInitialTab"
+  (saved)="onEditDialogSaved()"
+  (close)="onEditDialogClose()"
+></app-location-edit-dialog>
+
+<!-- Delete location dialog -->
+<app-delete-location-dialog
+  [location]="deletingLocation"
+  [isOpen]="showDeleteDialog"
+  (deleted)="onLocationDeleted($event)"
+  (markedInactive)="onLocationMarkedInactive($event)"
+  (close)="onDeleteDialogClose()"
+></app-delete-location-dialog>

@@ -1,8 +1,9 @@
 import { Component, OnDestroy, OnInit } from '@angular/core';
 import { ActivatedRoute } from '@angular/router';
 import { Subject, switchMap, takeUntil } from 'rxjs';
-import { ReportCard, ReportColumn, ReportFilters, ReportKey, ReportPageConfig } from '../../reports.models';
+import { DrilldownTarget, ReportAnomaly, ReportCard, ReportColumn, ReportFilters, ReportKey, ReportNarrative, ReportPageConfig } from '../../reports.models';
 import { ReportsService } from '../../services/reports.service';
+import { DrilldownService } from '../../services/drilldown.service';
 import { OperatingEntityContextService } from '../../../services/operating-entity-context.service';
 
 const REPORT_CONFIG: Record<ReportKey, ReportPageConfig> = {
@@ -117,13 +118,53 @@ const REPORT_CONFIG: Record<ReportKey, ReportPageConfig> = {
   'profit-loss': {
     key: 'profit-loss',
     title: 'Profit & Loss',
-    subtitle: 'P&L statement-style report by period.',
+    subtitle: 'P&L with revenue, direct costs, gross margin, operating expenses, and net profit.',
     endpoint: 'profit-loss',
     columns: [
       { key: 'period', label: 'Period', type: 'date' },
       { key: 'revenue', label: 'Revenue', type: 'currency' },
-      { key: 'cost_of_operations', label: 'Cost of Operations', type: 'currency' },
-      { key: 'gross_profit', label: 'Gross Profit', type: 'currency' }
+      { key: 'direct_costs', label: 'Direct Costs', type: 'currency' },
+      { key: 'gross_margin', label: 'Gross Margin', type: 'currency' },
+      { key: 'operating_expenses', label: 'Operating Expenses', type: 'currency' },
+      { key: 'net_profit', label: 'Net Profit', type: 'currency' }
+    ]
+  },
+  'direct-load-profit': {
+    key: 'direct-load-profit',
+    title: 'Direct Load Profit',
+    subtitle: 'Per-load profitability: revenue minus driver pay, fuel, and tolls.',
+    endpoint: 'direct-load-profit',
+    columns: [
+      { key: 'load_number', label: 'Load #' },
+      { key: 'completed_date', label: 'Date', type: 'date' },
+      { key: 'driver_name', label: 'Driver' },
+      { key: 'truck', label: 'Truck' },
+      { key: 'rate', label: 'Rate', type: 'currency' },
+      { key: 'driver_pay', label: 'Driver Pay', type: 'currency' },
+      { key: 'fuel', label: 'Fuel', type: 'currency' },
+      { key: 'tolls', label: 'Tolls', type: 'currency' },
+      { key: 'direct_profit', label: 'Direct Profit', type: 'currency' },
+      { key: 'margin_pct', label: 'Margin %', type: 'percent' }
+    ]
+  },
+  'fully-loaded-profit': {
+    key: 'fully-loaded-profit',
+    title: 'Fully Loaded Profit',
+    subtitle: 'Direct load profit minus prorated period costs (insurance, ELD, maintenance). Group by load, truck, or driver.',
+    endpoint: 'fully-loaded-profit',
+    columns: [
+      { key: 'load_number', label: 'Load #' },
+      { key: 'completed_date', label: 'Date', type: 'date' },
+      { key: 'driver_name', label: 'Driver' },
+      { key: 'truck', label: 'Truck' },
+      { key: 'rate', label: 'Revenue', type: 'currency' },
+      { key: 'direct_profit', label: 'Direct Profit', type: 'currency' },
+      { key: 'insurance_allocation', label: 'Insurance Alloc', type: 'currency' },
+      { key: 'eld_allocation', label: 'ELD Alloc', type: 'currency' },
+      { key: 'maintenance_allocation', label: 'Maintenance Alloc', type: 'currency' },
+      { key: 'other_allocation', label: 'Other Alloc', type: 'currency' },
+      { key: 'fully_loaded_profit', label: 'Fully Loaded Profit', type: 'currency' },
+      { key: 'fully_loaded_margin_pct', label: 'Margin %', type: 'percent' }
     ]
   }
 };
@@ -144,11 +185,25 @@ export class ReportViewComponent implements OnInit, OnDestroy {
   cards: ReportCard[] = [];
   rows: Record<string, unknown>[] = [];
   reportSummary: Record<string, unknown> = {};
+  anomalies: ReportAnomaly[] = [];
+  isChatOpen = false;
+  isExporting: { csv: boolean; pdf: boolean } = { csv: false, pdf: false };
+
+  // FN-1183: pre-resolved drill-down targets. Computed once per fetch so
+  // routerLink bindings see stable references — see FN-317 RCA on getter
+  // bindings causing change-detection thrash.
+  displayCards: Array<{ card: ReportCard; target: DrilldownTarget | null }> = [];
+  displayRows: Array<{ row: Record<string, unknown>; target: DrilldownTarget | null }> = [];
+
+  narrative: ReportNarrative | null = null;
+  narrativeLoading = false;
+  narrativeFailed = false;
 
   constructor(
     private route: ActivatedRoute,
     private reportsService: ReportsService,
-    private operatingEntityContext: OperatingEntityContextService
+    private operatingEntityContext: OperatingEntityContextService,
+    private drilldownService: DrilldownService
   ) {}
 
   ngOnInit(): void {
@@ -173,7 +228,11 @@ export class ReportViewComponent implements OnInit, OnDestroy {
         takeUntil(this.destroy$),
         switchMap((data) => {
           const reportKey = data['reportKey'] as ReportKey;
-          this.config = REPORT_CONFIG[reportKey] || REPORT_CONFIG.overview;
+          const nextConfig = REPORT_CONFIG[reportKey] || REPORT_CONFIG.overview;
+          if (this.config && this.config.key !== nextConfig.key) {
+            this.isChatOpen = false;
+          }
+          this.config = nextConfig;
           return this.route.queryParams;
         })
       )
@@ -195,22 +254,39 @@ export class ReportViewComponent implements OnInit, OnDestroy {
   }
 
   exportAs(format: 'csv' | 'pdf'): void {
+    if (this.isExporting[format]) return;
+    const filters = this.getCurrentFilters();
+    this.isExporting[format] = true;
+    this.error = '';
     this.reportsService
-      .exportReport(this.config.key, format, this.getCurrentFilters())
+      .exportReport(this.config.key, format, filters)
       .pipe(takeUntil(this.destroy$))
       .subscribe({
         next: (blob) => {
           const url = URL.createObjectURL(blob);
           const a = document.createElement('a');
           a.href = url;
-          a.download = `${this.config.key}.${format}`;
+          a.download = this.buildExportFilename(format, filters);
           a.click();
           URL.revokeObjectURL(url);
+          this.isExporting[format] = false;
         },
         error: () => {
-          this.error = 'Export failed. Please try again.';
+          this.error = `${format.toUpperCase()} export failed. Please try again.`;
+          this.isExporting[format] = false;
         }
       });
+  }
+
+  private buildExportFilename(format: 'csv' | 'pdf', filters: ReportFilters): string {
+    const start = filters.startDate;
+    const end = filters.endDate;
+    let range: string;
+    if (start && end) range = `${start}_${end}`;
+    else if (start) range = `from-${start}`;
+    else if (end) range = `to-${end}`;
+    else range = 'all';
+    return `${this.config.key}-${range}.${format}`;
   }
 
   asColumns(): ReportColumn[] {
@@ -248,24 +324,108 @@ export class ReportViewComponent implements OnInit, OnDestroy {
     return index;
   }
 
+  openChat(): void {
+    this.isChatOpen = true;
+  }
+
+  closeChat(): void {
+    this.isChatOpen = false;
+  }
+
+  getChatFilters(): ReportFilters {
+    return this.getCurrentFilters();
+  }
+
   private fetchReport(filters: ReportFilters): void {
     this.isLoading = true;
     this.error = '';
+    this.anomalies = [];
     this.reportsService.getReport(this.config.endpoint, filters).pipe(takeUntil(this.destroy$)).subscribe({
       next: (resp) => {
         this.cards = resp.cards || [];
         this.rows = resp.data || [];
         this.reportSummary = (resp.summary || {}) as Record<string, unknown>;
+        this.recomputeDrilldowns(filters);
         this.isLoading = false;
+        this.fetchAnomalies(filters);
+        this.fetchNarrative(filters);
       },
       error: (err) => {
         this.error = err?.error?.error || 'Unable to load report data.';
         this.rows = [];
         this.cards = [];
+        this.displayCards = [];
+        this.displayRows = [];
         this.reportSummary = {};
+        this.anomalies = [];
         this.isLoading = false;
+        this.narrative = null;
+        this.narrativeLoading = false;
+        this.narrativeFailed = true;
       }
     });
+  }
+
+  /** FN-1183: pre-resolve drill-down targets so template bindings stay stable. */
+  private recomputeDrilldowns(filters: ReportFilters): void {
+    const reportKey = this.config?.key;
+    if (!reportKey) {
+      this.displayCards = this.cards.map((card) => ({ card, target: null }));
+      this.displayRows = this.rows.map((row) => ({ row, target: null }));
+      return;
+    }
+    this.displayCards = this.cards.map((card) => ({
+      card,
+      target: this.drilldownService.getCardTarget(reportKey, card.key, filters)
+    }));
+    this.displayRows = this.rows.map((row) => ({
+      row,
+      target: this.drilldownService.getRowTarget(reportKey, row, filters)
+    }));
+  }
+
+  private fetchAnomalies(filters: ReportFilters): void {
+    if (!this.rows.length) {
+      this.anomalies = [];
+      return;
+    }
+    this.reportsService
+      .getAnomalies(this.config.key, { data: this.rows, filters })
+      .pipe(takeUntil(this.destroy$))
+      .subscribe({
+        next: (resp) => {
+          this.anomalies = Array.isArray(resp?.anomalies) ? resp.anomalies : [];
+        },
+        error: () => {
+          this.anomalies = [];
+        }
+      });
+  }
+
+  private fetchNarrative(filters: ReportFilters): void {
+    this.narrative = null;
+    this.narrativeFailed = false;
+    this.narrativeLoading = true;
+    const payload = {
+      cards: this.cards,
+      data: this.rows,
+      filters,
+      priorPeriod: (this.reportSummary?.['priorPeriod'] as Record<string, unknown>) || undefined
+    };
+    this.reportsService
+      .getNarrative(this.config.key, payload)
+      .pipe(takeUntil(this.destroy$))
+      .subscribe({
+        next: (resp) => {
+          this.narrative = resp;
+          this.narrativeLoading = false;
+        },
+        error: () => {
+          this.narrative = null;
+          this.narrativeLoading = false;
+          this.narrativeFailed = true;
+        }
+      });
   }
 
   private getCurrentFilters(): ReportFilters {

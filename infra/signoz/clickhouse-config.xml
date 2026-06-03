@@ -1,0 +1,21 @@
+<clickhouse>
+    <!-- FleetNeuron tuning overlay — merged with base config.
+         Do NOT set listen_host, ports, or paths here — the Docker
+         image's docker_related_config.xml already handles those.
+         Overriding them causes port conflicts during entrypoint init. -->
+
+    <logger>
+        <level>warning</level>
+        <console>true</console>
+    </logger>
+
+    <max_connections>100</max_connections>
+    <max_concurrent_queries>50</max_concurrent_queries>
+
+    <!-- Memory limits for Render Standard plan (2GB RAM) -->
+    <max_server_memory_usage_to_ram_ratio>0.8</max_server_memory_usage_to_ram_ratio>
+
+    <merge_tree>
+        <max_bytes_to_merge_at_max_space_in_pool>161061273600</max_bytes_to_merge_at_max_space_in_pool>
+    </merge_tree>
+</clickhouse>

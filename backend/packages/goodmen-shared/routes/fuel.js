@@ -27,7 +27,7 @@
  *   POST   /api/fuel/exceptions/bulk-resolve
  *   POST   /api/fuel/reprocess-unmatched
  *   GET    /api/fuel/overview
- *   GET    /api/fuel/cards/:cardId/assignments
+ *   GET    /api/fuel/cards/:cardId/assignments (?fuelCardId= for one physical card)
  *   POST   /api/fuel/cards/:cardId/assign-driver
  *   POST   /api/fuel/cards/:cardId/revoke-driver
  *   GET    /api/fuel/driver-assignments
@@ -98,12 +98,95 @@ function requireTenant(req, res) {
   return tid;
 }
 
+/** `cardId` route param is a fuel_card_accounts id (account). */
+async function loadPhysicalFuelCard(tenantId, accountId, fuelCardId) {
+  if (!fuelCardId) return null;
+  return knex('fuel_cards')
+    .where({
+      id: fuelCardId,
+      fuel_card_account_id: accountId,
+      tenant_id: tenantId
+    })
+    .first('id', 'card_number_last4');
+}
+
+async function countPhysicalCardsUnderAccount(tenantId, accountId) {
+  const r = await knex('fuel_cards')
+    .where({ fuel_card_account_id: accountId, tenant_id: tenantId })
+    .count('* as c')
+    .first();
+  return parseInt(r?.c, 10) || 0;
+}
+
+/**
+ * Active assignment rows that belong to this physical `fuel_cards` row (FN-673).
+ * Includes legacy rows: same account, null fuel_card_id, matching last4 or fully null (account-wide).
+ */
+function scopeAssignmentsToPhysicalCard(qb, physicalCard, alias = 'fuel_card_driver_assignments') {
+  const c = (name) => `${alias}.${name}`;
+  return qb.andWhere(function scopePhysical() {
+    this.where(c('fuel_card_id'), physicalCard.id);
+    if (physicalCard.card_number_last4) {
+      this.orWhere(function legacyLast4() {
+        this.whereNull(c('fuel_card_id')).where(c('card_number_last4'), physicalCard.card_number_last4);
+      });
+    }
+    this.orWhere(function legacyAccount() {
+      this.whereNull(c('fuel_card_id')).whereNull(c('card_number_last4'));
+    });
+  });
+}
+
 // ─── Provider templates ───────────────────────────────────────────────────────
+/**
+ * @openapi
+ * /api/fuel/providers/templates:
+ *   get:
+ *     summary: List fuel provider templates
+ *     description: Returns all available fuel provider templates with their column mappings and metadata.
+ *     tags:
+ *       - Fuel
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Array of provider template objects
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 type: object
+ */
 router.get('/providers/templates', (_req, res) => {
   res.json(getProviderTemplates());
 });
 
 // ─── Fuel Card Accounts ───────────────────────────────────────────────────────
+/**
+ * @openapi
+ * /api/fuel/cards:
+ *   get:
+ *     summary: List fuel card accounts
+ *     description: Returns all fuel card accounts for the tenant, including a card_count for each account.
+ *     tags:
+ *       - Fuel
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Array of fuel card account objects with card_count
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 type: object
+ *       401:
+ *         description: Tenant context required
+ *       500:
+ *         description: Failed to fetch fuel card accounts
+ */
 router.get('/cards', async (req, res) => {
   try {
     const tid = requireTenant(req, res); if (!tid) return;
@@ -134,6 +217,56 @@ router.get('/cards', async (req, res) => {
   }
 });
 
+/**
+ * @openapi
+ * /api/fuel/cards:
+ *   post:
+ *     summary: Create a fuel card account
+ *     description: Creates a new fuel card account for the tenant.
+ *     tags:
+ *       - Fuel
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - provider_name
+ *               - display_name
+ *             properties:
+ *               provider_name:
+ *                 type: string
+ *               display_name:
+ *                 type: string
+ *               account_number_masked:
+ *                 type: string
+ *               import_method:
+ *                 type: string
+ *                 default: manual_upload
+ *               default_matching_rules:
+ *                 type: object
+ *               status:
+ *                 type: string
+ *                 default: active
+ *               notes:
+ *                 type: string
+ *     responses:
+ *       201:
+ *         description: Created fuel card account
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *       400:
+ *         description: provider_name and display_name are required
+ *       401:
+ *         description: Tenant context required
+ *       500:
+ *         description: Failed to create fuel card account
+ */
 router.post('/cards', async (req, res) => {
   try {
     const tid = requireTenant(req, res); if (!tid) return;
@@ -160,6 +293,57 @@ router.post('/cards', async (req, res) => {
   }
 });
 
+/**
+ * @openapi
+ * /api/fuel/cards/{id}:
+ *   patch:
+ *     summary: Update a fuel card account
+ *     description: Partially updates a fuel card account. Only the provided fields are changed.
+ *     tags:
+ *       - Fuel
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Fuel card account ID
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               display_name:
+ *                 type: string
+ *               account_number_masked:
+ *                 type: string
+ *               import_method:
+ *                 type: string
+ *               default_matching_rules:
+ *                 type: object
+ *               status:
+ *                 type: string
+ *               notes:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Updated fuel card account
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *       401:
+ *         description: Tenant context required
+ *       404:
+ *         description: Fuel card account not found
+ *       500:
+ *         description: Failed to update fuel card account
+ */
 router.patch('/cards/:id', async (req, res) => {
   try {
     const tid = requireTenant(req, res); if (!tid) return;
@@ -188,17 +372,78 @@ router.patch('/cards/:id', async (req, res) => {
 // ─── Fuel Card ↔ Driver Assignments ──────────────────────────────────────────
 
 /**
- * GET /cards/:cardId/assignments
- * List all assignments (active + revoked) for a fuel card.
+ * @openapi
+ * /api/fuel/cards/{cardId}/assignments:
+ *   get:
+ *     summary: List fuel card assignments
+ *     description: Returns all driver assignments (active and revoked) for a specific fuel card account. Optional query fuelCardId scopes to one physical card.
+ *     tags:
+ *       - Fuel
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: cardId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Fuel card account ID
+ *       - in: query
+ *         name: fuelCardId
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Scopes assignments to a specific physical fuel card
+ *     responses:
+ *       200:
+ *         description: Array of assignment objects with driver_name
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 type: object
+ *       401:
+ *         description: Tenant context required
+ *       500:
+ *         description: Failed to fetch card assignments
  */
 router.get('/cards/:cardId/assignments', async (req, res) => {
   try {
     const tid = requireTenant(req, res); if (!tid) return;
     const { cardId } = req.params;
+    const fuelCardId = req.query.fuelCardId || req.query.fuel_card_id;
 
-    const rows = await knex('fuel_card_driver_assignments as a')
+    const account = await knex('fuel_card_accounts')
+      .where({ id: cardId, tenant_id: tid })
+      .first('id');
+    if (!account) return sendError(res, 404, 'Fuel card account not found');
+
+    let q = knex('fuel_card_driver_assignments as a')
       .leftJoin('drivers as d', 'd.id', 'a.driver_id')
-      .where({ 'a.tenant_id': tid, 'a.fuel_card_account_id': cardId })
+      .where({ 'a.tenant_id': tid, 'a.fuel_card_account_id': cardId });
+
+    if (fuelCardId) {
+      const physicalCard = await loadPhysicalFuelCard(tid, cardId, fuelCardId);
+      if (!physicalCard) return sendError(res, 404, 'Fuel card not found under this account');
+      const singlePhysical = (await countPhysicalCardsUnderAccount(tid, cardId)) <= 1;
+      q = q.andWhere(function filterOnePhysicalCard() {
+        this.where('a.fuel_card_id', physicalCard.id);
+        if (physicalCard.card_number_last4) {
+          this.orWhere(function legacyLast4() {
+            this.whereNull('a.fuel_card_id').where('a.card_number_last4', physicalCard.card_number_last4);
+          });
+        }
+        if (singlePhysical) {
+          this.orWhere(function legacyAccount() {
+            this.whereNull('a.fuel_card_id').whereNull('a.card_number_last4');
+          });
+        }
+      });
+    }
+
+    const rows = await q
       .select(
         'a.*',
         knex.raw("COALESCE(d.first_name || ' ' || d.last_name, NULL) AS driver_name")
@@ -213,52 +458,130 @@ router.get('/cards/:cardId/assignments', async (req, res) => {
 });
 
 /**
- * POST /cards/:cardId/assign-driver
- * Assign a driver to a fuel card. Auto-revokes any existing active assignment.
+ * @openapi
+ * /api/fuel/cards/{cardId}/assign-driver:
+ *   post:
+ *     summary: Assign a driver to a fuel card
+ *     description: Assigns a driver to a physical fuel card under the account. Auto-revokes active assignments for that card only.
+ *     tags:
+ *       - Fuel
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: cardId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Fuel card account ID
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - driverId
+ *             properties:
+ *               driverId:
+ *                 type: string
+ *                 format: uuid
+ *               fuelCardId:
+ *                 type: string
+ *                 format: uuid
+ *                 description: Specific physical fuel card ID
+ *               cardNumberLast4:
+ *                 type: string
+ *                 description: Legacy disambiguation field
+ *               notes:
+ *                 type: string
+ *     responses:
+ *       201:
+ *         description: Created driver assignment
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *       400:
+ *         description: driverId is required
+ *       401:
+ *         description: Tenant context required
+ *       404:
+ *         description: Fuel card account or driver not found
+ *       500:
+ *         description: Failed to assign driver to card
  */
 router.post('/cards/:cardId/assign-driver', async (req, res) => {
   try {
     const tid = requireTenant(req, res); if (!tid) return;
     const { cardId } = req.params;
-    const { driverId, cardNumberLast4, notes } = req.body;
+    const { driverId, cardNumberLast4, notes, fuelCardId } = req.body;
 
     if (!driverId) return sendError(res, 400, 'driverId is required');
 
-    // Verify the card exists and belongs to this tenant
-    const card = await knex('fuel_card_accounts')
+    const account = await knex('fuel_card_accounts')
       .where({ id: cardId, tenant_id: tid })
       .first('id');
-    if (!card) return sendError(res, 404, 'Fuel card account not found');
+    if (!account) return sendError(res, 404, 'Fuel card account not found');
 
-    // Verify the driver exists and belongs to this tenant
     const driver = await knex('drivers')
       .where({ id: driverId, tenant_id: tid })
       .first('id');
     if (!driver) return sendError(res, 404, 'Driver not found');
 
+    let physicalCard = null;
+    if (fuelCardId) {
+      physicalCard = await loadPhysicalFuelCard(tid, cardId, fuelCardId);
+      if (!physicalCard) return sendError(res, 404, 'Fuel card not found under this account');
+    } else if (cardNumberLast4) {
+      const matches = await knex('fuel_cards')
+        .where({
+          fuel_card_account_id: cardId,
+          tenant_id: tid,
+          card_number_last4: cardNumberLast4
+        })
+        .select('id', 'card_number_last4');
+      if (matches.length > 1) {
+        return sendError(res, 400, 'Multiple cards share this last4; pass fuelCardId');
+      }
+      if (matches.length === 1) physicalCard = matches[0];
+    }
+
+    const physicalCount = await countPhysicalCardsUnderAccount(tid, cardId);
+    if (physicalCount > 1 && !physicalCard) {
+      return sendError(res, 400, 'fuelCardId or cardNumberLast4 is required when the account has multiple cards');
+    }
+
     const uid = userId(req);
+    let revokeQ = knex('fuel_card_driver_assignments')
+      .where({ fuel_card_account_id: cardId, tenant_id: tid, status: 'active' });
 
-    // Auto-revoke any existing active assignment for this card
-    await knex('fuel_card_driver_assignments')
-      .where({ fuel_card_account_id: cardId, tenant_id: tid, status: 'active' })
-      .update({
-        status: 'revoked',
-        revoked_date: new Date(),
-        revoked_by: uid,
-        updated_at: new Date()
-      });
+    if (physicalCard) {
+      revokeQ = scopeAssignmentsToPhysicalCard(revokeQ, physicalCard, 'fuel_card_driver_assignments');
+    }
 
-    // Create new active assignment
-    const [row] = await knex('fuel_card_driver_assignments').insert({
+    await revokeQ.update({
+      status: 'revoked',
+      revoked_date: new Date(),
+      revoked_by: uid,
+      updated_at: new Date()
+    });
+
+    const last4ForRow = physicalCard?.card_number_last4 ?? cardNumberLast4 ?? null;
+    const insert = {
       tenant_id: tid,
       fuel_card_account_id: cardId,
+      fuel_card_id: physicalCard?.id || null,
       driver_id: driverId,
-      card_number_last4: cardNumberLast4 || null,
+      card_number_last4: last4ForRow,
       status: 'active',
       assigned_date: new Date(),
       assigned_by: uid,
       notes: notes || null
-    }).returning('*');
+    };
+
+    const [row] = await knex('fuel_card_driver_assignments').insert(insert).returning('*');
 
     res.status(201).json(row);
   } catch (err) {
@@ -268,18 +591,94 @@ router.post('/cards/:cardId/assign-driver', async (req, res) => {
 });
 
 /**
- * POST /cards/:cardId/revoke-driver
- * Revoke the active driver assignment for a fuel card.
+ * @openapi
+ * /api/fuel/cards/{cardId}/revoke-driver:
+ *   post:
+ *     summary: Revoke active driver assignment
+ *     description: Revokes the active assignment for one physical card. Use fuelCardId or cardNumberLast4 to disambiguate when multiple cards exist.
+ *     tags:
+ *       - Fuel
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: cardId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Fuel card account ID
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               fuelCardId:
+ *                 type: string
+ *                 format: uuid
+ *                 description: Specific physical fuel card ID
+ *               cardNumberLast4:
+ *                 type: string
+ *                 description: Disambiguate when multiple cards
+ *               notes:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Revoked assignment record
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *       401:
+ *         description: Tenant context required
+ *       404:
+ *         description: No active assignment found for this card
+ *       500:
+ *         description: Failed to revoke card assignment
  */
 router.post('/cards/:cardId/revoke-driver', async (req, res) => {
   try {
     const tid = requireTenant(req, res); if (!tid) return;
     const { cardId } = req.params;
-    const { notes } = req.body;
+    const { notes, fuelCardId, cardNumberLast4 } = req.body;
 
-    const active = await knex('fuel_card_driver_assignments')
-      .where({ fuel_card_account_id: cardId, tenant_id: tid, status: 'active' })
-      .first();
+    const account = await knex('fuel_card_accounts')
+      .where({ id: cardId, tenant_id: tid })
+      .first('id');
+    if (!account) return sendError(res, 404, 'Fuel card account not found');
+
+    let physicalCard = null;
+    if (fuelCardId) {
+      physicalCard = await loadPhysicalFuelCard(tid, cardId, fuelCardId);
+      if (!physicalCard) return sendError(res, 404, 'Fuel card not found under this account');
+    } else if (cardNumberLast4) {
+      const matches = await knex('fuel_cards')
+        .where({
+          fuel_card_account_id: cardId,
+          tenant_id: tid,
+          card_number_last4: cardNumberLast4
+        })
+        .select('id', 'card_number_last4');
+      if (matches.length > 1) {
+        return sendError(res, 400, 'Multiple cards share this last4; pass fuelCardId');
+      }
+      if (matches.length === 1) physicalCard = matches[0];
+    }
+
+    const physicalCount = await countPhysicalCardsUnderAccount(tid, cardId);
+    if (physicalCount > 1 && !physicalCard) {
+      return sendError(res, 400, 'fuelCardId or cardNumberLast4 is required when the account has multiple cards');
+    }
+
+    let activeQ = knex('fuel_card_driver_assignments')
+      .where({ fuel_card_account_id: cardId, tenant_id: tid, status: 'active' });
+
+    if (physicalCard) {
+      activeQ = scopeAssignmentsToPhysicalCard(activeQ, physicalCard, 'fuel_card_driver_assignments');
+    }
+
+    const active = await activeQ.first();
 
     if (!active) return sendError(res, 404, 'No active assignment found for this card');
 
@@ -302,8 +701,38 @@ router.post('/cards/:cardId/revoke-driver', async (req, res) => {
 });
 
 /**
- * GET /driver-assignments?driver_id=<uuid>
- * List all card assignments for a specific driver.
+ * @openapi
+ * /api/fuel/driver-assignments:
+ *   get:
+ *     summary: List card assignments for a driver
+ *     description: Returns all fuel card assignments for a specific driver, including card account details.
+ *     tags:
+ *       - Fuel
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: driver_id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Driver ID to look up assignments for
+ *     responses:
+ *       200:
+ *         description: Array of assignment objects with card account details
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 type: object
+ *       400:
+ *         description: driver_id query param is required
+ *       401:
+ *         description: Tenant context required
+ *       500:
+ *         description: Failed to fetch driver assignments
  */
 router.get('/driver-assignments', async (req, res) => {
   try {
@@ -333,8 +762,38 @@ router.get('/driver-assignments', async (req, res) => {
 // ─── Fuel Cards (under Account) ──────────────────────────────────────────────
 
 /**
- * GET /accounts/:accountId/cards
- * List all cards belonging to a fuel card account (tenant-scoped).
+ * @openapi
+ * /api/fuel/accounts/{accountId}/cards:
+ *   get:
+ *     summary: List cards for an account
+ *     description: Returns all individual fuel cards belonging to a specific fuel card account.
+ *     tags:
+ *       - Fuel
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: accountId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Fuel card account ID
+ *     responses:
+ *       200:
+ *         description: Array of fuel card objects
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 type: object
+ *       401:
+ *         description: Tenant context required
+ *       404:
+ *         description: Fuel card account not found
+ *       500:
+ *         description: Failed to fetch cards for account
  */
 router.get('/accounts/:accountId/cards', async (req, res) => {
   try {
@@ -359,9 +818,58 @@ router.get('/accounts/:accountId/cards', async (req, res) => {
 });
 
 /**
- * POST /accounts/:accountId/cards
- * Create a new card under a fuel card account.
- * Body: { card_number_masked, card_number_last4?, status?, notes? }
+ * @openapi
+ * /api/fuel/accounts/{accountId}/cards:
+ *   post:
+ *     summary: Create a card under an account
+ *     description: Creates a new individual fuel card under a fuel card account.
+ *     tags:
+ *       - Fuel
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: accountId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Fuel card account ID
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - card_number_masked
+ *             properties:
+ *               card_number_masked:
+ *                 type: string
+ *               card_number_last4:
+ *                 type: string
+ *               status:
+ *                 type: string
+ *                 default: active
+ *               notes:
+ *                 type: string
+ *     responses:
+ *       201:
+ *         description: Created fuel card
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *       400:
+ *         description: card_number_masked is required
+ *       401:
+ *         description: Tenant context required
+ *       404:
+ *         description: Fuel card account not found
+ *       409:
+ *         description: A card with this number already exists for this tenant
+ *       500:
+ *         description: Failed to create fuel card
  */
 router.post('/accounts/:accountId/cards', async (req, res) => {
   try {
@@ -398,8 +906,51 @@ router.post('/accounts/:accountId/cards', async (req, res) => {
 });
 
 /**
- * PATCH /accounts/cards/:cardId
- * Update a fuel card's fields (status, notes, card_number_last4).
+ * @openapi
+ * /api/fuel/accounts/cards/{cardId}:
+ *   patch:
+ *     summary: Update a fuel card
+ *     description: Partially updates an individual fuel card's fields (status, notes, card_number_last4).
+ *     tags:
+ *       - Fuel
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: cardId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Fuel card ID
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               card_number_last4:
+ *                 type: string
+ *               status:
+ *                 type: string
+ *               notes:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Updated fuel card
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *       400:
+ *         description: No valid fields to update
+ *       401:
+ *         description: Tenant context required
+ *       404:
+ *         description: Fuel card not found
+ *       500:
+ *         description: Failed to update fuel card
  */
 router.patch('/accounts/cards/:cardId', async (req, res) => {
   try {
@@ -425,6 +976,30 @@ router.patch('/accounts/cards/:cardId', async (req, res) => {
 });
 
 // ─── Mapping Profiles ─────────────────────────────────────────────────────────
+/**
+ * @openapi
+ * /api/fuel/mapping-profiles:
+ *   get:
+ *     summary: List mapping profiles
+ *     description: Returns all fuel import mapping profiles for the tenant.
+ *     tags:
+ *       - Fuel
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Array of mapping profile objects
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 type: object
+ *       401:
+ *         description: Tenant context required
+ *       500:
+ *         description: Failed to fetch mapping profiles
+ */
 router.get('/mapping-profiles', async (req, res) => {
   try {
     const tid = requireTenant(req, res); if (!tid) return;
@@ -438,6 +1013,49 @@ router.get('/mapping-profiles', async (req, res) => {
   }
 });
 
+/**
+ * @openapi
+ * /api/fuel/mapping-profiles:
+ *   post:
+ *     summary: Create a mapping profile
+ *     description: Creates a new fuel import mapping profile. If is_default is true, any previous default for the same provider is unset.
+ *     tags:
+ *       - Fuel
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - profile_name
+ *               - column_map
+ *             properties:
+ *               profile_name:
+ *                 type: string
+ *               provider_name:
+ *                 type: string
+ *               column_map:
+ *                 type: object
+ *                 description: Column name to field mapping
+ *               is_default:
+ *                 type: boolean
+ *     responses:
+ *       201:
+ *         description: Created mapping profile
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *       400:
+ *         description: profile_name and column_map are required
+ *       401:
+ *         description: Tenant context required
+ *       500:
+ *         description: Failed to create mapping profile
+ */
 router.post('/mapping-profiles', async (req, res) => {
   try {
     const tid = requireTenant(req, res); if (!tid) return;
@@ -467,6 +1085,41 @@ router.post('/mapping-profiles', async (req, res) => {
   }
 });
 
+/**
+ * @openapi
+ * /api/fuel/mapping-profiles/{id}:
+ *   delete:
+ *     summary: Delete a mapping profile
+ *     description: Deletes a fuel import mapping profile by ID.
+ *     tags:
+ *       - Fuel
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Mapping profile ID
+ *     responses:
+ *       200:
+ *         description: Deletion confirmation
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 deleted:
+ *                   type: boolean
+ *       401:
+ *         description: Tenant context required
+ *       404:
+ *         description: Mapping profile not found
+ *       500:
+ *         description: Failed to delete mapping profile
+ */
 router.delete('/mapping-profiles/:id', async (req, res) => {
   try {
     const tid = requireTenant(req, res); if (!tid) return;
@@ -482,6 +1135,44 @@ router.delete('/mapping-profiles/:id', async (req, res) => {
 });
 
 // ─── Import – Preview (no persist) ───────────────────────────────────────────
+/**
+ * @openapi
+ * /api/fuel/import/preview:
+ *   post:
+ *     summary: Preview a fuel import file
+ *     description: Parses an uploaded CSV/XLSX file and returns a preview of the data without persisting anything.
+ *     tags:
+ *       - Fuel
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - file
+ *             properties:
+ *               file:
+ *                 type: string
+ *                 format: binary
+ *                 description: CSV or XLSX file (max 10 MB)
+ *               provider_key:
+ *                 type: string
+ *                 default: generic
+ *     responses:
+ *       200:
+ *         description: Preview result with parsed rows and column headers
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *       400:
+ *         description: No file uploaded or preview failed
+ *       401:
+ *         description: Tenant context required
+ */
 router.post('/import/preview', upload.single('file'), async (req, res) => {
   try {
     requireTenant(req, res);
@@ -500,8 +1191,50 @@ router.post('/import/preview', upload.single('file'), async (req, res) => {
 });
 
 // ─── Import – AI Preprocess (FN-406) ─────────────────────────────────────────
-// Accepts file + provider, parses headers/sample rows, sends to AI service for
-// column mapping inference, product type detection, and row split proposals.
+/**
+ * @openapi
+ * /api/fuel/import/ai-preprocess:
+ *   post:
+ *     summary: AI-assisted fuel import preprocessing
+ *     description: Parses an uploaded file's headers and sample rows, then sends them to the AI service for column mapping inference, product type detection, and row split proposals.
+ *     tags:
+ *       - Fuel
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - file
+ *             properties:
+ *               file:
+ *                 type: string
+ *                 format: binary
+ *                 description: CSV or XLSX file (max 10 MB)
+ *               provider_key:
+ *                 type: string
+ *                 default: generic
+ *               provider_name:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: AI preprocessing result with inferred column mappings and product types
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *       400:
+ *         description: No file uploaded or could not parse headers
+ *       401:
+ *         description: Tenant context required
+ *       502:
+ *         description: AI service unreachable or preprocessing failed
+ *       504:
+ *         description: AI service timeout
+ */
 router.post('/import/ai-preprocess', upload.single('file'), async (req, res) => {
   try {
     requireTenant(req, res);
@@ -575,6 +1308,52 @@ router.post('/import/ai-preprocess', upload.single('file'), async (req, res) => 
 });
 
 // ─── Import – Stage (validate & persist batch rows) ──────────────────────────
+/**
+ * @openapi
+ * /api/fuel/import/stage:
+ *   post:
+ *     summary: Stage a fuel import batch
+ *     description: Validates and stages an uploaded fuel file as a batch. Rows are persisted in a staging table but not yet committed as transactions. Optionally uploads the file to R2 storage.
+ *     tags:
+ *       - Fuel
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - file
+ *               - provider_name
+ *             properties:
+ *               file:
+ *                 type: string
+ *                 format: binary
+ *                 description: CSV or XLSX file (max 10 MB)
+ *               provider_name:
+ *                 type: string
+ *               card_account_id:
+ *                 type: string
+ *                 format: uuid
+ *               column_map:
+ *                 type: string
+ *                 description: JSON string of column-to-field mapping
+ *     responses:
+ *       200:
+ *         description: Staging result with batch ID and row counts
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *       400:
+ *         description: No file uploaded or provider_name is required
+ *       401:
+ *         description: Tenant context required
+ *       500:
+ *         description: Stage failed
+ */
 router.post('/import/stage', upload.single('file'), async (req, res) => {
   try {
     const tid = requireTenant(req, res); if (!tid) return;
@@ -631,6 +1410,45 @@ router.post('/import/stage', upload.single('file'), async (req, res) => {
 });
 
 // ─── Import – Commit (insert fuel_transactions) ───────────────────────────────
+/**
+ * @openapi
+ * /api/fuel/import/commit/{batchId}:
+ *   post:
+ *     summary: Commit a staged import batch
+ *     description: Commits a previously staged import batch, inserting the staged rows as fuel_transactions.
+ *     tags:
+ *       - Fuel
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: batchId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Import batch ID
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               import_warnings:
+ *                 type: boolean
+ *                 description: If true, import rows with warnings
+ *     responses:
+ *       200:
+ *         description: Commit result with success/failed row counts
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *       401:
+ *         description: Tenant context required
+ *       500:
+ *         description: Commit failed
+ */
 router.post('/import/commit/:batchId', async (req, res) => {
   try {
     const tid = requireTenant(req, res); if (!tid) return;
@@ -650,6 +1468,48 @@ router.post('/import/commit/:batchId', async (req, res) => {
 });
 
 // ─── Import Batches ───────────────────────────────────────────────────────────
+/**
+ * @openapi
+ * /api/fuel/import/batches:
+ *   get:
+ *     summary: List import batches
+ *     description: Returns a paginated list of fuel import batches for the tenant.
+ *     tags:
+ *       - Fuel
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           default: 50
+ *         description: Maximum number of batches to return
+ *       - in: query
+ *         name: offset
+ *         schema:
+ *           type: integer
+ *           default: 0
+ *         description: Number of batches to skip
+ *     responses:
+ *       200:
+ *         description: Paginated batch list
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 rows:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                 total:
+ *                   type: integer
+ *       401:
+ *         description: Tenant context required
+ *       500:
+ *         description: Failed to fetch import batches
+ */
 router.get('/import/batches', async (req, res) => {
   try {
     const tid = requireTenant(req, res); if (!tid) return;
@@ -672,6 +1532,50 @@ router.get('/import/batches', async (req, res) => {
   }
 });
 
+/**
+ * @openapi
+ * /api/fuel/import/batches/{id}:
+ *   get:
+ *     summary: Get import batch detail
+ *     description: Returns a single import batch with all its staged rows. Optionally filter rows by resolution_status.
+ *     tags:
+ *       - Fuel
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Import batch ID
+ *       - in: query
+ *         name: resolution_status
+ *         schema:
+ *           type: string
+ *         description: Filter batch rows by resolution status (e.g. skipped)
+ *     responses:
+ *       200:
+ *         description: Batch object with its rows
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 batch:
+ *                   type: object
+ *                 rows:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *       401:
+ *         description: Tenant context required
+ *       404:
+ *         description: Batch not found
+ *       500:
+ *         description: Failed to fetch batch detail
+ */
 router.get('/import/batches/:id', async (req, res) => {
   try {
     const tid = requireTenant(req, res); if (!tid) return;
@@ -700,6 +1604,95 @@ router.get('/import/batches/:id', async (req, res) => {
 });
 
 // ─── Fuel Transactions ────────────────────────────────────────────────────────
+/**
+ * @openapi
+ * /api/fuel/transactions:
+ *   get:
+ *     summary: List fuel transactions
+ *     description: Returns a paginated, filterable list of fuel transactions with joined truck and driver display names.
+ *     tags:
+ *       - Fuel
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           default: 50
+ *       - in: query
+ *         name: offset
+ *         schema:
+ *           type: integer
+ *           default: 0
+ *       - in: query
+ *         name: date_from
+ *         schema:
+ *           type: string
+ *           format: date
+ *         description: Filter transactions on or after this date
+ *       - in: query
+ *         name: date_to
+ *         schema:
+ *           type: string
+ *           format: date
+ *         description: Filter transactions on or before this date
+ *       - in: query
+ *         name: provider
+ *         schema:
+ *           type: string
+ *         description: Filter by provider name (case-insensitive)
+ *       - in: query
+ *         name: truck_id
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *       - in: query
+ *         name: driver_id
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *       - in: query
+ *         name: matched_status
+ *         schema:
+ *           type: string
+ *       - in: query
+ *         name: settlement_link_status
+ *         schema:
+ *           type: string
+ *       - in: query
+ *         name: batch_id
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Filter by source import batch
+ *       - in: query
+ *         name: product_type
+ *         schema:
+ *           type: string
+ *       - in: query
+ *         name: category
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Paginated transaction list
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 rows:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                 total:
+ *                   type: integer
+ *       401:
+ *         description: Tenant context required
+ *       500:
+ *         description: Failed to fetch transactions
+ */
 router.get('/transactions', async (req, res) => {
   try {
     const tid = requireTenant(req, res); if (!tid) return;
@@ -760,6 +1753,45 @@ router.get('/transactions', async (req, res) => {
   }
 });
 
+/**
+ * @openapi
+ * /api/fuel/transactions/{id}:
+ *   get:
+ *     summary: Get a fuel transaction
+ *     description: Returns a single fuel transaction with its associated exceptions.
+ *     tags:
+ *       - Fuel
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Fuel transaction ID
+ *     responses:
+ *       200:
+ *         description: Transaction object with exceptions
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 transaction:
+ *                   type: object
+ *                 exceptions:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *       401:
+ *         description: Tenant context required
+ *       404:
+ *         description: Transaction not found
+ *       500:
+ *         description: Failed to fetch transaction
+ */
 router.get('/transactions/:id', async (req, res) => {
   try {
     const tid = requireTenant(req, res); if (!tid) return;
@@ -777,6 +1809,69 @@ router.get('/transactions/:id', async (req, res) => {
   }
 });
 
+/**
+ * @openapi
+ * /api/fuel/transactions/{id}:
+ *   patch:
+ *     summary: Update a fuel transaction
+ *     description: Partially updates a fuel transaction. Only the provided fields are changed.
+ *     tags:
+ *       - Fuel
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Fuel transaction ID
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               truck_id:
+ *                 type: string
+ *                 format: uuid
+ *               driver_id:
+ *                 type: string
+ *                 format: uuid
+ *               load_id:
+ *                 type: string
+ *                 format: uuid
+ *               settlement_id:
+ *                 type: string
+ *                 format: uuid
+ *               settlement_link_status:
+ *                 type: string
+ *               matched_status:
+ *                 type: string
+ *               notes:
+ *                 type: string
+ *               vendor_name:
+ *                 type: string
+ *               city:
+ *                 type: string
+ *               state:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Updated transaction
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *       401:
+ *         description: Tenant context required
+ *       404:
+ *         description: Transaction not found
+ *       500:
+ *         description: Failed to update transaction
+ */
 router.patch('/transactions/:id', async (req, res) => {
   try {
     const tid = requireTenant(req, res); if (!tid) return;
@@ -803,6 +1898,80 @@ router.patch('/transactions/:id', async (req, res) => {
   }
 });
 
+/**
+ * @openapi
+ * /api/fuel/transactions:
+ *   post:
+ *     summary: Create a manual fuel transaction
+ *     description: Manually creates a single fuel transaction (not via import).
+ *     tags:
+ *       - Fuel
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - transaction_date
+ *               - provider_name
+ *               - gallons
+ *               - amount
+ *             properties:
+ *               transaction_date:
+ *                 type: string
+ *                 format: date
+ *               provider_name:
+ *                 type: string
+ *               gallons:
+ *                 type: number
+ *               amount:
+ *                 type: number
+ *               external_transaction_id:
+ *                 type: string
+ *               posted_date:
+ *                 type: string
+ *                 format: date
+ *               truck_id:
+ *                 type: string
+ *                 format: uuid
+ *               driver_id:
+ *                 type: string
+ *                 format: uuid
+ *               unit_number_raw:
+ *                 type: string
+ *               driver_name_raw:
+ *                 type: string
+ *               card_number_masked:
+ *                 type: string
+ *               vendor_name:
+ *                 type: string
+ *               city:
+ *                 type: string
+ *               state:
+ *                 type: string
+ *               price_per_gallon:
+ *                 type: number
+ *               product_type:
+ *                 type: string
+ *               odometer:
+ *                 type: integer
+ *     responses:
+ *       201:
+ *         description: Created fuel transaction
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *       400:
+ *         description: Required fields missing
+ *       401:
+ *         description: Tenant context required
+ *       500:
+ *         description: Failed to create transaction
+ */
 // Manual transaction creation
 router.post('/transactions', async (req, res) => {
   try {
@@ -846,6 +2015,41 @@ router.post('/transactions', async (req, res) => {
   }
 });
 
+/**
+ * @openapi
+ * /api/fuel/transactions/{id}:
+ *   delete:
+ *     summary: Delete a fuel transaction
+ *     description: Deletes a single fuel transaction by ID.
+ *     tags:
+ *       - Fuel
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Fuel transaction ID
+ *     responses:
+ *       200:
+ *         description: Deletion confirmation
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 deleted:
+ *                   type: boolean
+ *       401:
+ *         description: Tenant context required
+ *       404:
+ *         description: Transaction not found
+ *       500:
+ *         description: Failed to delete transaction
+ */
 router.delete('/transactions/:id', async (req, res) => {
   try {
     const tid = requireTenant(req, res); if (!tid) return;
@@ -862,6 +2066,56 @@ router.delete('/transactions/:id', async (req, res) => {
 });
 
 // ─── Exceptions ───────────────────────────────────────────────────────────────
+/**
+ * @openapi
+ * /api/fuel/exceptions:
+ *   get:
+ *     summary: List fuel transaction exceptions
+ *     description: Returns a paginated list of fuel transaction exceptions with joined transaction details. Filterable by status and exception_type.
+ *     tags:
+ *       - Fuel
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           default: 50
+ *       - in: query
+ *         name: offset
+ *         schema:
+ *           type: integer
+ *           default: 0
+ *       - in: query
+ *         name: status
+ *         schema:
+ *           type: string
+ *         description: Filter by resolution_status (e.g. open, resolved)
+ *       - in: query
+ *         name: exception_type
+ *         schema:
+ *           type: string
+ *         description: Filter by exception type
+ *     responses:
+ *       200:
+ *         description: Paginated exception list
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 rows:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                 total:
+ *                   type: integer
+ *       401:
+ *         description: Tenant context required
+ *       500:
+ *         description: Failed to fetch exceptions
+ */
 router.get('/exceptions', async (req, res) => {
   try {
     const tid = requireTenant(req, res); if (!tid) return;

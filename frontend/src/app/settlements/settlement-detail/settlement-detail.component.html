@@ -15,13 +15,15 @@
       </div>
     </div>
     <div class="header-actions" *ngIf="settlement">
-      <button type="button" class="btn-secondary" (click)="downloadSettlementPdf()" [disabled]="saving || loading">
-        <span class="material-symbols-outlined">download</span>
-        Download PDF
+      <button type="button" class="btn-secondary btn-export" (click)="downloadSettlementPdf()" [disabled]="loading || downloadingPdf">
+        <span class="material-symbols-outlined" *ngIf="!downloadingPdf">download</span>
+        <span class="spinner-inline" *ngIf="downloadingPdf" aria-hidden="true"></span>
+        {{ getExportButtonLabel() }}
       </button>
-      <button type="button" class="btn-secondary" (click)="generateSettlementPdfToCloud()" [disabled]="saving || loading">
-        <span class="material-symbols-outlined">cloud_upload</span>
-        Generate PDF
+      <button type="button" class="btn-primary btn-email-action" (click)="sendEmail()" [disabled]="loading || emailingSettlement">
+        <span class="material-symbols-outlined" *ngIf="!emailingSettlement">forward_to_inbox</span>
+        <span class="spinner-inline" *ngIf="emailingSettlement" aria-hidden="true"></span>
+        {{ getEmailButtonLabel() }}
       </button>
       <button type="button" class="btn-secondary" (click)="recalcTotals()" [disabled]="saving || loading">
         <span class="material-symbols-outlined">sync</span>
@@ -34,6 +36,10 @@
       <button type="button" class="btn-danger" (click)="voidSettlement()" [disabled]="isLocked() || saving || loading">
         <span class="material-symbols-outlined">block</span>
         Void
+      </button>
+      <button type="button" class="btn-secondary" *ngIf="hasPairedSettlement()" (click)="openPairedSettlement()" [disabled]="saving || loading">
+        <span class="material-symbols-outlined">swap_horiz</span>
+        {{ getPairedSettlementLabel() }}
       </button>
     </div>
   </div>
@@ -58,21 +64,35 @@
             <div class="label">Settlement #</div>
             <div class="value">{{ getSettlementNumberDisplay() }}</div>
           </div>
+          <div class="summary-item" *ngIf="isV2Settlement()">
+            <div class="label">Type</div>
+            <div class="value">
+              <span class="badge" [ngClass]="getSettlementTypeClass()">{{ getSettlementTypeLabel() }}</span>
+            </div>
+          </div>
           <div class="summary-item">
             <div class="label">Driver</div>
             <div class="value">{{ getDriverName() }}</div>
+          </div>
+          <div class="summary-item" *ngIf="isV2Settlement() && settlement.truck_id">
+            <div class="label">Truck</div>
+            <div class="value">{{ getTruckLabel() }}</div>
+          </div>
+          <div class="summary-item" *ngIf="isV2Settlement() && getEquipmentOwnerName() !== '—'">
+            <div class="label">Equipment Owner</div>
+            <div class="value">{{ getEquipmentOwnerName() }}</div>
           </div>
           <div class="summary-item">
             <div class="label">Payroll period</div>
             <div class="value">{{ dateOnly(period?.period_start || settlement.period_start) }} → {{ dateOnly(period?.period_end || settlement.period_end) }}</div>
           </div>
           <div class="summary-item">
-            <div class="label">Primary payee</div>
-            <div class="value">{{ primaryPayee?.name || settlement.primary_payee_id || '—' }}</div>
+            <div class="label">{{ getPrimaryPartyLabel() }}</div>
+            <div class="value">{{ getPrimaryPartyName() }}</div>
           </div>
           <div class="summary-item">
-            <div class="label">Equipment Owner</div>
-            <div class="value">{{ additionalPayee?.name || settlement.additional_payee_id || '—' }}</div>
+            <div class="label">{{ getSecondaryPartyLabel() }}</div>
+            <div class="value">{{ getSecondaryPartyName() }}</div>
           </div>
           <div class="summary-item">
             <div class="label">Date basis</div>
@@ -91,24 +111,28 @@
             <div class="metric-value">${{ settlement.subtotal_gross | number:'1.2-2' }}</div>
           </div>
           <div class="metric-card">
-            <div class="metric-label">Driver pay subtotal</div>
-            <div class="metric-value">${{ settlement.subtotal_driver_pay | number:'1.2-2' }}</div>
-          </div>
-          <div class="metric-card">
-            <div class="metric-label">Equipment Owner subtotal</div>
-            <div class="metric-value">${{ settlement.subtotal_additional_payee | number:'1.2-2' }}</div>
+            <div class="metric-label">{{ getCurrentPartyPayLabel() }}</div>
+            <div class="metric-value">${{ getCurrentPartyPayValue() | number:'1.2-2' }}</div>
           </div>
           <div class="metric-card metric-warn">
             <div class="metric-label">Total deductions</div>
             <div class="metric-value">${{ settlement.total_deductions | number:'1.2-2' }}</div>
           </div>
-          <div class="metric-card metric-good">
-            <div class="metric-label">Net driver pay</div>
-            <div class="metric-value">${{ settlement.net_pay_driver | number:'1.2-2' }}</div>
+          <div class="metric-card" [ngClass]="hasNegativeNet() ? 'metric-danger' : 'metric-good'">
+            <div class="metric-label">{{ getNetPayLabel() }}</div>
+            <div class="metric-value">${{ getNetPayValue() | number:'1.2-2' }}</div>
+            <div class="rollover-notice" *ngIf="hasNegativeNet()">
+              <span class="material-symbols-outlined">arrow_upward</span>
+              ${{ getCarriedBalance() | number:'1.2-2' }} carried forward
+            </div>
           </div>
-          <div class="metric-card metric-good">
-            <div class="metric-label">Net additional payee</div>
+          <div class="metric-card metric-good" *ngIf="!isV2Settlement()">
+            <div class="metric-label">Net equipment owner</div>
             <div class="metric-value">${{ settlement.net_pay_additional_payee | number:'1.2-2' }}</div>
+          </div>
+          <div class="metric-card" *ngIf="isV2Settlement() && getCarriedBalance() > 0">
+            <div class="metric-label">Carried balance</div>
+            <div class="metric-value metric-danger-text">${{ getCarriedBalance() | number:'1.2-2' }}</div>
           </div>
         </div>
       </section>
@@ -155,8 +179,8 @@
               <td>{{ dateOnly(li.delivery_date) }}</td>
               <td>{{ li.loaded_miles || 0 }}</td>
               <td>${{ li.gross_amount | number:'1.2-2' }}</td>
-              <td>${{ li.driver_pay_amount | number:'1.2-2' }}</td>
-              <td>${{ li.additional_payee_amount | number:'1.2-2' }}</td>
+              <td [class.pay-highlight]="!isEoSettlement()">${{ li.driver_pay_amount | number:'1.2-2' }}</td>
+              <td [class.pay-highlight]="isEoSettlement()">${{ li.additional_payee_amount | number:'1.2-2' }}</td>
               <td *ngIf="!isLocked()">
                 <button type="button" class="btn-sm btn-danger" (click)="removeLoad(li.id)" [disabled]="saving">
                   <span class="material-symbols-outlined">delete</span>
@@ -379,18 +403,101 @@
       <div class="empty-state" *ngIf="manualAdjustments.length === 0">No manual adjustments.</div>
     </section>
 
+    <!-- V2: Fuel Expenses -->
+    <section class="detail-card v2-section" *ngIf="isV2Settlement() && fuelAdjustments.length">
+      <div class="section-header">
+        <h2>
+          <span class="material-symbols-outlined section-icon">local_gas_station</span>
+          Fuel expenses
+        </h2>
+        <span class="pill pill-warn">${{ getTotalFor(fuelAdjustments) | number:'1.2-2' }}</span>
+      </div>
+      <ul class="line-items">
+        <li *ngFor="let x of fuelAdjustments">
+          <div>
+            <div class="line-title">{{ x.description || 'Fuel' }}</div>
+            <div class="line-sub">{{ dateOnly(x.occurrence_date) }} • {{ x.charge_party || 'driver' }}</div>
+          </div>
+          <div class="line-amount">${{ x.amount | number:'1.2-2' }}</div>
+        </li>
+      </ul>
+    </section>
+
+    <!-- V2: Toll Expenses -->
+    <section class="detail-card v2-section" *ngIf="isV2Settlement() && tollAdjustments.length">
+      <div class="section-header">
+        <h2>
+          <span class="material-symbols-outlined section-icon">toll</span>
+          Toll expenses
+        </h2>
+        <span class="pill pill-warn">${{ getTotalFor(tollAdjustments) | number:'1.2-2' }}</span>
+      </div>
+      <ul class="line-items">
+        <li *ngFor="let x of tollAdjustments">
+          <div>
+            <div class="line-title">{{ x.description || 'Toll' }}</div>
+            <div class="line-sub">{{ dateOnly(x.occurrence_date) }} • {{ x.charge_party || 'driver' }}</div>
+          </div>
+          <div class="line-amount">${{ x.amount | number:'1.2-2' }}</div>
+        </li>
+      </ul>
+    </section>
+
+    <!-- V2: Carried Balance -->
+    <section class="detail-card v2-section" *ngIf="isV2Settlement() && carriedBalanceAdjs.length">
+      <div class="section-header">
+        <h2>
+          <span class="material-symbols-outlined section-icon">history</span>
+          Carried balance
+        </h2>
+        <span class="pill pill-danger">${{ getTotalFor(carriedBalanceAdjs) | number:'1.2-2' }}</span>
+      </div>
+      <ul class="line-items">
+        <li *ngFor="let x of carriedBalanceAdjs">
+          <div>
+            <div class="line-title">{{ x.description || 'Carried balance from prior period' }}</div>
+            <div class="line-sub">Rolled forward from prior settlement</div>
+          </div>
+          <div class="line-amount line-amount-danger">${{ x.amount | number:'1.2-2' }}</div>
+        </li>
+      </ul>
+    </section>
+
+    <!-- V2: Balance Transfers (EO only) -->
+    <section class="detail-card v2-section" *ngIf="isEoSettlement() && balanceTransferAdjs.length">
+      <div class="section-header">
+        <h2>
+          <span class="material-symbols-outlined section-icon">swap_horiz</span>
+          Balance transfers (driver quit)
+        </h2>
+        <span class="pill pill-danger">${{ getTotalFor(balanceTransferAdjs) | number:'1.2-2' }}</span>
+      </div>
+      <ul class="line-items">
+        <li *ngFor="let x of balanceTransferAdjs">
+          <div>
+            <div class="line-title">{{ x.description || 'Balance transfer' }}</div>
+            <div class="line-sub">Applied from approved transfer</div>
+          </div>
+          <div class="line-amount line-amount-danger">${{ x.amount | number:'1.2-2' }}</div>
+        </li>
+      </ul>
+    </section>
+
     <section class="detail-card">
       <div class="section-header">
-        <h2>Phase 4 helper: send settlement email</h2>
+        <h2>{{ getEmailSectionTitle() }}</h2>
+        <span class="pill">{{ getEmailActionLabel() }}</span>
       </div>
+      <p class="email-help">{{ getEmailHelpText() }}</p>
       <div class="email-options">
-        <label><input type="checkbox" [(ngModel)]="emailOptions.to_driver" /> Send to driver</label>
-        <label><input type="checkbox" [(ngModel)]="emailOptions.to_additional_payee" /> Send to Equipment Owner</label>
+        <label><input type="checkbox" [(ngModel)]="emailOptions.to_driver" /> {{ getEmailPrimaryOptionLabel() }}</label>
+        <label><input type="checkbox" [(ngModel)]="emailOptions.to_additional_payee" /> {{ getEmailSecondaryOptionLabel() }}</label>
         <label><input type="checkbox" [(ngModel)]="emailOptions.cc_internal" /> CC internal</label>
       </div>
-      <button type="button" class="btn-primary" (click)="sendEmail()" [disabled]="saving || loading">
-        <span class="material-symbols-outlined">forward_to_inbox</span>
-        Send email
+      <button type="button" class="btn-primary" (click)="sendEmail()" [disabled]="loading || emailingSettlement">
+        <span class="material-symbols-outlined" *ngIf="!emailingSettlement">forward_to_inbox</span>
+        <span class="spinner-inline" *ngIf="emailingSettlement" aria-hidden="true"></span>
+        {{ getEmailButtonLabel() }}
       </button>
       <div class="line-sub" *ngIf="lastGeneratedSettlementPdfUrl">
         Latest stored PDF: <a [href]="lastGeneratedSettlementPdfUrl" target="_blank" rel="noopener">Open signed download link</a>

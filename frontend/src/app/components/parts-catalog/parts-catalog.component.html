@@ -28,13 +28,135 @@
         />
       </label>
 
-      <button type="button" class="btn-primary btn-with-icon" (click)="openForm()">
+      <!-- FN-1099: Quick Add → Snap Photo (split menu) -->
+      <div class="quick-add-wrap">
+        <button
+          type="button"
+          class="btn-primary btn-with-icon quick-add-toggle"
+          (click)="toggleQuickAdd()"
+          [attr.aria-expanded]="quickAddOpen"
+          aria-haspopup="menu"
+          [disabled]="aiBusy"
+        >
+          <span class="btn-icon icon-plus"></span>
+          <span>Quick Add</span>
+          <span class="quick-add-caret">▾</span>
+        </button>
+        <div *ngIf="quickAddOpen" class="quick-add-menu" role="menu">
+          <button
+            type="button"
+            class="quick-add-item"
+            role="menuitem"
+            (click)="startSnapPhoto()"
+          >
+            <span class="quick-add-icon">📷</span>
+            <span class="quick-add-label">Snap Photo</span>
+            <span class="quick-add-hint">Auto-fill from a part photo</span>
+          </button>
+          <!-- FN-1104: Scan Invoice → AI OCR multi-line bulk-create. -->
+          <button
+            type="button"
+            class="quick-add-item"
+            role="menuitem"
+            (click)="startScanInvoice()"
+          >
+            <span class="quick-add-icon">🧾</span>
+            <span class="quick-add-label">Scan Invoice</span>
+            <span class="quick-add-hint">Bulk-create from a vendor invoice</span>
+          </button>
+          <!-- FN-1107: Scan Barcode → lookup → open Edit (match) or Add prefilled (no match). -->
+          <button
+            type="button"
+            class="quick-add-item"
+            role="menuitem"
+            (click)="startScanBarcode()"
+          >
+            <span class="quick-add-icon">🏷️</span>
+            <span class="quick-add-label">Scan Barcode</span>
+            <span class="quick-add-hint">Open by barcode or add prefilled</span>
+          </button>
+          <button
+            type="button"
+            class="quick-add-item"
+            role="menuitem"
+            disabled
+            title="Coming soon — bulk SKU pasting from a list"
+          >
+            <span class="quick-add-icon">📋</span>
+            <span class="quick-add-label">Paste SKUs</span>
+            <span class="quick-add-hint">Coming soon</span>
+          </button>
+          <button
+            type="button"
+            class="quick-add-item"
+            role="menuitem"
+            disabled
+            title="Coming soon — clone an existing part as a template"
+          >
+            <span class="quick-add-icon">📑</span>
+            <span class="quick-add-label">Clone Existing</span>
+            <span class="quick-add-hint">Coming soon</span>
+          </button>
+        </div>
+      </div>
+
+      <button type="button" class="btn-outline btn-with-icon" (click)="openForm()">
         <span class="btn-icon icon-plus"></span>
         <span>New Part</span>
       </button>
+
+      <!-- Hidden file input — capture=environment opens rear camera on mobile;
+           desktop browsers fall back to a regular file picker. -->
+      <input
+        #snapPhotoInput
+        type="file"
+        accept="image/jpeg,image/png,image/webp,image/gif"
+        capture="environment"
+        (change)="onSnapPhotoSelected($event)"
+        class="input-file-hidden"
+      />
+      <!-- FN-1104: invoice picker — image OR PDF (no capture so the OS file
+           dialog opens by default; mobile can still pick from the camera). -->
+      <input
+        #scanInvoiceInput
+        type="file"
+        accept="image/jpeg,image/png,application/pdf"
+        (change)="onScanInvoiceSelected($event)"
+        class="input-file-hidden"
+      />
       </ng-container>
     </div>
   </div>
+
+  <!-- FN-1099 / FN-1104: shared AI loading overlay (drives Snap Photo and
+       Scan Invoice — both flip aiBusy). -->
+  <div *ngIf="aiBusy" class="ai-photo-overlay" role="status" aria-live="polite">
+    <div class="ai-photo-overlay-card">
+      <div class="ai-photo-spinner"></div>
+      <p class="ai-photo-msg">Reading invoice / part photo…</p>
+      <button type="button" class="btn-outline" (click)="cancelAiPhoto(); cancelAiInvoice();">Cancel</button>
+    </div>
+  </div>
+
+  <!-- FN-1104: Scan Invoice review modal -->
+  <app-quick-add-invoice-modal
+    *ngIf="invoiceModalOpen && invoiceAiResult"
+    [aiResult]="invoiceAiResult"
+    [r2Key]="invoiceR2Key"
+    [existingSkus]="invoiceExistingSkus"
+    [categories]="categories"
+    (confirmed)="onInvoiceModalConfirmed($event)"
+    (closed)="onInvoiceModalClosed()"
+  ></app-quick-add-invoice-modal>
+
+  <!-- FN-1107: Scan Barcode dialog -->
+  <app-barcode-scanner-dialog
+    *ngIf="scannerOpen"
+    [externalError]="scannerError"
+    [busy]="scannerBusy"
+    (scanned)="onBarcodeScanned($event)"
+    (closed)="closeScanner()"
+  ></app-barcode-scanner-dialog>
 
   <!-- Messages -->
   <div *ngIf="successMessage" class="alert alert-success">
@@ -204,6 +326,7 @@
       <table class="report-table">
         <thead>
           <tr>
+            <th class="th-expand"></th>
             <th>SKU</th>
             <th>Name</th>
             <th>Category</th>
@@ -217,45 +340,133 @@
           </tr>
         </thead>
         <tbody>
-          <tr *ngFor="let part of filteredParts">
-            <td>{{ part.sku }}</td>
-            <td class="cell-name">{{ part.name }}</td>
-            <td>{{ part.category }}</td>
-            <td>{{ part.manufacturer }}</td>
-            <td>{{ part.uom }}</td>
-            <td>{{ part.quantity_on_hand || 0 }}</td>
-            <td>${{ part.unit_cost | number: '1.2-2' }}</td>
-            <td>${{ part.unit_price | number: '1.2-2' }}</td>
-            <td>
-              <span
-                class="status-pill"
-                [ngClass]="part.status === 'ACTIVE' ? 'status-active' : 'status-inactive'"
-              >
-                {{ part.status || 'UNKNOWN' }}
-              </span>
-            </td>
-            <td>
-              <div class="row-actions" *ngIf="userRole === 'admin' || userRole === 'parts_manager'">
+          <ng-container *ngFor="let part of filteredParts">
+
+            <!-- Main row -->
+            <tr [class.row-expanded]="expandedStockPartId === part.id">
+              <td class="cell-expand">
                 <button
                   type="button"
-                  class="btn-small btn-secondary btn-with-icon"
-                  (click)="openFormModal(part)"
+                  class="btn-expand-stock"
+                  (click)="toggleStockBreakdown(part)"
+                  [title]="expandedStockPartId === part.id ? 'Hide stock locations' : 'Show stock by location'"
+                  [attr.aria-expanded]="expandedStockPartId === part.id"
                 >
-                  <span class="btn-icon icon-edit"></span>
-                  <span>Edit</span>
+                  <span class="expand-chevron" [class.open]="expandedStockPartId === part.id">▶</span>
                 </button>
-                <button
-                  type="button"
-                  class="btn-small btn-danger btn-with-icon"
-                  (click)="deactivatePart(part.id)"
-                  *ngIf="part.status === 'ACTIVE'"
+              </td>
+              <td>{{ part.sku }}</td>
+              <td class="cell-name">{{ part.name }}</td>
+              <td>{{ part.category }}</td>
+              <td>{{ part.manufacturer }}</td>
+              <td>{{ part.uom }}</td>
+              <td>{{ part.quantity_on_hand || 0 }}</td>
+              <td>${{ part.unit_cost | number: '1.2-2' }}</td>
+              <td>${{ part.unit_price | number: '1.2-2' }}</td>
+              <td>
+                <span
+                  class="status-pill"
+                  [ngClass]="part.status === 'ACTIVE' ? 'status-active' : 'status-inactive'"
                 >
-                  <span class="btn-icon icon-deactivate"></span>
-                  <span>Deactivate</span>
-                </button>
-              </div>
-            </td>
-          </tr>
+                  {{ part.status || 'UNKNOWN' }}
+                </span>
+              </td>
+              <td>
+                <div class="row-actions" *ngIf="userRole === 'admin' || userRole === 'parts_manager'">
+                  <button
+                    type="button"
+                    class="btn-small btn-secondary btn-with-icon"
+                    (click)="openFormModal(part)"
+                  >
+                    <span class="btn-icon icon-edit"></span>
+                    <span>Edit</span>
+                  </button>
+                  <!-- FN-1399: Reprint a label for an existing part. -->
+                  <button
+                    type="button"
+                    class="btn-small btn-outline"
+                    (click)="printLabelForPart(part)"
+                    *ngIf="part.barcode"
+                    title="Print a barcode label for this part"
+                  >
+                    Print label
+                  </button>
+                  <button
+                    type="button"
+                    class="btn-small btn-danger btn-with-icon"
+                    (click)="deactivatePart(part.id)"
+                    *ngIf="part.status === 'ACTIVE'"
+                  >
+                    <span class="btn-icon icon-deactivate"></span>
+                    <span>Deactivate</span>
+                  </button>
+                </div>
+              </td>
+            </tr>
+
+            <!-- FN-708: Stock breakdown expand row -->
+            <tr *ngIf="expandedStockPartId === part.id" class="stock-breakdown-row">
+              <td colspan="11" class="stock-breakdown-cell">
+
+                <!-- Loading -->
+                <div *ngIf="stockLoadingForId === part.id" class="sb-loading">
+                  <span class="sb-spinner"></span> Loading stock locations…
+                </div>
+
+                <!-- Error -->
+                <div *ngIf="stockLoadingForId !== part.id && stockLoadError" class="sb-error">
+                  ⚠ {{ stockLoadError }}
+                </div>
+
+                <!-- Lines -->
+                <ng-container *ngIf="stockLoadingForId !== part.id && !stockLoadError">
+
+                  <div *ngIf="getStockLines(part.id).length === 0" class="sb-empty">
+                    No inventory records found for this part across any location.
+                  </div>
+
+                  <div *ngIf="getStockLines(part.id).length > 0" class="sb-content">
+                    <div class="sb-heading">
+                      Stock for <strong>{{ part.sku }}</strong> —
+                      <span class="sb-summary-inline">{{ getStockSummary(part.id) }}</span>
+                    </div>
+
+                    <div class="sb-cards">
+                      <div
+                        *ngFor="let line of getStockLines(part.id)"
+                        class="sb-card"
+                        [class.sb-card-low]="(line.on_hand_qty ?? 0) > 0 && (line.on_hand_qty ?? 0) <= (line.reorder_level ?? 0)"
+                        [class.sb-card-zero]="(line.on_hand_qty ?? 0) === 0"
+                      >
+                        <div class="sb-loc-name">{{ line.location_name || line.location_id }}</div>
+
+                        <div class="sb-bin-row" *ngIf="line.bin_code">
+                          <span class="sb-bin-badge">{{ line.bin_code }}</span>
+                          <span *ngIf="line.bin_name" class="sb-bin-name">{{ line.bin_name }}</span>
+                        </div>
+                        <div class="sb-bin-row sb-bin-legacy" *ngIf="!line.bin_code && line.bin_location">
+                          {{ line.bin_location }}
+                        </div>
+
+                        <div class="sb-qty">
+                          <span class="sb-qty-num">{{ line.on_hand_qty ?? 0 }}</span>
+                          <span class="sb-qty-label">on hand</span>
+                        </div>
+
+                        <a
+                          class="sb-link"
+                          [routerLink]="['/inventory-reports']"
+                          title="View in Inventory Reports"
+                        >View →</a>
+                      </div>
+                    </div>
+                  </div>
+
+                </ng-container>
+              </td>
+            </tr>
+
+          </ng-container>
         </tbody>
       </table>
     </div>
@@ -273,17 +484,39 @@
         <button type="button" class="btn-close" (click)="closeForm()"></button>
       </div>
       <div class="modal-body">
+        <!-- FN-1111: Live duplicate detection while typing in the Add Part form -->
+        <app-duplicate-warning
+          *ngIf="showDuplicateWarning"
+          [candidates]="duplicateCandidates"
+          (editExisting)="onEditExistingDuplicate($event)"
+          (dismissed)="onDismissDuplicateWarning()"
+        ></app-duplicate-warning>
+
         <form [formGroup]="partForm">
           <div class="form-grid">
             <div class="form-group">
-              <label for="sku">SKU *</label>
-              <input
-                id="sku"
-                type="text"
-                class="form-control"
-                formControlName="sku"
-                [readOnly]="editingPartId !== null"
-              />
+              <label for="sku">
+                SKU *
+                <app-confidence-badge [confidence]="aiConfidence.partNumber ?? null"></app-confidence-badge>
+              </label>
+              <div class="sku-field">
+                <input
+                  id="sku"
+                  type="text"
+                  class="form-control"
+                  formControlName="sku"
+                  [readOnly]="editingPartId !== null"
+                />
+                <button
+                  *ngIf="!editingPartId"
+                  type="button"
+                  class="btn-outline btn-generate-sku"
+                  (click)="generateSku()"
+                  [disabled]="generateSkuBusy"
+                >
+                  Generate SKU
+                </button>
+              </div>
             </div>
 
             <div class="form-group">
@@ -292,18 +525,40 @@
             </div>
 
             <div class="form-group">
-              <label for="category">Category *</label>
+              <label for="category">
+                Category *
+                <app-confidence-badge [confidence]="aiConfidence.category ?? null"></app-confidence-badge>
+              </label>
               <input id="category" type="text" class="form-control" formControlName="category" />
             </div>
 
             <div class="form-group">
-              <label for="manufacturer">Manufacturer *</label>
-              <input
-                id="manufacturer"
-                type="text"
-                class="form-control"
-                formControlName="manufacturer"
-              />
+              <label for="manufacturer">
+                Manufacturer
+                <app-confidence-badge [confidence]="aiConfidence.manufacturer ?? null"></app-confidence-badge>
+              </label>
+              <app-master-typeahead
+                inputId="manufacturer"
+                entityLabel="manufacturer"
+                placeholder="Search or create a manufacturer…"
+                [value]="manufacturerValue"
+                [searchFn]="searchManufacturers"
+                [createFn]="createManufacturer"
+                (valueChange)="onManufacturerPick($event)"
+              ></app-master-typeahead>
+            </div>
+
+            <div class="form-group">
+              <label for="preferred_vendor_name">Preferred Vendor</label>
+              <app-master-typeahead
+                inputId="preferred_vendor_name"
+                entityLabel="vendor"
+                placeholder="Search or create a vendor…"
+                [value]="vendorValue"
+                [searchFn]="searchVendors"
+                [createFn]="createVendor"
+                (valueChange)="onVendorPick($event)"
+              ></app-master-typeahead>
             </div>
 
             <div class="form-group">
@@ -335,7 +590,29 @@
 
             <div class="form-group">
               <label for="barcode">Barcode</label>
-              <input id="barcode" type="text" class="form-control" formControlName="barcode" />
+              <!-- FN-1399: Backend auto-generates the barcode on create. The
+                   field is read-only by default; users opt in to a vendor-
+                   supplied barcode via the toggle. On Edit mode and on
+                   barcode-prefilled scans (FN-1107) the toggle is hidden. -->
+              <input
+                id="barcode"
+                type="text"
+                class="form-control"
+                formControlName="barcode"
+                [readOnly]="!editingPartId && !barcodePrefilled && !vendorBarcodeOverride"
+                [placeholder]="!editingPartId && !barcodePrefilled && !vendorBarcodeOverride ? 'auto-generated' : ''"
+              />
+              <label
+                *ngIf="!editingPartId && !barcodePrefilled"
+                class="barcode-override-toggle"
+              >
+                <input
+                  type="checkbox"
+                  [(ngModel)]="vendorBarcodeOverride"
+                  [ngModelOptions]="{ standalone: true }"
+                />
+                I have a vendor barcode
+              </label>
             </div>
 
             <div class="form-group">
@@ -360,13 +637,24 @@
           </div>
 
           <div class="form-group full-width">
-            <label for="description">Description</label>
+            <label for="description">
+              Description
+              <app-confidence-badge [confidence]="aiConfidence.description ?? null"></app-confidence-badge>
+            </label>
             <textarea
               id="description"
               rows="3"
               class="form-control"
               formControlName="description"
             ></textarea>
+          </div>
+
+          <!-- FN-1099: Surface AI warnings (e.g., partial label, glare) -->
+          <div *ngIf="aiWarnings.length" class="form-group full-width ai-warnings">
+            <strong>AI noticed:</strong>
+            <ul>
+              <li *ngFor="let w of aiWarnings">{{ w }}</li>
+            </ul>
           </div>
 
           <div class="form-group full-width">
@@ -386,12 +674,49 @@
           type="button"
           class="btn-primary"
           (click)="savePart()"
-          [disabled]="!partForm.valid || loading"
+          [disabled]="loading"
         >
           {{ loading ? 'Saving…' : 'Save Part' }}
         </button>
       </div>
     </div>
   </div>
+
+  <!-- FN-1399: Post-create success modal with Print Label CTA -->
+  <div class="modal-backdrop print-confirm-backdrop" *ngIf="printablePart">
+    <div class="modal print-confirm-modal">
+      <div class="modal-header">
+        <h5>Part created</h5>
+        <button type="button" class="btn-close" (click)="dismissPrintConfirm()"></button>
+      </div>
+      <div class="modal-body">
+        <p class="print-confirm-msg">
+          <strong>{{ printablePart.name }}</strong>
+          <span class="print-confirm-sku">SKU: {{ printablePart.sku }}</span>
+        </p>
+        <p class="print-confirm-msg">
+          A scannable barcode has been generated:
+          <code class="print-confirm-code">{{ printablePart.barcode }}</code>
+        </p>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn-outline" (click)="dismissPrintConfirm()">Done</button>
+        <button
+          type="button"
+          class="btn-primary"
+          (click)="printLabelForPart(printablePart)"
+        >
+          Print label
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- FN-1399: Hidden print container. Only renders when partForLabel is set
+     so JsBarcode can mount cleanly. The label-print-area class is the only
+     element kept visible by @media print rules in the component CSS. -->
+<div *ngIf="partForLabel" class="label-print-area">
+  <app-part-label-print [part]="partForLabel"></app-part-label-print>
 </div>
 

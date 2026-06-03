@@ -1,6 +1,13 @@
 import { Component, OnInit } from '@angular/core';
+import { MatDialog } from '@angular/material/dialog';
+import { firstValueFrom } from 'rxjs';
 import { TollsService } from '../tolls.service';
+import { AiService } from '../../services/ai.service';
 import { TollAccount, TollMappingProfile, TollUploadResult, TollCommitResult, TollAiNormalizeResult, TollAiColumnMapping, TOLL_NORMALIZED_FIELDS } from '../tolls.model';
+import { InvoicePreviewDialogComponent, InvoicePreviewDialogData } from '../tolls-transactions/invoice-preview-dialog/invoice-preview-dialog.component';
+
+const VISION_ACCEPT_EXTS = ['jpg', 'jpeg', 'png', 'webp', 'gif'];
+const VISION_MAX_BYTES = 10 * 1024 * 1024;
 
 type WizardStep = 'upload' | 'ai_analyze' | 'map' | 'preview' | 'commit' | 'result';
 
@@ -54,7 +61,17 @@ export class TollsImportComponent implements OnInit {
   commitError = '';
   commitResult: TollCommitResult | null = null;
 
-  constructor(private tollsSvc: TollsService) {}
+  // Vision (AI invoice extraction)
+  visionFile: File | null = null;
+  visionLoading = false;
+  visionError = '';
+  visionToast = '';
+
+  constructor(
+    private tollsSvc: TollsService,
+    private aiService: AiService,
+    private dialog: MatDialog,
+  ) {}
 
   ngOnInit(): void {
     this.tollsSvc.getAccounts().subscribe(accts => {
@@ -283,6 +300,75 @@ export class TollsImportComponent implements OnInit {
       });
   }
 
+  // ─── Vision (Extract with AI) ────────────────────────────────────────────────
+
+  onVisionFileChange(e: Event): void {
+    const file = (e.target as HTMLInputElement).files?.[0];
+    if (file) this.handleVisionFile(file);
+  }
+
+  handleVisionFile(file: File): void {
+    const ext = file.name.split('.').pop()?.toLowerCase() || '';
+    if (!VISION_ACCEPT_EXTS.includes(ext)) {
+      this.visionError = 'Unsupported file type. Use JPG, PNG, WebP, or GIF.';
+      this.visionFile = null;
+      return;
+    }
+    if (file.size > VISION_MAX_BYTES) {
+      this.visionError = `File must be under ${VISION_MAX_BYTES / (1024 * 1024)} MB.`;
+      this.visionFile = null;
+      return;
+    }
+    this.visionFile = file;
+    this.visionError = '';
+  }
+
+  clearVisionFile(): void {
+    this.visionFile = null;
+    this.visionError = '';
+  }
+
+  async extractWithAi(): Promise<void> {
+    if (!this.visionFile || this.visionLoading) return;
+    this.visionLoading = true;
+    this.visionError = '';
+    this.visionToast = '';
+
+    try {
+      const result = await firstValueFrom(this.aiService.extractTollInvoice(this.visionFile));
+
+      if (!result.transactions.length) {
+        this.visionError = 'No transactions could be extracted. You can enter rows manually.';
+        return;
+      }
+
+      const dialogData: InvoicePreviewDialogData = {
+        transactions: result.transactions,
+        warnings: result.warnings,
+      };
+
+      const ref = this.dialog.open(InvoicePreviewDialogComponent, {
+        width: '960px',
+        maxWidth: '96vw',
+        maxHeight: '90vh',
+        disableClose: false,
+        panelClass: 'invoice-preview-panel',
+        data: dialogData,
+      });
+
+      const dialogResult = await firstValueFrom(ref.afterClosed());
+      if (dialogResult?.saved) {
+        this.visionToast = `${dialogResult.count} transaction${dialogResult.count === 1 ? '' : 's'} saved.`;
+        this.visionFile = null;
+      }
+    } catch (err: unknown) {
+      const e = err as { error?: { error?: string }; message?: string };
+      this.visionError = e?.error?.error || e?.message || 'Extraction failed. You can enter rows manually.';
+    } finally {
+      this.visionLoading = false;
+    }
+  }
+
   // ─── Navigation ──────────────────────────────────────────────────────────────
 
   goBack(): void {
@@ -307,6 +393,9 @@ export class TollsImportComponent implements OnInit {
     this.aiResult = null;
     this.aiError = '';
     this.aiConfidenceMap = {};
+    this.visionFile = null;
+    this.visionError = '';
+    this.visionToast = '';
     this.currentStep = 'upload';
   }
 

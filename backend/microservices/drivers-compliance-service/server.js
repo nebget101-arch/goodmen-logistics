@@ -1,3 +1,4 @@
+require('./tracing');
 require('dotenv').config();
 
 const express = require('express');
@@ -23,34 +24,15 @@ app.use(cors());
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 
-const swaggerOptions = {
-  definition: {
-    openapi: '3.0.0',
-    info: {
-      title: 'Drivers Compliance Service API',
-      version: '1.0.0',
-      description: 'API documentation for the Drivers Compliance microservice.'
-    },
-    components: {
-      securitySchemes: {
-        bearerAuth: {
-          type: 'http',
-          scheme: 'bearer',
-          bearerFormat: 'JWT'
-        }
-      }
-    },
-    security: [
-      {
-        bearerAuth: []
-      }
-    ]
-  },
+const { buildSwaggerOptions } = require('@goodmen/shared/config/swagger');
+const swaggerOptions = buildSwaggerOptions({
+  title: 'Drivers Compliance Service API',
+  description: 'API documentation for the Drivers Compliance microservice.',
   apis: [
     path.join(__dirname, '../../packages/goodmen-shared/routes/*.js'),
     __filename
   ]
-};
+});
 
 const swaggerSpec = swaggerJsdoc(swaggerOptions);
 
@@ -71,12 +53,14 @@ const safetyRiskEngineRouter = require('@goodmen/shared/routes/safety-risk-engin
 const employerInvestigationsRouter = require('@goodmen/shared/routes/employer-investigations');
 const publicEmployerInvestigationsRouter = require('@goodmen/shared/routes/public-employer-investigations');
 const annualComplianceRouter = require('@goodmen/shared/routes/annual-compliance');
+const addressRouter = require('@goodmen/shared/routes/address');
 const authMiddleware = require('@goodmen/shared/middleware/auth-middleware');
 const tenantContextMiddleware = require('@goodmen/shared/middleware/tenant-context-middleware');
 const requirePlanAccess = require('@goodmen/shared/middleware/plan-access-middleware');
 
 const requireRoadsidePlan = requirePlanAccess('/roadside');
 
+app.get('/api-docs-json', (_req, res) => res.json(swaggerSpec));
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 
 app.use('/api/drivers', authMiddleware, tenantContextMiddleware, driversRouter);
@@ -96,6 +80,7 @@ app.use('/public/onboarding', publicOnboardingRouter);
 app.use('/public/roadside', publicRoadsideRouter);
 app.use('/public/consents', publicConsentsRouter);
 app.use('/public/employer-investigations', publicEmployerInvestigationsRouter);
+app.use('/api/address', addressRouter);
 
 /**
  * @openapi
@@ -117,6 +102,12 @@ app.get('/health', (req, res) => {
   res.json(healthStatus);
 });
 
-app.listen(PORT, () => {
+app.listen(PORT, async () => {
+  try {
+    await knex.migrate.latest();
+    console.log('✅ Database migrations applied');
+  } catch (err) {
+    console.error('⚠️  Migration error (non-fatal):', err.message);
+  }
   console.log(`🧑‍✈️ Drivers compliance service running on http://localhost:${PORT}`);
 });

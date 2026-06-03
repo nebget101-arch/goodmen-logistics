@@ -81,6 +81,16 @@ function normalizeStatus(value, fallback) {
   return mapped || fallback;
 }
 
+function formatUserDisplayName(user) {
+  if (!user) return null;
+  const full = [user.first_name, user.last_name]
+    .filter(Boolean)
+    .map(part => String(part).trim())
+    .filter(Boolean)
+    .join(' ');
+  return full || user.username || null;
+}
+
 function normalizeUuid(value) {
   if (value === undefined || value === null) return null;
   if (typeof value === 'string' && value.trim() === '') return null;
@@ -92,6 +102,78 @@ function normalizeOdometer(value) {
   if (typeof value === 'string' && value.trim() === '') return null;
   const num = Number(value);
   return Number.isNaN(num) ? null : Math.trunc(num);
+}
+
+function normalizeDateString(value) {
+  if (value === undefined || value === null) return null;
+  if (typeof value === 'string' && value.trim() === '') return null;
+  return value;
+}
+
+function normalizeNullableText(value) {
+  if (value === undefined || value === null) return null;
+  if (typeof value === 'string' && value.trim() === '') return null;
+  return value;
+}
+
+function normalizeNullableNumber(value) {
+  if (value === undefined || value === null) return null;
+  if (typeof value === 'string' && value.trim() === '') return null;
+  const num = Number(value);
+  return Number.isNaN(num) ? null : num;
+}
+
+function normalizeRoadCall(value) {
+  if (value === undefined || value === null || value === '') return false;
+  if (typeof value === 'boolean') return value;
+  if (typeof value === 'number') return value !== 0;
+  const str = String(value).trim().toLowerCase();
+  return str === 'true' || str === '1' || str === 'yes';
+}
+
+// FN-1518: maps Service Details payload (camelCase) to snake_case columns
+// added by FN-1528. Insert form populates all 8 fields; patch form only
+// includes keys present in the payload so omitted fields keep their value.
+function buildServiceDetailsInsert(payload) {
+  return {
+    service_category: normalizeNullableText(payload.serviceCategory),
+    service_description: normalizeNullableText(payload.serviceDescription),
+    problem_reported: normalizeNullableText(payload.problemReported),
+    safety_issue: normalizeNullableText(payload.safetyIssue),
+    downtime_reason: normalizeNullableText(payload.downtimeReason),
+    road_call: normalizeRoadCall(payload.roadCall),
+    breakdown_location: normalizeNullableText(payload.breakdownLocation),
+    estimated_duration_hours: normalizeNullableNumber(payload.estimatedDurationHours)
+  };
+}
+
+function buildServiceDetailsPatch(payload) {
+  const patch = {};
+  if ('serviceCategory' in payload) {
+    patch.service_category = normalizeNullableText(payload.serviceCategory);
+  }
+  if ('serviceDescription' in payload) {
+    patch.service_description = normalizeNullableText(payload.serviceDescription);
+  }
+  if ('problemReported' in payload) {
+    patch.problem_reported = normalizeNullableText(payload.problemReported);
+  }
+  if ('safetyIssue' in payload) {
+    patch.safety_issue = normalizeNullableText(payload.safetyIssue);
+  }
+  if ('downtimeReason' in payload) {
+    patch.downtime_reason = normalizeNullableText(payload.downtimeReason);
+  }
+  if ('roadCall' in payload) {
+    patch.road_call = normalizeRoadCall(payload.roadCall);
+  }
+  if ('breakdownLocation' in payload) {
+    patch.breakdown_location = normalizeNullableText(payload.breakdownLocation);
+  }
+  if ('estimatedDurationHours' in payload) {
+    patch.estimated_duration_hours = normalizeNullableNumber(payload.estimatedDurationHours);
+  }
+  return patch;
 }
 
 function computeDueDate(issuedDate, paymentTerms, customDays) {
@@ -106,7 +188,43 @@ function computeDueDate(issuedDate, paymentTerms, customDays) {
   return due.toISOString().slice(0, 10);
 }
 
-function computeTotalsFromLines({ laborLines, partLines, feeLines, discountType, discountValue, taxRatePercent }) {
+// Legacy fallback rate when no rule is found for a known state. See FN-1538.
+const LEGACY_FALLBACK_TAX_RATE = 0.085;
+
+function round2(value) {
+  return Math.round(value * 100) / 100;
+}
+
+/**
+ * Compute work-order totals + tax_breakdown using a state-aware tax engine.
+ *
+ * Per-component taxability comes from `state_tax_rules` (rule.labor_taxable,
+ * parts_taxable, fees_taxable). When no rule is available, we fall back to
+ * the legacy per-line `taxable` flag so existing data keeps producing the
+ * same numbers.
+ *
+ * Rate selection (in priority order):
+ *   1. `taxRateOverride === true`  → user-supplied `taxRatePercent / 100`
+ *   2. rule found                  → `rule.default_sales_tax_rate`
+ *   3. location has state, no rule → `LEGACY_FALLBACK_TAX_RATE` (0.085)
+ *   4. location with no state      → `LEGACY_FALLBACK_TAX_RATE` (0.085)
+ *   5. no location at all          → 0  (skip tax — spec wants warn + zero)
+ *
+ * Discounts are apportioned proportionally against the taxable subtotal so
+ * a 10% off coupon reduces the taxable base by 10%, not the whole discount.
+ */
+function computeWorkOrderTotals({
+  laborLines,
+  partLines,
+  feeLines,
+  discountType,
+  discountValue,
+  taxRatePercent,
+  taxRateOverride,
+  rule,
+  hasLocation,
+  hasState
+}) {
   const laborSubtotal = laborLines.reduce((sum, l) => sum + normalizeDecimal(l.line_total), 0);
   const partsSubtotal = partLines.reduce((sum, l) => sum + normalizeDecimal(l.line_total), 0);
   const feesSubtotal = feeLines.reduce((sum, l) => sum + normalizeDecimal(l.amount), 0);
@@ -118,18 +236,70 @@ function computeTotalsFromLines({ laborLines, partLines, feeLines, discountType,
     ? subtotal * (discountVal / 100)
     : (discountTypeValue === 'AMOUNT' ? discountVal : 0);
 
-  const taxableSubtotal = laborLines.filter(l => l.taxable)
-    .reduce((sum, l) => sum + normalizeDecimal(l.line_total), 0)
-    + partLines.filter(l => l.taxable)
-      .reduce((sum, l) => sum + normalizeDecimal(l.line_total), 0)
-    + feeLines.filter(l => l.taxable)
+  const overrideActive = taxRateOverride === true;
+
+  let rate = 0;
+  let fallbackReason = null;
+  if (overrideActive) {
+    rate = normalizeDecimal(taxRatePercent) / 100;
+  } else if (rule) {
+    rate = Number(rule.default_sales_tax_rate);
+  } else if (!hasLocation) {
+    rate = 0;
+    fallbackReason = 'no-location';
+  } else if (!hasState) {
+    rate = LEGACY_FALLBACK_TAX_RATE;
+    fallbackReason = 'no-state';
+  } else {
+    rate = LEGACY_FALLBACK_TAX_RATE;
+    fallbackReason = 'no-rule-for-state';
+  }
+
+  // Per-component taxability: rule wins. Without a rule, fall back to the
+  // legacy per-line `taxable` flag so we don't silently change historical
+  // numbers for tenants who never set up state rules.
+  let laborTaxableSubtotal;
+  let partsTaxableSubtotal;
+  let feesTaxableSubtotal;
+  if (rule) {
+    laborTaxableSubtotal = rule.labor_taxable ? laborSubtotal : 0;
+    partsTaxableSubtotal = rule.parts_taxable ? partsSubtotal : 0;
+    feesTaxableSubtotal = rule.fees_taxable ? feesSubtotal : 0;
+  } else {
+    laborTaxableSubtotal = laborLines
+      .filter((l) => l.taxable)
+      .reduce((sum, l) => sum + normalizeDecimal(l.line_total), 0);
+    partsTaxableSubtotal = partLines
+      .filter((l) => l.taxable)
+      .reduce((sum, l) => sum + normalizeDecimal(l.line_total), 0);
+    feesTaxableSubtotal = feeLines
+      .filter((l) => l.taxable)
       .reduce((sum, l) => sum + normalizeDecimal(l.amount), 0);
+  }
 
-  const taxRate = normalizeDecimal(taxRatePercent);
-  const taxableAfterDiscount = subtotal > 0 ? taxableSubtotal - (discountAmount * (taxableSubtotal / subtotal)) : taxableSubtotal;
-  const taxAmount = taxableAfterDiscount * (taxRate / 100);
-
+  const taxableSubtotal = laborTaxableSubtotal + partsTaxableSubtotal + feesTaxableSubtotal;
+  const taxableAfterDiscount = subtotal > 0
+    ? taxableSubtotal - (discountAmount * (taxableSubtotal / subtotal))
+    : taxableSubtotal;
+  const taxAmount = round2(taxableAfterDiscount * rate);
   const totalAmount = subtotal - discountAmount + taxAmount;
+
+  const taxBreakdown = {
+    rule_state: rule ? rule.state_code : null,
+    rate,
+    override: overrideActive,
+    fallback_reason: fallbackReason,
+    labor_taxable: rule ? rule.labor_taxable : null,
+    parts_taxable: rule ? rule.parts_taxable : null,
+    fees_taxable: rule ? rule.fees_taxable : null,
+    labor_subtotal: round2(laborSubtotal),
+    parts_subtotal: round2(partsSubtotal),
+    fees_subtotal: round2(feesSubtotal),
+    taxable_subtotal: round2(taxableSubtotal),
+    taxable_after_discount: round2(taxableAfterDiscount),
+    discount_amount: round2(discountAmount),
+    tax_amount: round2(taxAmount)
+  };
 
   return {
     laborSubtotal,
@@ -137,8 +307,22 @@ function computeTotalsFromLines({ laborLines, partLines, feeLines, discountType,
     feesSubtotal,
     discountAmount,
     taxAmount,
-    totalAmount
+    totalAmount,
+    taxBreakdown
   };
+}
+
+async function loadStateTaxRule(trx, stateCode) {
+  if (!stateCode) return null;
+  const code = String(stateCode).trim().toUpperCase();
+  if (!code) return null;
+  return trx('state_tax_rules')
+    .where('state_code', code)
+    .andWhere('effective_from', '<=', trx.fn.now())
+    .andWhere(function () {
+      this.whereNull('effective_to').orWhere('effective_to', '>=', trx.fn.now());
+    })
+    .first();
 }
 
 async function recomputeWorkOrderTotals(trx, workOrderId) {
@@ -149,13 +333,38 @@ async function recomputeWorkOrderTotals(trx, workOrderId) {
 
   if (!workOrder) throw new Error('Work order not found');
 
-  const totals = computeTotalsFromLines({
+  let location = null;
+  if (workOrder.location_id) {
+    location = await trx('locations').where({ id: workOrder.location_id }).first();
+  }
+  const stateCode = location?.state ? String(location.state).trim() : null;
+  const rule = stateCode ? await loadStateTaxRule(trx, stateCode) : null;
+
+  if (!workOrder.location_id) {
+    dtLogger.warn?.('work_order_tax_skip_no_location', { work_order_id: workOrderId });
+  } else if (!stateCode) {
+    dtLogger.warn?.('work_order_tax_legacy_no_state', {
+      work_order_id: workOrderId,
+      location_id: workOrder.location_id
+    });
+  } else if (!rule) {
+    dtLogger.warn?.('work_order_tax_legacy_no_rule_for_state', {
+      work_order_id: workOrderId,
+      state: stateCode
+    });
+  }
+
+  const totals = computeWorkOrderTotals({
     laborLines,
     partLines,
     feeLines,
     discountType: workOrder.discount_type,
     discountValue: workOrder.discount_value,
-    taxRatePercent: workOrder.tax_rate_percent
+    taxRatePercent: workOrder.tax_rate_percent,
+    taxRateOverride: workOrder.tax_rate_override === true,
+    rule,
+    hasLocation: !!workOrder.location_id,
+    hasState: !!stateCode
   });
 
   const [updated] = await trx('work_orders')
@@ -166,6 +375,7 @@ async function recomputeWorkOrderTotals(trx, workOrderId) {
       fees_subtotal: totals.feesSubtotal,
       tax_amount: totals.taxAmount,
       total_amount: totals.totalAmount,
+      tax_breakdown: JSON.stringify(totals.taxBreakdown),
       updated_at: trx.fn.now()
     })
     .returning('*');
@@ -281,6 +491,7 @@ async function getWorkOrderById(workOrderId, context = null) {
         email: requester.email || null
       };
       workOrder.requested_by_username = requester.username;
+      workOrder.requestedBy = formatUserDisplayName(requester);
     }
   }
 
@@ -290,6 +501,7 @@ async function getWorkOrderById(workOrderId, context = null) {
     if (assignedMechanic) {
       workOrder.assigned_mechanic_username = assignedMechanic.username;
       workOrder.assigned_to = assignedMechanic.username;
+      workOrder.assignedTo = formatUserDisplayName(assignedMechanic);
     }
   }
 
@@ -346,7 +558,7 @@ async function createWorkOrder(payload, userId, context = null) {
 
     let resolvedUserId = normalizeUuid(userId);
     if (!resolvedUserId) {
-      resolvedUserId = await resolveUserIdByUsername(trx, payload.requestedBy || payload.requestedByUsername);
+      resolvedUserId = await resolveUserIdByUsername(trx, payload.requestedByUsername || payload.requestedBy);
     }
 
     const resolvedDescription = payload.description || payload.title || 'Work order';
@@ -363,9 +575,15 @@ async function createWorkOrder(payload, userId, context = null) {
       odometer_miles: normalizeOdometer(payload.odometerMiles),
       assigned_mechanic_user_id: normalizeUuid(payload.assignedMechanicUserId),
       requested_by_user_id: resolvedUserId,
+      cost_type: payload.cost_type || payload.costType || 'BILLABLE',
       discount_type: payload.discountType || 'NONE',
       discount_value: payload.discountValue || 0,
       tax_rate_percent: payload.taxRatePercent || 0,
+      tax_rate_override: payload.taxRateOverride === true,
+      scheduled_date: normalizeDateString(payload.scheduledDate),
+      start_date: normalizeDateString(payload.startDate),
+      completion_date: normalizeDateString(payload.completionDate),
+      ...buildServiceDetailsInsert(payload),
       created_at: trx.fn.now(),
       updated_at: trx.fn.now()
     }).returning('*');
@@ -426,9 +644,10 @@ async function updateWorkOrder(workOrderId, payload, userId, context = null) {
 
     let resolvedUserId = normalizeUuid(userId);
     if (!resolvedUserId) {
-      resolvedUserId = await resolveUserIdByUsername(trx, payload.requestedBy || payload.requestedByUsername);
+      resolvedUserId = await resolveUserIdByUsername(trx, payload.requestedByUsername || payload.requestedBy);
     }
 
+    const costTypePatch = payload.cost_type ?? payload.costType;
     await trx('work_orders').where({ id: workOrderId }).update({
       vehicle_id: vehicleId,
       shop_client_id: customerId,
@@ -440,9 +659,17 @@ async function updateWorkOrder(workOrderId, payload, userId, context = null) {
       odometer_miles: odometerMiles,
       assigned_mechanic_user_id: assignedMechanicId,
       requested_by_user_id: workOrder.requested_by_user_id || resolvedUserId,
+      ...(costTypePatch !== undefined ? { cost_type: costTypePatch } : {}),
       discount_type: payload.discountType ?? workOrder.discount_type,
       discount_value: payload.discountValue ?? workOrder.discount_value,
       tax_rate_percent: payload.taxRatePercent ?? workOrder.tax_rate_percent,
+      tax_rate_override: payload.taxRateOverride === undefined
+        ? workOrder.tax_rate_override
+        : payload.taxRateOverride === true,
+      ...(payload.scheduledDate !== undefined ? { scheduled_date: normalizeDateString(payload.scheduledDate) } : {}),
+      ...(payload.startDate !== undefined ? { start_date: normalizeDateString(payload.startDate) } : {}),
+      ...(payload.completionDate !== undefined ? { completion_date: normalizeDateString(payload.completionDate) } : {}),
+      ...buildServiceDetailsPatch(payload),
       updated_at: trx.fn.now()
     });
 
@@ -481,7 +708,7 @@ async function updateWorkOrder(workOrderId, payload, userId, context = null) {
   });
 }
 
-async function updateWorkOrderStatus(workOrderId, nextStatus, userRole) {
+async function updateWorkOrderStatus(workOrderId, nextStatus, userRole, userId, context = null) {
   return db.transaction(async trx => {
     const workOrder = await trx('work_orders')
       .where({ id: workOrderId })
@@ -629,7 +856,7 @@ async function reservePart(workOrderId, payload, userId) {
         qty_requested: qtyRequested,
         qty_reserved: reserveQty,
         qty_issued: 0,
-        unit_price: normalizeDecimal(payload.unitPrice) || part.unit_price || 0,
+        unit_price: normalizeDecimal(payload.unitPrice) || normalizeDecimal(part.default_retail_price) || 0,
         taxable: payload.taxable !== undefined ? payload.taxable === true : (part.taxable === true),
         status: backordered ? 'BACKORDERED' : 'RESERVED',
         line_total: 0
@@ -818,6 +1045,157 @@ async function returnPart(workOrderId, partLineId, payload, userId) {
   });
 }
 
+function derivePartLineStatus(qtyRequested, qtyReserved, qtyIssued, currentStatus) {
+  if (qtyRequested > 0 && qtyIssued >= qtyRequested) return 'ISSUED';
+  if (qtyReserved >= qtyRequested && qtyRequested > 0) return 'RESERVED';
+  if (qtyReserved < qtyRequested) return 'BACKORDERED';
+  return currentStatus;
+}
+
+async function updatePartLine(workOrderId, partLineId, payload, userId) {
+  return db.transaction(async trx => {
+    const line = await trx('work_order_part_items')
+      .where({ id: partLineId, work_order_id: workOrderId })
+      .first();
+    if (!line) throw new Error('Part line not found');
+
+    const currentRequested = normalizeDecimal(line.qty_requested);
+    const currentReserved = normalizeDecimal(line.qty_reserved);
+    const currentIssued = normalizeDecimal(line.qty_issued);
+
+    const newRequested = payload.qtyRequested !== undefined
+      ? normalizeDecimal(payload.qtyRequested)
+      : currentRequested;
+    const newReserved = payload.qtyReserved !== undefined
+      ? normalizeDecimal(payload.qtyReserved)
+      : currentReserved;
+    const newIssued = payload.qtyIssued !== undefined
+      ? normalizeDecimal(payload.qtyIssued)
+      : currentIssued;
+
+    if (newRequested < 0) throw new Error('qtyRequested cannot be negative');
+    if (newReserved < 0) throw new Error('qtyReserved cannot be negative');
+    if (newIssued < 0) throw new Error('qtyIssued cannot be negative');
+    if (newReserved > newRequested) {
+      throw new Error('qty_reserved cannot exceed qty_requested');
+    }
+    if (newIssued > newReserved) {
+      throw new Error('qty_issued cannot exceed qty_reserved');
+    }
+
+    const reservedDelta = newReserved - currentReserved;
+    const issuedDelta = newIssued - currentIssued;
+
+    const locationId = line.location_id;
+    const partId = line.part_id;
+    const resolvedUserId = await resolveUserId(trx, userId);
+
+    if (reservedDelta !== 0) {
+      if (reservedDelta > 0) {
+        const inventory = await trx('inventory')
+          .where({ location_id: locationId, part_id: partId })
+          .first();
+        if (!inventory) throw new Error('Inventory not found for this location/part');
+        const available = normalizeDecimal(inventory.on_hand_qty) - normalizeDecimal(inventory.reserved_qty);
+        if (reservedDelta > available) {
+          throw new Error('Not enough inventory available to reserve additional quantity');
+        }
+        await trx('inventory')
+          .where({ location_id: locationId, part_id: partId })
+          .increment('reserved_qty', reservedDelta)
+          .update({ updated_at: trx.fn.now() });
+      } else {
+        await trx('inventory')
+          .where({ location_id: locationId, part_id: partId })
+          .decrement('reserved_qty', Math.abs(reservedDelta))
+          .update({ updated_at: trx.fn.now() });
+      }
+
+      await trx('inventory_transactions').insert({
+        location_id: locationId,
+        part_id: partId,
+        transaction_type: 'RESERVE',
+        qty_change: reservedDelta,
+        unit_cost_at_time: null,
+        reference_type: 'WORK_ORDER',
+        reference_id: workOrderId,
+        performed_by_user_id: resolvedUserId,
+        notes: reservedDelta > 0
+          ? 'Increased reservation via patch'
+          : 'Released reservation via patch'
+      });
+    }
+
+    if (issuedDelta !== 0) {
+      if (issuedDelta > 0) {
+        await trx('inventory')
+          .where({ location_id: locationId, part_id: partId })
+          .decrement('reserved_qty', issuedDelta)
+          .decrement('on_hand_qty', issuedDelta)
+          .update({ last_issued_at: trx.fn.now(), updated_at: trx.fn.now() });
+
+        await trx('inventory_transactions').insert({
+          location_id: locationId,
+          part_id: partId,
+          transaction_type: 'ISSUE',
+          qty_change: -issuedDelta,
+          unit_cost_at_time: line.unit_price,
+          reference_type: 'WORK_ORDER',
+          reference_id: workOrderId,
+          performed_by_user_id: resolvedUserId,
+          notes: 'Issued via patch'
+        });
+      } else {
+        const returnQty = Math.abs(issuedDelta);
+        await trx('inventory')
+          .where({ location_id: locationId, part_id: partId })
+          .increment('on_hand_qty', returnQty)
+          .update({ updated_at: trx.fn.now() });
+
+        await trx('inventory_transactions').insert({
+          location_id: locationId,
+          part_id: partId,
+          transaction_type: 'RETURN',
+          qty_change: returnQty,
+          unit_cost_at_time: line.unit_price,
+          reference_type: 'WORK_ORDER',
+          reference_id: workOrderId,
+          performed_by_user_id: resolvedUserId,
+          notes: 'Returned via patch'
+        });
+      }
+    }
+
+    const finalUnitPrice = payload.unitPrice !== undefined
+      ? normalizeDecimal(payload.unitPrice)
+      : normalizeDecimal(line.unit_price);
+    if (finalUnitPrice < 0) throw new Error('unitPrice cannot be negative');
+    const finalTaxable = payload.taxable !== undefined
+      ? payload.taxable === true
+      : line.taxable;
+
+    const newStatus = derivePartLineStatus(newRequested, newReserved, newIssued, line.status);
+    const lineTotal = newIssued * finalUnitPrice;
+
+    const [updatedLine] = await trx('work_order_part_items')
+      .where({ id: partLineId })
+      .update({
+        qty_requested: newRequested,
+        qty_reserved: newReserved,
+        qty_issued: newIssued,
+        unit_price: finalUnitPrice,
+        taxable: finalTaxable,
+        status: newStatus,
+        line_total: lineTotal,
+        updated_at: trx.fn.now()
+      })
+      .returning('*');
+
+    const recomputed = await recomputeWorkOrderTotals(trx, workOrderId);
+    return { line: updatedLine, workOrder: recomputed.workOrder };
+  });
+}
+
 async function updateCharges(workOrderId, payload) {
   return db.transaction(async trx => {
     const workOrder = await trx('work_orders').where({ id: workOrderId }).first();
@@ -839,6 +1217,9 @@ async function updateCharges(workOrderId, payload) {
       discount_type: payload.discountType ?? workOrder.discount_type,
       discount_value: payload.discountValue ?? workOrder.discount_value,
       tax_rate_percent: payload.taxRatePercent ?? workOrder.tax_rate_percent,
+      tax_rate_override: payload.taxRateOverride === undefined
+        ? workOrder.tax_rate_override
+        : payload.taxRateOverride === true,
       updated_at: trx.fn.now()
     });
 
@@ -1182,11 +1563,18 @@ module.exports = {
   reservePartsFromBarcodes,
   issuePart,
   returnPart,
+  updatePartLine,
   updateCharges,
   addLaborLine,
   updateLaborLine,
   deleteLaborLine,
   recomputeWorkOrderTotals,
   generateInvoiceForWorkOrder,
-  uploadDocument
+  uploadDocument,
+  normalizeDateString,
+  // Exported for unit tests (FN-1538). Pure functions; no DB.
+  computeWorkOrderTotals,
+  loadStateTaxRule,
+  LEGACY_FALLBACK_TAX_RATE,
+  formatUserDisplayName
 };

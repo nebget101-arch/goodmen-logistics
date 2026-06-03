@@ -1,8 +1,75 @@
 import { Injectable } from '@angular/core';
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, HttpEventType, HttpRequest } from '@angular/common/http';
 import { Observable, timeout } from 'rxjs';
-import { map } from 'rxjs/operators';
+import { filter, map } from 'rxjs/operators';
 import { environment } from '../../environments/environment';
+import { LocationBin, BinFormValue, BulkBinPayload, LocationListResponse } from '../models/location.model';
+
+/** Shape returned by GET /api/locations/:id/users */
+export interface LocationUserRecord {
+  id: string;
+  first_name: string | null;
+  last_name: string | null;
+  email: string | null;
+  role: string | null;
+  assigned_at: string | null;
+}
+
+// FN-1491 — POST /api/receiving/:id/invoice contracts.
+// The backend (FN-1490) stores the file, calls the AI extractor (FN-1489),
+// and returns this shape. `match` is populated when the AI service resolves
+// a SKU against the parts catalog; rows without a match render as
+// "Unmatched" in the review modal so the user can Quick-Add or Skip.
+export interface InvoiceExtractedLine {
+  sku?: string | null;
+  description: string;
+  qty: number;
+  unitCost: number;
+  match?: { partId: string; sku: string; name: string } | null;
+}
+
+export interface InvoiceExtractionResult {
+  vendor?: string | null;
+  reference?: string | null;
+  invoiceDate?: string | null;
+  lines: InvoiceExtractedLine[];
+}
+
+export interface InvoiceUploadResult {
+  fileUrl: string;
+  extracted: InvoiceExtractionResult;
+}
+
+export type InvoiceUploadEvent =
+  | { kind: 'progress'; progress: number }
+  | { kind: 'result'; result: InvoiceUploadResult };
+
+// FN-1625 — POST /api/dqf/cdl-extract contracts.
+// Backend (FN-1627) accepts multipart `file` (image or PDF, ≤10 MB), forwards
+// to AI service (FN-1626), applies a confidence floor server-side, and returns
+// the camelCase shape below. The CDL bytes are NOT persisted (no R2 / no disk).
+export interface CdlExtractedFields {
+  firstName?: string | null;
+  middleName?: string | null;
+  lastName?: string | null;
+  dateOfBirth?: string | null;
+  streetAddress?: string | null;
+  city?: string | null;
+  state?: string | null;
+  zipCode?: string | null;
+  cdlNumber?: string | null;
+  cdlState?: string | null;
+  cdlClass?: string | null;
+  cdlExpiry?: string | null;
+}
+
+export interface CdlExtractionResponse {
+  success: boolean;
+  extracted: CdlExtractedFields | null;
+  extractedFields?: string[];
+  reason?: 'low_confidence' | 'ai_unavailable' | string;
+  meta?: { lowConfidenceFields?: string[]; processingMs?: number };
+}
 
 @Injectable({
   providedIn: 'root'
@@ -16,9 +83,134 @@ export class ApiService {
     return this.baseUrl;
   }
 
-  // Locations
+  // ── Locations — FN-691 / FN-698 / FN-699 ────────────────────────────────
+
+  /** Legacy — kept for backward compatibility */
   getLocations(): Observable<any> {
     return this.http.get(`${this.baseUrl}/locations`);
+  }
+
+  /** Paginated, filterable list → { data, meta: { page, pageSize, total } } */
+  listLocations(params?: {
+    type?: string;
+    active?: boolean;
+    search?: string;
+    page?: number;
+    pageSize?: number;
+    sortBy?: string;
+    sortDir?: string;
+  }): Observable<any> {
+    const p = new URLSearchParams();
+    if (params?.type)     p.set('type',     params.type);
+    if (params?.active !== undefined)   p.set('active',   String(params.active));
+    if (params?.search)   p.set('search',   params.search);
+    if (params?.page)     p.set('page',     String(params.page));
+    if (params?.pageSize) p.set('pageSize', String(params.pageSize));
+    if (params?.sortBy)   p.set('sortBy',   params.sortBy);
+    if (params?.sortDir)  p.set('sortDir',  params.sortDir);
+    const qs = p.toString();
+    return this.http.get<any>(`${this.baseUrl}/locations${qs ? '?' + qs : ''}`);
+  }
+
+  getLocationById(id: string): Observable<any> {
+    return this.http.get<any>(`${this.baseUrl}/locations/${id}`);
+  }
+
+  createLocation(payload: any): Observable<any> {
+    return this.http.post<any>(`${this.baseUrl}/locations`, payload);
+  }
+
+  updateLocation(id: string, payload: any): Observable<any> {
+    return this.http.patch<any>(`${this.baseUrl}/locations/${id}`, payload);
+  }
+
+  /**
+   * Hard-delete a location.
+   * Returns 200 on success.
+   * Returns 409 with body: { message: string; dependencies: { work_orders: number; inventory_items: number; users: number; vehicles: number } }
+   * when the location has linked records and cannot be hard-deleted.
+   */
+  deleteLocation(id: string): Observable<any> {
+    return this.http.delete<any>(`${this.baseUrl}/locations/${id}`);
+  }
+
+  // ── Location Bins — FN-692 ────────────────────────────────────────────────
+
+  getLocationBins(locationId: string): Observable<any> {
+    return this.http.get<any>(`${this.baseUrl}/locations/${locationId}/bins`);
+  }
+
+  createLocationBin(locationId: string, payload: any): Observable<any> {
+    return this.http.post<any>(`${this.baseUrl}/locations/${locationId}/bins`, payload);
+  }
+
+  updateLocationBin(locationId: string, binId: string, payload: any): Observable<any> {
+    return this.http.patch<any>(`${this.baseUrl}/locations/${locationId}/bins/${binId}`, payload);
+  }
+
+  deleteLocationBin(locationId: string, binId: string): Observable<any> {
+    return this.http.delete<any>(`${this.baseUrl}/locations/${locationId}/bins/${binId}`);
+  }
+
+  // ── Location Supply Rules — FN-693 ────────────────────────────────────────
+
+  getLocationSupplyRules(locationId: string): Observable<any> {
+    return this.http.get<any>(`${this.baseUrl}/locations/${locationId}/supply-rules`);
+  }
+
+  createLocationSupplyRule(locationId: string, payload: any): Observable<any> {
+    return this.http.post<any>(`${this.baseUrl}/locations/${locationId}/supply-rules`, payload);
+  }
+
+  updateLocationSupplyRule(locationId: string, ruleId: string, payload: any): Observable<any> {
+    return this.http.patch<any>(`${this.baseUrl}/locations/${locationId}/supply-rules/${ruleId}`, payload);
+  }
+
+  deleteLocationSupplyRule(locationId: string, ruleId: string): Observable<any> {
+    return this.http.delete<any>(`${this.baseUrl}/locations/${locationId}/supply-rules/${ruleId}`);
+  }
+
+  // ── Location Bins — Bulk Create (FN-699) ─────────────────────────────────
+
+  bulkCreateBins(locationId: string, payload: BulkBinPayload): Observable<{ created: LocationBin[] }> {
+    return this.http.post<{ created: LocationBin[] }>(
+      `${this.baseUrl}/locations/${locationId}/bins/bulk`, payload
+    );
+  }
+
+  // ── Location Users — FN-694 / FN-700 ─────────────────────────────────────
+
+  getLocationUsers(locationId: string): Observable<LocationUserRecord[]> {
+    return this.http.get<LocationUserRecord[]>(
+      `${this.baseUrl}/locations/${encodeURIComponent(locationId)}/users`
+    );
+  }
+
+  assignLocationUsers(locationId: string, userIds: string[]): Observable<unknown> {
+    return this.http.post<unknown>(
+      `${this.baseUrl}/locations/${encodeURIComponent(locationId)}/users`,
+      { user_ids: userIds }
+    );
+  }
+
+  /** @alias assignLocationUsers — kept for backward compatibility */
+  assignUsersToLocation(locationId: string, userIds: string[]): Observable<any> {
+    return this.assignLocationUsers(locationId, userIds);
+  }
+
+  removeLocationUser(locationId: string, userId: string): Observable<{ success: boolean }> {
+    return this.http.delete<{ success: boolean }>(
+      `${this.baseUrl}/locations/${encodeURIComponent(locationId)}/users/${encodeURIComponent(userId)}`
+    );
+  }
+
+  /** @alias removeLocationUser — kept for backward compatibility */
+  removeUserFromLocation(locationId: string, userId: string): Observable<any> {
+    return this.removeLocationUser(locationId, userId);
+  }
+
+  getUserLocations(userId: string): Observable<any> {
+    return this.http.get<any>(`${this.baseUrl}/users/${userId}/locations`);
   }
 
   // FMCSA company info lookup (legacy — shop clients context)
@@ -183,12 +375,45 @@ export class ApiService {
   }
 
   // Dashboard
-  getDashboardStats(): Observable<any> {
-    return this.http.get(`${this.baseUrl}/dashboard/stats`);
+  /**
+   * FN-1332 — pass `window` so the backend can return window-scoped stats with
+   * deltas (FN-1333). When `window` is omitted the endpoint preserves its
+   * legacy behavior, so callers that haven't migrated still work.
+   */
+  getDashboardStats(opts: { window?: 'today' | '7d' | '30d' } = {}): Observable<any> {
+    const params: Record<string, string> = {};
+    if (opts.window) params['window'] = opts.window;
+    return this.http.get(`${this.baseUrl}/dashboard/stats`, { params });
   }
 
-  getAlerts(): Observable<any> {
-    return this.http.get(`${this.baseUrl}/dashboard/alerts`);
+  /**
+   * FN-1329 — fetch the unified Action Queue (severity-ranked, grouped alerts).
+   * Backed by `GET /api/dashboard/action-queue` on the gateway (FN-1330).
+   */
+  getActionQueue(opts: {
+    window?: 'today' | '7d' | '30d';
+    severity?: 'all' | 'critical' | 'high' | 'medium' | 'low';
+  } = {}): Observable<any> {
+    const params: Record<string, string> = {};
+    if (opts.window) params['window'] = opts.window;
+    if (opts.severity) params['severity'] = opts.severity;
+    return this.http.get(`${this.baseUrl}/dashboard/action-queue`, { params });
+  }
+
+  /**
+   * FN-1329 — dismiss a grouped alert. Pass `groupId` alone to dismiss the
+   * whole group; pass `targetIds` to dismiss only the selected items inside
+   * an expanded group. Persists via the existing dismissals store.
+   */
+  dismissActionQueueGroup(payload: {
+    groupId: string;
+    targetIds?: string[];
+  }): Observable<any> {
+    const body: Record<string, unknown> = { group_id: payload.groupId };
+    if (payload.targetIds && payload.targetIds.length) {
+      body['target_ids'] = payload.targetIds;
+    }
+    return this.http.post(`${this.baseUrl}/dashboard/action-queue/dismiss`, body);
   }
 
   // Drivers
@@ -219,6 +444,25 @@ export class ApiService {
     return this.http.post(`${this.baseUrl}/drivers`, driver);
   }
 
+  // FN-1628 — Upload a CDL (image/PDF) for AI field extraction. The backend
+  // applies a per-field confidence floor before returning, so any value that
+  // arrives in `extracted` is safe to apply directly.
+  extractCdl(file: File): Observable<CdlExtractionResponse> {
+    const form = new FormData();
+    form.append('file', file);
+    return this.http.post<CdlExtractionResponse>(`${this.baseUrl}/dqf/cdl-extract`, form);
+  }
+
+  // FN-1633 — Multi-file variant. Always posts under the `files` field to match
+  // `upload.array('files', 10)` server-side (FN-1634). Even single-file
+  // selections from the multi picker go through this method; the BE returns
+  // `{ results: CdlExtractionResponse[] }` in upload order.
+  extractCdls(files: File[]): Observable<{ results: CdlExtractionResponse[] }> {
+    const form = new FormData();
+    for (const f of files) form.append('files', f, f.name);
+    return this.http.post<{ results: CdlExtractionResponse[] }>(`${this.baseUrl}/dqf/cdl-extract`, form);
+  }
+
   updateDriver(id: string, driver: any): Observable<any> {
     return this.http.put(`${this.baseUrl}/drivers/${id}`, driver).pipe(
       timeout(30000) // 30s so UI does not stay stuck if backend hangs
@@ -242,12 +486,21 @@ export class ApiService {
   }
 
   // Settlements (payroll)
-  listSettlements(filters?: { driver_id?: string; payroll_period_id?: string; settlement_status?: string; settlement_number?: string; limit?: number; offset?: number }): Observable<any> {
+  listSettlements(filters?: {
+    driver_id?: string;
+    payroll_period_id?: string;
+    settlement_status?: string;
+    settlement_type?: string;
+    settlement_number?: string;
+    limit?: number;
+    offset?: number;
+  }): Observable<any> {
     let url = `${this.baseUrl}/settlements/settlements`;
     const params = new URLSearchParams();
     if (filters?.driver_id) params.set('driver_id', filters.driver_id);
     if (filters?.payroll_period_id) params.set('payroll_period_id', filters.payroll_period_id);
     if (filters?.settlement_status) params.set('settlement_status', filters.settlement_status);
+    if (filters?.settlement_type) params.set('settlement_type', filters.settlement_type);
     if (filters?.settlement_number) params.set('settlement_number', filters.settlement_number);
     if (filters?.limit != null) params.set('limit', String(filters.limit));
     if (filters?.offset != null) params.set('offset', String(filters.offset));
@@ -295,6 +548,10 @@ export class ApiService {
       period: src?.period || settlement?.period || null,
       primary_payee: src?.primary_payee || settlement?.primary_payee || null,
       additional_payee: src?.additional_payee || settlement?.additional_payee || null,
+      truck: src?.truck || settlement?.truck || null,
+      equipment_owner: src?.equipment_owner || settlement?.equipment_owner || null,
+      paired_settlement_id: src?.paired_settlement_id ?? settlement?.paired_settlement_id ?? null,
+      paired_settlement: src?.paired_settlement || settlement?.paired_settlement || null,
       adjustment_groups: adjustmentGroups
     };
 
@@ -368,13 +625,59 @@ export class ApiService {
   }
 
   downloadSettlementPdfBlob(id: string): Observable<Blob> {
-    return this.http.get(`${this.baseUrl}/settlements/settlements/${id}/pdf/download`, {
+    return this.http.get(`${this.baseUrl}/settlements/settlements/${id}/pdf`, {
       responseType: 'blob'
     });
   }
 
+  /**
+   * Loads eligible for a settlement period (driver-scoped). Prefer this over GET /loads for settlement UI.
+   * Backend: GET /api/settlements/eligible-loads
+   */
+  getEligibleSettlementLoads(
+    driverId: string,
+    periodStart: string,
+    periodEnd: string,
+    dateBasis: 'pickup' | 'delivery' = 'pickup'
+  ): Observable<any> {
+    const p = new URLSearchParams({
+      driver_id: driverId,
+      period_start: periodStart,
+      period_end: periodEnd,
+      date_basis: dateBasis || 'pickup'
+    });
+    return this.http.get(`${this.baseUrl}/settlements/eligible-loads?${p.toString()}`);
+  }
+
   createSettlementDraft(payload: { payroll_period_id: string; driver_id: string; date_basis?: string }): Observable<any> {
     return this.http.post(`${this.baseUrl}/settlements/draft`, payload);
+  }
+
+  generateDualSettlements(payload: { payroll_period_id: string; driver_id: string; date_basis?: string }): Observable<any> {
+    return this.http.post(`${this.baseUrl}/settlements/generate-dual`, payload);
+  }
+
+  listBalanceTransfers(filters?: { status?: string; target_equipment_owner_id?: string; source_driver_id?: string }): Observable<any[]> {
+    let url = `${this.baseUrl}/settlements/balance-transfers`;
+    const params = new URLSearchParams();
+    if (filters?.status) params.set('status', filters.status);
+    if (filters?.target_equipment_owner_id) params.set('target_equipment_owner_id', filters.target_equipment_owner_id);
+    if (filters?.source_driver_id) params.set('source_driver_id', filters.source_driver_id);
+    const qs = params.toString();
+    if (qs) url += `?${qs}`;
+    return this.http.get<any[]>(url);
+  }
+
+  createBalanceTransfer(payload: { source_driver_id?: string; source_settlement_id?: string; target_equipment_owner_id?: string; amount: number; reason: string }): Observable<any> {
+    return this.http.post(`${this.baseUrl}/settlements/balance-transfers`, payload);
+  }
+
+  approveBalanceTransfer(id: string, reviewNotes?: string): Observable<any> {
+    return this.http.patch(`${this.baseUrl}/settlements/balance-transfers/${id}/approve`, { review_notes: reviewNotes || null });
+  }
+
+  rejectBalanceTransfer(id: string, reviewNotes?: string): Observable<any> {
+    return this.http.patch(`${this.baseUrl}/settlements/balance-transfers/${id}/reject`, { review_notes: reviewNotes || null });
   }
 
   createEquipmentOwner(payload: {
@@ -630,6 +933,13 @@ export class ApiService {
     return this.http.get(`${this.baseUrl}/vehicles/${id}`);
   }
 
+  getVehicleMaintenanceHistory(id: string, page = 1, pageSize = 25): Observable<any> {
+    const params = new URLSearchParams();
+    params.set('page', String(page));
+    params.set('pageSize', String(pageSize));
+    return this.http.get(`${this.baseUrl}/vehicles/${id}/maintenance-history?${params.toString()}`);
+  }
+
   createVehicle(vehicle: any): Observable<any> {
     return this.http.post(`${this.baseUrl}/vehicles`, vehicle);
   }
@@ -698,6 +1008,16 @@ export class ApiService {
     return this.http.post(`${this.baseUrl}/work-orders/${id}/parts/${partLineId}/return`, { qtyToReturn });
   }
 
+  patchWorkOrderPart(id: string, partLineId: string, payload: {
+    qtyRequested?: number;
+    qtyReserved?: number;
+    qtyIssued?: number;
+    unitPrice?: number;
+    taxable?: boolean;
+  }): Observable<any> {
+    return this.http.patch(`${this.baseUrl}/work-orders/${id}/parts/${partLineId}`, payload);
+  }
+
   listWorkOrders(filters?: any): Observable<any> {
     const params = new URLSearchParams();
     if (filters) {
@@ -718,6 +1038,10 @@ export class ApiService {
 
   generateInvoiceFromWorkOrder(id: string, payload?: any): Observable<any> {
     return this.http.post(`${this.baseUrl}/work-orders/${id}/generate-invoice`, payload || {});
+  }
+
+  updateInvoiceStatus(invoiceId: string, status: string, reason?: string): Observable<any> {
+    return this.http.patch(`${this.baseUrl}/invoices/${invoiceId}/status`, { status, reason });
   }
 
   downloadWorkOrderUploadTemplate(): Observable<Blob> {
@@ -1158,8 +1482,30 @@ export class ApiService {
     if (filters?.category) params.set('category', filters.category);
     if (filters?.manufacturer) params.set('manufacturer', filters.manufacturer);
     if (filters?.search) params.set('search', filters.search);
+    if (filters?.is_active !== undefined) params.set('is_active', String(filters.is_active));
+    if (filters?.limit !== undefined) params.set('limit', String(filters.limit));
     if (params.toString()) url += `?${params.toString()}`;
     return this.http.get(url);
+  }
+
+  // Quick-add (FN-1486): location-scoped recent and common parts.
+  // Backend endpoints land in FN-1485; missing endpoint returns empty list (caller treats error as empty).
+  getRecentPartsAtLocation(locationId: string, limit: number = 20): Observable<any> {
+    const qs = new URLSearchParams({ limit: String(limit) }).toString();
+    return this.http.get(
+      `${this.baseUrl}/parts/recent-at-location/${encodeURIComponent(locationId)}?${qs}`
+    );
+  }
+
+  getCommonPartsAtLocation(
+    locationId: string,
+    days: number = 90,
+    limit: number = 20
+  ): Observable<any> {
+    const qs = new URLSearchParams({ days: String(days), limit: String(limit) }).toString();
+    return this.http.get(
+      `${this.baseUrl}/parts/common-at-location/${encodeURIComponent(locationId)}?${qs}`
+    );
   }
 
   getPartCategories(): Observable<any> {
@@ -1196,6 +1542,22 @@ export class ApiService {
     return this.http.patch(`${this.baseUrl}/parts/${id}/deactivate`, {});
   }
 
+  /**
+   * FN-1111 — fuzzy duplicate-check for the Add Part form. At least one of
+   * `name`, `sku`, or `manufacturer` must be non-empty; the BE 400s when
+   * all three are blank, so the caller is expected to gate the request.
+   */
+  duplicateCheckParts(query: { name?: string; sku?: string; manufacturer?: string; limit?: number }): Observable<any> {
+    const params = new URLSearchParams();
+    if (query.name) params.set('name', query.name);
+    if (query.sku) params.set('sku', query.sku);
+    if (query.manufacturer) params.set('manufacturer', query.manufacturer);
+    if (query.limit != null) params.set('limit', String(query.limit));
+    const qs = params.toString();
+    const url = `${this.baseUrl}/parts/duplicate-check${qs ? `?${qs}` : ''}`;
+    return this.http.get(url);
+  }
+
   // Inventory
   getInventory(locationId: string, filters?: any): Observable<any> {
     let url = `${this.baseUrl}/inventory?locationId=${locationId}`;
@@ -1220,6 +1582,14 @@ export class ApiService {
 
   updateInventoryItem(id: string, data: any): Observable<any> {
     return this.http.put(`${this.baseUrl}/inventory/${id}`, data);
+  }
+
+  /**
+   * FN-708 — Return all inventory lines for a given part across all locations.
+   * Each item includes: location_id, location_name, on_hand_qty, bin_id?, bin_code?, bin_name?
+   */
+  getInventoryByPart(partId: string): Observable<any> {
+    return this.http.get(`${this.baseUrl}/inventory/by-part/${encodeURIComponent(partId)}`);
   }
 
   // Receiving
@@ -1248,8 +1618,160 @@ export class ApiService {
     return this.http.delete(`${this.baseUrl}/receiving/${ticketId}/lines/${lineId}`);
   }
 
+  /**
+   * FN-1562 — Patch a DRAFT receiving line. Backend (FN-1566) accepts any
+   * subset of `unit_cost`, `qty_received`, `bin_location_override` and
+   * rejects edits on POSTED tickets.
+   */
+  updateReceivingLine(
+    ticketId: string,
+    lineId: string,
+    body: { unit_cost?: number; qty_received?: number; bin_location_override?: string | null }
+  ): Observable<any> {
+    return this.http.patch(`${this.baseUrl}/receiving/${ticketId}/lines/${lineId}`, body);
+  }
+
+  /**
+   * FN-1562 — Update a part's default cost (and optionally retail) from the
+   * receiving reconcile prompt. Hits the same `PATCH /parts/:id` route as
+   * other partial updates (FN-1566 keeps that contract).
+   */
+  updatePartCost(
+    partId: string,
+    body: { default_cost: number; default_retail_price?: number }
+  ): Observable<any> {
+    return this.http.patch(`${this.baseUrl}/parts/${partId}`, body);
+  }
+
   postReceivingTicket(ticketId: string): Observable<any> {
     return this.http.post(`${this.baseUrl}/receiving/${ticketId}/post`, {});
+  }
+
+  getReceivingDraft(locationId: string): Observable<any> {
+    return this.http.get(`${this.baseUrl}/receiving/draft?locationId=${encodeURIComponent(locationId)}`);
+  }
+
+  getReceivingTodaySummary(locationId?: string): Observable<any> {
+    const qs = locationId ? `?locationId=${encodeURIComponent(locationId)}` : '';
+    return this.http.get(`${this.baseUrl}/receiving/summary/today${qs}`);
+  }
+
+  /**
+   * FN-1493/FN-1494 — Receiving activity report. Returns paged POSTED tickets
+   * with line items expanded for the current page plus aggregations
+   * (totalParts, totalLines, totalCost, byUser, byVendor) computed across
+   * the full filtered set. Filters mirror the backend.
+   */
+  getReceivingActivity(filters: {
+    locationId?: string;
+    from?: string;
+    to?: string;
+    userId?: string;
+    vendor?: string;
+    page?: number;
+    pageSize?: number;
+  } = {}): Observable<any> {
+    const p = new URLSearchParams();
+    if (filters.locationId) p.set('locationId', filters.locationId);
+    if (filters.from) p.set('from', filters.from);
+    if (filters.to) p.set('to', filters.to);
+    if (filters.userId) p.set('userId', filters.userId);
+    if (filters.vendor) p.set('vendor', filters.vendor);
+    if (filters.page) p.set('page', String(filters.page));
+    if (filters.pageSize) p.set('pageSize', String(filters.pageSize));
+    const qs = p.toString();
+    return this.http.get(`${this.baseUrl}/receiving/activity${qs ? '?' + qs : ''}`);
+  }
+
+  /**
+   * FN-1494 — Build the absolute URL for the streaming CSV export. Filters
+   * mirror `GET /receiving/activity` (ticket# search is client-side only).
+   */
+  getReceivingActivityCsvUrl(filters: {
+    locationId?: string;
+    from?: string;
+    to?: string;
+    userId?: string;
+    vendor?: string;
+  } = {}): string {
+    const p = new URLSearchParams();
+    if (filters.locationId) p.set('locationId', filters.locationId);
+    if (filters.from) p.set('from', filters.from);
+    if (filters.to) p.set('to', filters.to);
+    if (filters.userId) p.set('userId', filters.userId);
+    if (filters.vendor) p.set('vendor', filters.vendor);
+    const qs = p.toString();
+    return `${this.baseUrl}/receiving/activity.csv${qs ? '?' + qs : ''}`;
+  }
+
+  // FN-1491 — Invoice upload + AI extraction (parent FN-1480).
+  // Backend (FN-1490) accepts multipart `file`, persists to ticket, forwards
+  // to AI service (FN-1489), and responds with { fileUrl, extracted }.
+  // Emits progress events while the file is uploading so the UI can surface
+  // a 0–100% indicator; the final result event carries the extraction body.
+  uploadReceivingInvoice(ticketId: string, file: File): Observable<InvoiceUploadEvent> {
+    const form = new FormData();
+    form.append('file', file);
+    const req = new HttpRequest(
+      'POST',
+      `${this.baseUrl}/receiving/${encodeURIComponent(ticketId)}/invoice`,
+      form,
+      { reportProgress: true }
+    );
+    return this.http.request<any>(req).pipe(
+      map((event: any): InvoiceUploadEvent | null => {
+        if (event.type === HttpEventType.UploadProgress) {
+          const total = event.total || 0;
+          const loaded = event.loaded || 0;
+          const pct = total > 0 ? Math.round((loaded / total) * 100) : 0;
+          // Cap at 99 until we get the response body — extraction is happening
+          // server-side and we don't want a 100% bar that hangs.
+          return { kind: 'progress', progress: Math.min(pct, 99) };
+        }
+        if (event.type === HttpEventType.Response) {
+          const body = event.body || {};
+          const data = body.data ?? body;
+          return {
+            kind: 'result',
+            result: {
+              fileUrl: data.fileUrl ?? data.invoice_file_url ?? '',
+              extracted: this.normalizeInvoiceExtraction(
+                data.extracted ?? data.extracted_data ?? data
+              )
+            }
+          };
+        }
+        return null;
+      }),
+      filter((e): e is InvoiceUploadEvent => e !== null)
+    );
+  }
+
+  private normalizeInvoiceExtraction(raw: any): InvoiceExtractionResult {
+    const lines = Array.isArray(raw?.lines) ? raw.lines : [];
+    return {
+      vendor: raw?.vendor ?? null,
+      reference: raw?.reference ?? raw?.referenceNumber ?? raw?.invoiceNumber ?? null,
+      invoiceDate: raw?.invoiceDate ?? raw?.invoice_date ?? null,
+      lines: lines.map((l: any) => {
+        const matchRaw = l?.match;
+        const partId = matchRaw?.partId ?? matchRaw?.part_id ?? null;
+        const match = partId
+          ? {
+              partId,
+              sku: matchRaw?.sku ?? '',
+              name: matchRaw?.name ?? matchRaw?.description ?? ''
+            }
+          : null;
+        return {
+          sku: l?.sku ?? null,
+          description: l?.description ?? '',
+          qty: Number(l?.qty ?? l?.quantity ?? 0),
+          unitCost: Number(l?.unitCost ?? l?.unit_cost ?? 0),
+          match
+        };
+      })
+    };
   }
 
   // Adjustments
@@ -1504,6 +2026,49 @@ export class ApiService {
     return this.http.post(`${aiBase}/work-order/triage`, payload);
   }
 
+  // FN-1442: AI triage + live availability in one round-trip. Backend joins
+  // AI-suggested SKUs with the tenant's parts catalog and inventory and
+  // surfaces inventoryStatus = in_stock | low_stock | out_of_stock | not_found
+  // per part. Use this from the triage panel; the AI-only triageWorkOrder
+  // above is left as-is for callers that don't need availability.
+  triageEnrichedWorkOrder(payload: {
+    description: string;
+    vehicleId?: string | null;
+    customerId?: string | null;
+    locationId?: string | null;
+  }): Observable<{
+    tasks: Array<{ description: string; estimatedHours?: number }>;
+    parts: Array<{
+      partName: string;
+      suggestedSku: string | null;
+      qty: number;
+      confidence?: number | null;
+      partId: string | null;
+      onHand: number | null;
+      binLocation: string | null;
+      reorderPoint: number | null;
+      isLowStock: boolean;
+      inventoryStatus: 'in_stock' | 'low_stock' | 'out_of_stock' | 'not_found';
+    }>;
+    priority?: string;
+    notes?: string;
+  }> {
+    return this.http.post<any>(`${this.baseUrl}/work-orders/triage-enriched`, payload);
+  }
+
+  // FN-1443: queue a reorder for an out-of-stock or low-stock part surfaced by
+  // triage. Reuses the parts-reorder endpoint (no new endpoint introduced for
+  // the reorder itself); `sourceWorkOrderId` lets the BE link the PO back.
+  createPartsReorder(payload: {
+    locationId: string;
+    partId?: string | null;
+    sku: string;
+    qty: number;
+    sourceWorkOrderId?: string | null;
+  }): Observable<{ success?: boolean; data?: any }> {
+    return this.http.post<any>(`${this.baseUrl}/parts/reorder`, payload);
+  }
+
   getInventoryRecommendations(payload: {
     locationName?: string;
     onHand: Array<{ sku?: string; name?: string; on_hand_qty?: number; reserved_qty?: number; available_qty?: number; status?: string; min_stock_level?: number; reorder_qty?: number }>;
@@ -1536,6 +2101,36 @@ export class ApiService {
 
   submitEmployerInvestigationResponse(tokenId: string, data: Record<string, unknown>): Observable<any> {
     return this.http.post(`${this.baseUrl}/public/employer-investigations/${encodeURIComponent(tokenId)}/respond`, data);
+  }
+
+  // ── Idle Truck Alerts — FN-508 ──────────────────────────────────────────
+
+  listIdleTruckAlerts(filters?: { alert_type?: string; response_status?: string; vehicle_id?: string; limit?: number; offset?: number }): Observable<any> {
+    let url = `${this.baseUrl}/idle-truck-monitor/alerts`;
+    const params = new URLSearchParams();
+    if (filters?.alert_type) params.set('alert_type', filters.alert_type);
+    if (filters?.response_status) params.set('response_status', filters.response_status);
+    if (filters?.vehicle_id) params.set('vehicle_id', filters.vehicle_id);
+    if (filters?.limit != null) params.set('limit', String(filters.limit));
+    if (filters?.offset != null) params.set('offset', String(filters.offset));
+    const qs = params.toString();
+    if (qs) url += `?${qs}`;
+    return this.http.get<any>(url);
+  }
+
+  respondToIdleTruckAlert(id: string, responseStatus: string, responseNotes?: string): Observable<any> {
+    return this.http.patch(`${this.baseUrl}/idle-truck-monitor/alerts/${id}/respond`, {
+      response_status: responseStatus,
+      response_notes: responseNotes || null
+    });
+  }
+
+  getNotificationUnreadCount(): Observable<{ count: number }> {
+    return this.http.get<{ count: number }>(`${this.baseUrl}/notifications/unread-count`);
+  }
+
+  markAllNotificationsRead(): Observable<any> {
+    return this.http.patch(`${this.baseUrl}/notifications/read-all`, {});
   }
 }
 

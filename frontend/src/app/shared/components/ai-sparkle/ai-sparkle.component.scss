@@ -1,0 +1,76 @@
+/* FN-818 — AI extraction sparkle marker */
+
+.ai-sparkle-host {
+  display: inline-flex;
+  line-height: 0;
+}
+
+.ai-sparkle {
+  --sparkle-color: #2dd4bf; /* teal — tier high */
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  padding: 0;
+  margin: 0;
+  cursor: pointer;
+  color: var(--sparkle-color);
+  line-height: 1;
+  transition: transform 120ms ease, color 120ms ease;
+
+  &:focus-visible {
+    outline: 2px solid var(--sparkle-color);
+    outline-offset: 2px;
+    border-radius: 3px;
+  }
+
+  &:hover {
+    transform: scale(1.08);
+  }
+
+  &--sm {
+    font-size: 12px;
+    width: 14px;
+    height: 14px;
+  }
+
+  &--md {
+    font-size: 16px;
+    width: 18px;
+    height: 18px;
+  }
+
+  &--high   { --sparkle-color: #2dd4bf; } /* teal-400 */
+  &--medium { --sparkle-color: #f59e0b; } /* amber-500 */
+  &--low    { --sparkle-color: #f97316; } /* orange-500 */
+
+  &--hidden {
+    visibility: hidden;
+  }
+}
+
+.ai-sparkle__glyph {
+  display: inline-block;
+  font-family: "Apple Color Emoji", "Segoe UI Symbol", "Noto Sans Symbols 2", sans-serif;
+  color: var(--sparkle-color);
+  animation: ai-sparkle-shimmer 2s ease-in-out infinite;
+  text-shadow: 0 0 6px color-mix(in srgb, var(--sparkle-color) 50%, transparent);
+  will-change: opacity, filter;
+}
+
+@keyframes ai-sparkle-shimmer {
+  0%   { opacity: 0.65; filter: drop-shadow(0 0 0 transparent); }
+  50%  { opacity: 1;    filter: drop-shadow(0 0 4px var(--sparkle-color)); }
+  100% { opacity: 0.65; filter: drop-shadow(0 0 0 transparent); }
+}
+
+/* Accessibility — disable the 2s shimmer loop for users who opt out of motion. */
+@media (prefers-reduced-motion: reduce) {
+  .ai-sparkle__glyph {
+    animation: none;
+    filter: none;
+    text-shadow: none;
+    opacity: 1;
+  }
+}

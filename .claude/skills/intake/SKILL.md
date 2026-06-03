@@ -40,18 +40,46 @@ Use the Jira MCP tools:
 - `createIssueLink` for cross-story dependencies (use "Blocks" link type)
 
 ### 3. Subtask Guidelines
-When breaking a story into subtasks:
-- Each subtask should be a self-contained piece of work that one agent can complete
-- Always include a **QA subtask** for validation (label: `agent:qa`)
-  - QA subtasks should describe what to validate and what evidence to capture
-  - If automation tests are needed, specify that in the description
+
+**CRITICAL RULE — one subtask per agent type, not per sub-unit of work.**
+
+Splitting a single agent's work across multiple subtasks (e.g. "Create component", "Wire service", "Add styles" all under frontend) creates multiple parallel branches that touch overlapping files and cause painful merge conflicts when the story PR is assembled. Don't do it.
+
+**Default subtask shape for a story:**
+- **At most ONE `agent:frontend` subtask** — covers ALL frontend work for the story (components, services, routing, styles, unit specs).
+- **At most ONE `agent:backend` subtask** — covers ALL backend work for the story (routes, controllers, services, middleware, validation).
+- **At most ONE `agent:database` subtask** — only if schema/migration/seed work is needed.
+- **At most ONE `agent:devops` subtask** — only if infra/Docker/Render/env config is needed.
+- **At most ONE `agent:ai` subtask** — only if AI service work is needed.
+- **Exactly ONE `agent:qa` subtask** — always included, covers all validation/evidence for the story.
+
+If the scope genuinely exceeds what one agent can reasonably deliver in a single pass, that is a signal to **split the Story**, not to fan out subtasks. Create a second Story and sequence them with a "Blocks" link.
+
+**Do not create multiple subtasks of the same agent type under one story.** If you catch yourself writing `FN-102 (frontend): component` and `FN-103 (frontend): service`, collapse them into one frontend subtask.
+
+**Other requirements:**
+- QA subtasks should describe what to validate and what evidence to capture. If automation tests are needed, specify that in the description.
 - Subtask branch naming: `<agent>/FN-XXX/<slug>` where FN-XXX is the subtask key
-- Story branch (merge target): `<agent>/FN-STORY/<slug>` where FN-STORY is the parent story key
+- **Subtasks branch off `origin/integration/FN-STORY`, NOT `origin/dev`** (integration-branch model — see CLAUDE.md)
+- The integration branch `integration/FN-STORY` is created by the first implementing agent if it doesn't exist; intake just declares its name in the story doc
+
+**Each subtask MUST declare expected Files Touched in its Jira description.** This is consumed by `/pick-next-task` for cross-task conflict detection. Add this section to every subtask description:
+
+```
+## Files Touched (expected)
+- src/app/feature/foo.component.ts
+- src/app/feature/foo.service.ts
+- services/load-service/routes/foo.js
+- (paths or glob patterns; be honest about shared files like modules, routing, index.ts)
+```
+
+The list does not need to be exhaustive — it's a conflict-detection signal. If two subtasks declare overlapping files, `/pick-next-task` will refuse to pick the second one while the first is in progress, forcing serial execution. If you have no files to declare (e.g., pure config), write `_none_`.
 
 ### 4. Define Dependencies
 - Identify which stories/subtasks must complete before others can start
 - Create "Blocks" links between dependent issues
-- Within a story, sequence subtasks if they have internal dependencies
+- **Avoid internal subtask chains.** With one subtask per agent type, cross-agent dependencies should be rare. Only link backend → frontend if the frontend subtask literally cannot start without the backend contract (and even then, prefer defining the API shape up front in the story doc so both can start in parallel).
+- The QA subtask is always blocked by all implementation subtasks under the same story.
 - Document the dependency chain in the story doc
 
 ### 5. Create Story Doc Stubs
@@ -72,12 +100,15 @@ For each Story, create `docs/stories/FN-XXX.md` using this template:
 ## Agent
 [frontend | backend | ai | database | devops]
 
+## Integration Branch
+`integration/FN-XXX` (created by first subtask agent from `origin/dev`; subtasks branch off this; story PR merges to `dev`)
+
 ## Subtasks
-| Key | Summary | Agent | Branch | Status |
-|-----|---------|-------|--------|--------|
-| FN-AAA | [subtask description] | frontend | `frontend/FN-AAA/<slug>` | Pending |
-| FN-BBB | [subtask description] | backend | `backend/FN-BBB/<slug>` | Pending |
-| FN-CCC | QA validation | qa | _manual_ | Pending |
+| Key | Summary | Agent | Branch | Files Touched | Status |
+|-----|---------|-------|--------|---------------|--------|
+| FN-AAA | [subtask description] | frontend | `frontend/FN-AAA/<slug>` | `src/app/foo/**` | Pending |
+| FN-BBB | [subtask description] | backend | `backend/FN-BBB/<slug>` | `services/load-service/routes/foo.js` | Pending |
+| FN-CCC | QA validation | qa | _manual_ | — | Pending |
 
 ## Implementation Summary
 _To be filled by implementing agent_
@@ -113,13 +144,15 @@ _To be filled by QA_
 - Epic stays In Progress until ALL stories are Done, then auto-transition to Done
 
 ### 8. Output Summary
-Print a summary table:
+Print a summary table. Note the shape: ONE subtask per agent type (no splitting frontend into multiple subtasks).
 ```
-| Jira Key | Type    | Summary               | Agent    | Parent  | Dependencies | Status           |
-|----------|---------|-----------------------|----------|---------|-------------|------------------|
-| FN-100   | Epic    | Feature name          | —        | —       | —           | Backlog          |
-| FN-101   | Story   | User-facing work      | frontend | FN-100  | None        | Backlog          |
-| FN-102   | Subtask | Implement component   | frontend | FN-101  | None        | Selected for Dev |
-| FN-103   | Subtask | API endpoint          | backend  | FN-101  | None        | Selected for Dev |
-| FN-104   | Subtask | QA validation         | qa       | FN-101  | FN-102,103  | Blocked          |
+| Jira Key | Type    | Summary                    | Agent    | Parent  | Dependencies | Status           |
+|----------|---------|----------------------------|----------|---------|-------------|------------------|
+| FN-100   | Epic    | Feature name               | —        | —       | —           | Backlog          |
+| FN-101   | Story   | User-facing work           | frontend | FN-100  | None        | Backlog          |
+| FN-102   | Subtask | Frontend implementation    | frontend | FN-101  | None        | Selected for Dev |
+| FN-103   | Subtask | Backend implementation     | backend  | FN-101  | None        | Selected for Dev |
+| FN-104   | Subtask | QA validation              | qa       | FN-101  | FN-102,103  | Blocked          |
 ```
+
+If you find yourself about to add `FN-105 | Subtask | Frontend styling | frontend`, STOP — roll it into FN-102 instead.

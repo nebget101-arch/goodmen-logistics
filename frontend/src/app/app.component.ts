@@ -3,12 +3,13 @@ import { Router } from '@angular/router';
 import { OnboardingModalService } from './services/onboarding-modal.service';
 import { ApiService } from './services/api.service';
 import { AiChatService, AiChatMessage, AiSuggestion } from './services/ai-chat.service';
+import { AiChatLauncherService, AiChatLauncherState } from './services/ai-chat-launcher.service';
 import { AccessControlService } from './services/access-control.service';
-import { OperatingEntityContextService } from './services/operating-entity-context.service';
+import { OperatingEntityContextService, OperatingEntityOption } from './services/operating-entity-context.service';
 import { ReferenceDataService } from './services/reference-data.service';
+import { WebsocketService } from './services/websocket.service';
 import { NAV_TOP_LINKS, NAV_SECTIONS, NavSection, NavLink } from './config/nav.config';
 import { PERMISSIONS } from './models/access-control.model';
-import { AiSelectOption } from './shared/ai-select/ai-select.component';
 
 @Component({
   selector: 'app-root',
@@ -30,6 +31,8 @@ export class AppComponent implements OnInit {
   sidebarOpen = false;
   userMenuOpen = false;
   aiChatOpen = false;
+  /** FN-1356: 'default' = full pill, 'minimized' = icon-only orb. Persisted in localStorage. */
+  aiLauncherState: AiChatLauncherState = 'default';
   aiConversationId: string | null = null;
   aiMessages: AiChatMessage[] = [];
   aiSuggestions: AiSuggestion[] = [];
@@ -48,34 +51,25 @@ export class AppComponent implements OnInit {
     public onboardingModal: OnboardingModalService,
     private apiService: ApiService,
     private aiChatService: AiChatService,
+    private aiChatLauncher: AiChatLauncherService,
     public access: AccessControlService,
     public operatingEntityContext: OperatingEntityContextService,
-    private referenceDataService: ReferenceDataService
+    private referenceDataService: ReferenceDataService,
+    private websocket: WebsocketService
   ) {}
 
   isLoggedIn(): boolean {
     return !!localStorage.getItem('token');
   }
 
-  operatingEntityOptions: AiSelectOption[] = [];
-  operatingEntityOptionsMobile: AiSelectOption[] = [];
+  companySwitcherEntities: OperatingEntityOption[] = [];
+  companySwitcherShowAll = false;
 
   rebuildOperatingEntityOptions(): void {
-    const entities = this.operatingEntityContext.snapshot.accessibleOperatingEntities;
-    const prefix: AiSelectOption[] = this.showAllEntitiesOption()
-      ? [{ value: 'all', label: 'All Entities' }]
-      : [];
-    this.operatingEntityOptions = [
-      ...prefix,
-      ...entities.map(e => ({
-        value: e.id,
-        label: e.name + (e.mcNumber ? ' \u00b7 MC ' + e.mcNumber : '')
-      }))
+    this.companySwitcherEntities = [
+      ...this.operatingEntityContext.snapshot.accessibleOperatingEntities
     ];
-    this.operatingEntityOptionsMobile = [
-      ...prefix,
-      ...entities.map(e => ({ value: e.id, label: e.name }))
-    ];
+    this.companySwitcherShowAll = this.showAllEntitiesOption();
   }
 
   showAllEntitiesOption(): boolean {
@@ -116,6 +110,20 @@ export class AppComponent implements OnInit {
       return;
     }
     this.aiChatOpen = !this.aiChatOpen;
+  }
+
+  /** FN-1356: Collapse the pill into the circular orb (× control on the pill). */
+  minimizeAiLauncher(event?: MouseEvent | KeyboardEvent): void {
+    if (event) {
+      event.stopPropagation();
+      event.preventDefault();
+    }
+    this.aiChatLauncher.setState('minimized');
+  }
+
+  /** FN-1356: Expand the orb back into the pill (click on the orb). Does not open chat. */
+  expandAiLauncher(): void {
+    this.aiChatLauncher.setState('default');
   }
 
   sendAiMessage(): void {
@@ -190,6 +198,7 @@ export class AppComponent implements OnInit {
   }
 
   logout(): void {
+    this.websocket.disconnect();
     localStorage.removeItem('token');
     localStorage.removeItem('role');
     this.access.clearAccess();
@@ -225,6 +234,10 @@ export class AppComponent implements OnInit {
     return this.access.canAccessTrialRequestsAdmin();
   }
 
+  canSeeFmcsaImportsAdmin(): boolean {
+    return this.access.canAccessFmcsaImportsAdmin();
+  }
+
   canAccessBilling(): boolean {
     return this.access.canAccessBilling();
   }
@@ -251,9 +264,13 @@ export class AppComponent implements OnInit {
           // Non-blocking preload; dispatch board and other screens can retry on demand.
         }
       });
+      // FN-813: open the realtime WS so the loads dashboard (and future views)
+      // can subscribe without each component re-initiating the handshake.
+      this.websocket.connect();
     }
     this.operatingEntityContext.bootstrapFromSessionIfNeeded(this.isLoggedIn());
     this.operatingEntityContext.context$().subscribe(() => this.rebuildOperatingEntityOptions());
+    this.aiChatLauncher.state$.subscribe((state) => (this.aiLauncherState = state));
   }
 
   toggleSidebar(): void {

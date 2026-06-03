@@ -1,0 +1,635 @@
+/* FN-862 / S2 — LoadWizardComponent modal shell. FN-867 / S7 — PDF/timeline fold-in. */
+
+:host {
+  display: contents;
+}
+
+.load-wizard-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1100;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 24px 16px;
+  overflow-y: auto;
+}
+
+.load-wizard-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(5, 10, 25, 0.82);
+  backdrop-filter: blur(4px);
+  z-index: 0;
+}
+
+.load-wizard-panel {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  max-width: 860px;
+  background:
+    radial-gradient(circle at 0% 0%, rgba(59, 130, 246, 0.07), transparent 55%),
+    rgba(10, 17, 34, 0.98);
+  border: 1px solid rgba(59, 130, 246, 0.22);
+  border-radius: 16px;
+  box-shadow:
+    0 24px 60px rgba(5, 10, 25, 0.9),
+    0 0 0 1px rgba(10, 17, 34, 1);
+  overflow: hidden;
+  min-height: 520px;
+
+  /* FN-867: widen the panel when the Step 4 PDF viewer is visible so both
+     panes have breathing room side-by-side. */
+  &--with-pdf {
+    max-width: 1180px;
+  }
+}
+
+.load-wizard-loading {
+  padding: 48px 32px;
+  color: #cbd5e1;
+  font-size: 0.95rem;
+  text-align: center;
+}
+
+/* FN-868 / FN-885 — View mode header with the Edit toggle. */
+.load-wizard-header {
+  position: absolute;
+  top: 16px;
+  right: 20px;
+  z-index: 2;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.load-wizard-edit-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  background: rgba(251, 191, 36, 0.15);
+  border: 1px solid rgba(251, 191, 36, 0.45);
+  border-radius: 8px;
+  color: #fbbf24;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+
+  .material-symbols-outlined {
+    font-size: 16px;
+  }
+
+  &:hover {
+    background: rgba(251, 191, 36, 0.25);
+    border-color: #fbbf24;
+  }
+
+  &:focus-visible {
+    outline: 2px solid #fbbf24;
+    outline-offset: 2px;
+  }
+}
+
+.step-placeholder {
+  padding: 28px 32px;
+  color: #e2e8f0;
+  min-height: 280px;
+
+  h3 {
+    margin: 0 0 8px;
+    font-size: 1rem;
+    font-weight: 600;
+    color: #38bdf8;
+    letter-spacing: 0.01em;
+  }
+
+  .step-hint {
+    margin: 0 0 18px;
+    font-size: 0.875rem;
+    color: #94a3b8;
+    line-height: 1.5;
+  }
+}
+
+.stub-form {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 12px;
+
+  label {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    font-size: 0.78rem;
+    color: #94a3b8;
+  }
+
+  input {
+    padding: 8px 10px;
+    background: rgba(15, 23, 42, 0.75);
+    border: 1px solid rgba(51, 65, 85, 0.7);
+    border-radius: 8px;
+    color: #e2e8f0;
+    font-size: 0.875rem;
+
+    &:focus {
+      outline: none;
+      border-color: #38bdf8;
+      background: rgba(15, 23, 42, 0.95);
+    }
+  }
+}
+
+.stub-stops {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+
+  li {
+    padding: 8px 12px;
+    background: rgba(15, 23, 42, 0.65);
+    border: 1px solid rgba(51, 65, 85, 0.6);
+    border-radius: 8px;
+    font-size: 0.85rem;
+    color: #cbd5e1;
+  }
+}
+
+.submit-error {
+  margin-top: 18px;
+  padding: 10px 14px;
+  border: 1px solid rgba(239, 68, 68, 0.4);
+  background: rgba(239, 68, 68, 0.12);
+  color: #fca5a5;
+  border-radius: 8px;
+  font-size: 0.85rem;
+}
+
+.submitting-hint {
+  margin-top: 14px;
+  color: #94a3b8;
+  font-size: 0.85rem;
+}
+
+/* FN-867: Stops step wrapper — timeline summary sits above the drag-drop list. */
+.step-stops-wrap {
+  display: flex;
+  flex-direction: column;
+}
+
+/* FN-867: Trip timeline summary panel shown on Step 2. */
+.trip-timeline-summary {
+  margin: 20px 32px 0;
+  padding: 14px 16px;
+  background: rgba(15, 23, 42, 0.55);
+  border: 1px solid rgba(51, 65, 85, 0.55);
+  border-radius: 10px;
+
+  &__title {
+    margin: 0 0 10px;
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: #38bdf8;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+
+  &__list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+
+  &__item {
+    display: flex;
+  }
+
+  &__btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 12px;
+    background: rgba(15, 23, 42, 0.85);
+    border: 1px solid rgba(51, 65, 85, 0.75);
+    border-radius: 8px;
+    color: #e2e8f0;
+    font-size: 0.82rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: border-color 120ms, background 120ms, transform 120ms;
+    text-align: left;
+
+    &:hover {
+      border-color: #38bdf8;
+      background: rgba(30, 41, 59, 0.95);
+    }
+
+    &:focus-visible {
+      outline: 2px solid #38bdf8;
+      outline-offset: 2px;
+    }
+  }
+
+  &__seq {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    font-size: 0.75rem;
+    font-weight: 600;
+    background: rgba(59, 130, 246, 0.22);
+    color: #bfdbfe;
+  }
+
+  &__item--pickup &__seq {
+    background: rgba(34, 197, 94, 0.22);
+    color: #bbf7d0;
+  }
+
+  &__item--delivery &__seq {
+    background: rgba(249, 115, 22, 0.22);
+    color: #fed7aa;
+  }
+
+  &__body {
+    display: flex;
+    flex-direction: column;
+    line-height: 1.2;
+  }
+
+  &__type {
+    font-size: 0.7rem;
+    color: #94a3b8;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+
+  &__loc {
+    font-size: 0.85rem;
+    color: #e2e8f0;
+  }
+}
+
+/* FN-881: Attachments step is owned by `app-load-wizard-attachments`; the
+   wizard only hosts per-submit status messages below it. */
+.step-attachments {
+  display: flex;
+  flex-direction: column;
+
+  &__main {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .submit-error,
+  .submitting-hint {
+    margin: 0 32px 20px;
+  }
+
+  /* FN-867: when a source rate-confirmation PDF is present, show it side-by-
+     side with the attachments manager. Left pane = PDF, right pane = UI. */
+  &--split {
+    display: grid;
+    grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
+    gap: 0;
+    min-height: 560px;
+  }
+
+  &__pdf {
+    position: relative;
+    border-right: 1px solid rgba(51, 65, 85, 0.55);
+    background: rgba(5, 10, 25, 0.95);
+    min-height: 560px;
+  }
+
+  &__pdf-frame {
+    display: block;
+    width: 100%;
+    height: 100%;
+    min-height: 560px;
+    border: none;
+    background: #0f172a;
+  }
+}
+
+@media (max-width: 900px) {
+  .load-wizard-panel--with-pdf {
+    max-width: 860px;
+  }
+
+  .step-attachments--split {
+    grid-template-columns: 1fr;
+  }
+
+  .step-attachments__pdf,
+  .step-attachments__pdf-frame {
+    min-height: 360px;
+  }
+
+  .step-attachments__pdf {
+    border-right: none;
+    border-bottom: 1px solid rgba(51, 65, 85, 0.55);
+  }
+}
+
+/* FN-888 — Step 0 AI-Extract panel */
+.ai-extract-step {
+  padding: 28px 32px 32px;
+  color: #e2e8f0;
+  display: flex;
+  flex-direction: column;
+  min-height: 520px;
+
+  &__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 4px;
+  }
+
+  &__title {
+    margin: 0;
+    font-size: 1.05rem;
+    font-weight: 600;
+    color: #38bdf8;
+    letter-spacing: 0.01em;
+  }
+
+  &__close {
+    appearance: none;
+    background: transparent;
+    border: none;
+    color: #94a3b8;
+    font-size: 1.4rem;
+    line-height: 1;
+    cursor: pointer;
+    padding: 4px 8px;
+    border-radius: 6px;
+
+    &:hover:not(:disabled) {
+      background: rgba(148, 163, 184, 0.12);
+      color: #e2e8f0;
+    }
+
+    &:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+    }
+  }
+
+  &__hint {
+    margin: 0 0 20px;
+    font-size: 0.85rem;
+    color: #94a3b8;
+    line-height: 1.5;
+  }
+}
+
+.ai-dropzone {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 24px;
+  border: 2px dashed rgba(59, 130, 246, 0.42);
+  border-radius: 12px;
+  background: rgba(15, 23, 42, 0.5);
+  transition: border-color 150ms ease, background-color 150ms ease;
+
+  &:hover {
+    border-color: rgba(56, 189, 248, 0.7);
+    background: rgba(15, 23, 42, 0.72);
+  }
+
+  &__icon {
+    color: #38bdf8;
+    margin-bottom: 12px;
+  }
+
+  &__title {
+    margin: 0;
+    font-size: 1rem;
+    font-weight: 600;
+    color: #e2e8f0;
+  }
+
+  &__subtitle {
+    margin: 6px 0 12px;
+    font-size: 0.78rem;
+    color: #64748b;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+  }
+
+  &__browse {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 8px 18px;
+    border-radius: 8px;
+    background: linear-gradient(135deg, #3b82f6, #2563eb);
+    color: #fff;
+    font-size: 0.85rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: filter 150ms ease;
+
+    &:hover { filter: brightness(1.08); }
+
+    input[type="file"] {
+      display: none;
+    }
+  }
+}
+
+.ai-extract-file {
+  margin-top: 4px;
+  margin-bottom: 16px;
+
+  &__row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 14px;
+    background: rgba(15, 23, 42, 0.75);
+    border: 1px solid rgba(51, 65, 85, 0.7);
+    border-radius: 10px;
+    font-size: 0.88rem;
+  }
+
+  &__icon {
+    font-size: 1.2rem;
+  }
+
+  &__name {
+    flex: 1;
+    color: #e2e8f0;
+    word-break: break-all;
+    font-weight: 500;
+  }
+
+  &__size {
+    color: #94a3b8;
+    font-size: 0.78rem;
+  }
+
+  &__remove {
+    appearance: none;
+    background: transparent;
+    border: none;
+    color: #94a3b8;
+    font-size: 1.2rem;
+    line-height: 1;
+    cursor: pointer;
+    padding: 2px 8px;
+    border-radius: 4px;
+
+    &:hover:not(:disabled) {
+      color: #fca5a5;
+      background: rgba(239, 68, 68, 0.1);
+    }
+
+    &:disabled { opacity: 0.4; cursor: not-allowed; }
+  }
+}
+
+.ai-extract-steps {
+  list-style: none;
+  margin: 4px 0 0;
+  padding: 14px 16px;
+  background: rgba(15, 23, 42, 0.58);
+  border: 1px solid rgba(51, 65, 85, 0.5);
+  border-radius: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+
+  &__item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-size: 0.88rem;
+    color: #64748b;
+    transition: color 150ms ease;
+
+    &--active { color: #e2e8f0; }
+    &--done   { color: #86efac; }
+  }
+
+  &__indicator {
+    width: 18px;
+    height: 18px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    background: rgba(30, 41, 59, 0.7);
+    border: 1px solid rgba(71, 85, 105, 0.6);
+    flex-shrink: 0;
+  }
+
+  &__check {
+    color: #22c55e;
+    font-size: 0.78rem;
+    line-height: 1;
+  }
+
+  &__spinner {
+    width: 10px;
+    height: 10px;
+    border: 2px solid rgba(56, 189, 248, 0.35);
+    border-top-color: #38bdf8;
+    border-radius: 50%;
+    animation: ai-extract-spin 700ms linear infinite;
+  }
+}
+
+@keyframes ai-extract-spin {
+  to { transform: rotate(360deg); }
+}
+
+.ai-extract-error {
+  margin-top: 16px;
+  padding: 14px 16px;
+  border: 1px solid rgba(239, 68, 68, 0.45);
+  background: rgba(239, 68, 68, 0.1);
+  border-radius: 10px;
+
+  &__message {
+    color: #fca5a5;
+    font-size: 0.88rem;
+    margin-bottom: 10px;
+    line-height: 1.45;
+  }
+
+  &__actions {
+    display: flex;
+    gap: 10px;
+    justify-content: flex-end;
+
+    .btn {
+      appearance: none;
+      padding: 8px 16px;
+      border-radius: 8px;
+      font-size: 0.85rem;
+      font-weight: 600;
+      cursor: pointer;
+      border: 1px solid transparent;
+      transition: filter 150ms ease, background-color 150ms ease;
+    }
+
+    .btn-secondary {
+      background: transparent;
+      border-color: rgba(148, 163, 184, 0.4);
+      color: #cbd5e1;
+
+      &:hover { background: rgba(148, 163, 184, 0.12); }
+    }
+
+    .btn-primary {
+      background: linear-gradient(135deg, #3b82f6, #2563eb);
+      color: #fff;
+
+      &:hover:not(:disabled) { filter: brightness(1.08); }
+
+      &:disabled { opacity: 0.5; cursor: not-allowed; }
+    }
+  }
+}
+
+@media (max-width: 600px) {
+  .load-wizard-overlay { padding: 0; align-items: stretch; }
+
+  .load-wizard-panel {
+    border-radius: 0;
+    min-height: 100dvh;
+    max-width: 100%;
+  }
+
+  .step-placeholder { padding: 20px 16px; }
+
+  .ai-extract-step { padding: 20px 16px 24px; }
+
+  .step-attachments {
+    .submit-error,
+    .submitting-hint {
+      margin: 0 16px 16px;
+    }
+  }
+
+  .trip-timeline-summary {
+    margin: 16px 16px 0;
+  }
+}
+

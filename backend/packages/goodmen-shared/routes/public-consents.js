@@ -110,6 +110,62 @@ function replaceTemplatePlaceholders(bodyText, { driver, operatingEntity }) {
   return result;
 }
 
+/**
+ * @openapi
+ * /public/consents/{packetId}/status:
+ *   get:
+ *     summary: Get signed consent statuses for a packet
+ *     description: Returns all signed consent statuses for the given onboarding packet. Used to rehydrate the UI after refresh. Per 49 CFR Part 391 — Driver consent and authorization management.
+ *     tags:
+ *       - Consents (Public)
+ *     security: []
+ *     parameters:
+ *       - in: path
+ *         name: packetId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Onboarding packet ID
+ *       - in: query
+ *         name: token
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Packet access token
+ *     responses:
+ *       200:
+ *         description: List of signed consents
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 consents:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       consent_key:
+ *                         type: string
+ *                       status:
+ *                         type: string
+ *                       signed_at:
+ *                         type: string
+ *                         format: date-time
+ *       400:
+ *         description: Missing packetId or token
+ *       403:
+ *         description: Invalid token
+ *       404:
+ *         description: Packet not found
+ *       410:
+ *         description: Packet expired or revoked
+ *       429:
+ *         description: Rate limited
+ *       500:
+ *         description: Server error
+ */
 // GET /public/consents/:packetId/status?token=...
 // Return all signed consent statuses for this packet (used to rehydrate UI after refresh)
 // IMPORTANT: This route MUST be defined BEFORE /:packetId/:consentKey to prevent
@@ -148,6 +204,86 @@ router.get('/:packetId/status', rateLimited, async (req, res) => {
   }
 });
 
+/**
+ * @openapi
+ * /public/consents/{packetId}/{consentKey}:
+ *   get:
+ *     summary: Load consent template and status
+ *     description: Loads the consent template and current signing status for a driver in the given packet. Replaces placeholders with company and driver data. Per 49 CFR Part 391 — Driver consent and authorization management.
+ *     tags:
+ *       - Consents (Public)
+ *     security: []
+ *     parameters:
+ *       - in: path
+ *         name: packetId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Onboarding packet ID
+ *       - in: path
+ *         name: consentKey
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Consent template key (e.g. fcra_disclosure, psp_consent)
+ *       - in: query
+ *         name: token
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Packet access token
+ *     responses:
+ *       200:
+ *         description: Consent template with signing status
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 template:
+ *                   type: object
+ *                   properties:
+ *                     id:
+ *                       type: integer
+ *                     key:
+ *                       type: string
+ *                     title:
+ *                       type: string
+ *                     body_text:
+ *                       type: string
+ *                     version:
+ *                       type: string
+ *                     requires_signature:
+ *                       type: boolean
+ *                     capture_fields:
+ *                       type: object
+ *                 consent:
+ *                   type: object
+ *                   nullable: true
+ *                 isSigned:
+ *                   type: boolean
+ *                 driverId:
+ *                   type: integer
+ *                 companyName:
+ *                   type: string
+ *                 companyAddress:
+ *                   type: string
+ *                 driverFullName:
+ *                   type: string
+ *       400:
+ *         description: Missing required parameters
+ *       403:
+ *         description: Invalid token
+ *       404:
+ *         description: Packet or consent template not found
+ *       410:
+ *         description: Packet expired or revoked
+ *       429:
+ *         description: Rate limited
+ *       500:
+ *         description: Server error
+ */
 // GET /public/consents/:packetId/:consentKey?token=...
 // Load consent template + current status for the driver in this packet
 router.get('/:packetId/:consentKey', rateLimited, async (req, res) => {
@@ -229,6 +365,90 @@ router.get('/:packetId/:consentKey', rateLimited, async (req, res) => {
   }
 });
 
+/**
+ * @openapi
+ * /public/consents/{packetId}/{consentKey}/sign:
+ *   post:
+ *     summary: Sign a consent form
+ *     description: Signs a consent form for the driver. Captures IP address and user-agent. Generates a signed PDF and updates DQF requirements. Per 49 CFR Part 391 — Driver consent and authorization management.
+ *     tags:
+ *       - Consents (Public)
+ *     security: []
+ *     parameters:
+ *       - in: path
+ *         name: packetId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Onboarding packet ID
+ *       - in: path
+ *         name: consentKey
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Consent template key
+ *       - in: query
+ *         name: token
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Packet access token
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - signerName
+ *             properties:
+ *               signerName:
+ *                 type: string
+ *                 description: Full name of the signer
+ *               signatureType:
+ *                 type: string
+ *                 default: typed_name
+ *                 description: Type of signature (e.g. typed_name)
+ *               signatureValue:
+ *                 type: string
+ *                 description: The signature value (defaults to signerName)
+ *               captureData:
+ *                 type: object
+ *                 description: Additional captured form fields
+ *     responses:
+ *       200:
+ *         description: Consent signed successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 consentId:
+ *                   type: integer
+ *                 status:
+ *                   type: string
+ *                 signedAt:
+ *                   type: string
+ *                   format: date-time
+ *                 documentId:
+ *                   type: integer
+ *                   nullable: true
+ *       400:
+ *         description: Missing signerName or invalid parameters
+ *       403:
+ *         description: Invalid token
+ *       404:
+ *         description: Packet or consent template not found
+ *       409:
+ *         description: Consent has already been signed
+ *       410:
+ *         description: Packet expired or revoked
+ *       429:
+ *         description: Rate limited
+ *       500:
+ *         description: Server error
+ */
 // POST /public/consents/:packetId/:consentKey/sign?token=...
 // Sign a consent (captures IP, user-agent from request)
 router.post('/:packetId/:consentKey/sign', rateLimited, async (req, res) => {

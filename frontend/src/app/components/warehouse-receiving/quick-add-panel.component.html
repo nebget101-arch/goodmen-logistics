@@ -1,0 +1,195 @@
+<div class="qap" [class.qap--mobile-open]="mobileExpanded" [class.qap--disabled]="disabled">
+  <button
+    type="button"
+    class="qap__chip"
+    (click)="toggleMobile()"
+    [attr.aria-expanded]="mobileExpanded"
+    aria-controls="qap-body"
+  >
+    <span class="qap__chip-icon" aria-hidden="true">+</span>
+    <span class="qap__chip-label">Quick add</span>
+  </button>
+
+  <div id="qap-body" class="qap__body" role="region" aria-label="Quick-add parts">
+    <header class="qap__header">
+      <h3 class="qap__title">Quick add</h3>
+    </header>
+
+    <div class="qap__tabs" role="tablist" aria-label="Quick-add tabs">
+      <button
+        type="button"
+        role="tab"
+        class="qap__tab"
+        [class.is-active]="activeTab === 'search'"
+        [attr.aria-selected]="activeTab === 'search'"
+        (click)="selectTab('search')"
+      >
+        Search
+      </button>
+      <button
+        type="button"
+        role="tab"
+        class="qap__tab"
+        [class.is-active]="activeTab === 'recent'"
+        [attr.aria-selected]="activeTab === 'recent'"
+        (click)="selectTab('recent')"
+      >
+        Recent
+      </button>
+      <button
+        type="button"
+        role="tab"
+        class="qap__tab"
+        [class.is-active]="activeTab === 'common'"
+        [attr.aria-selected]="activeTab === 'common'"
+        (click)="selectTab('common')"
+      >
+        Common
+      </button>
+    </div>
+
+    <!-- Search tab -->
+    <div *ngIf="activeTab === 'search'" class="qap__pane" role="tabpanel">
+      <div class="qap__search-wrap">
+        <input
+          type="text"
+          class="qap__search-input"
+          placeholder="Search by SKU or name…"
+          [value]="searchQuery"
+          (input)="onSearchInput($any($event.target).value)"
+          [disabled]="disabled"
+          aria-label="Search parts"
+        />
+      </div>
+
+      <ng-container *ngIf="searchLoading; else searchListBlock">
+        <div class="qap__loading">Searching…</div>
+      </ng-container>
+
+      <ng-template #searchListBlock>
+        <ng-container *ngIf="!searchTouched || !searchQuery.trim(); else searchResultsBlock">
+          <div class="qap__empty">Type to search</div>
+        </ng-container>
+
+        <ng-template #searchResultsBlock>
+          <ng-container *ngIf="searchResults.length > 0; else searchNoMatches">
+            <ul class="qap__list">
+              <li
+                *ngFor="let part of searchResults; let i = index; trackBy: trackByPart"
+                class="qap__row"
+              >
+                <ng-container
+                  *ngTemplateOutlet="rowTpl; context: { $implicit: part, index: i, list: searchResults }"
+                ></ng-container>
+              </li>
+            </ul>
+          </ng-container>
+          <ng-template #searchNoMatches>
+            <div class="qap__empty">No matches</div>
+          </ng-template>
+        </ng-template>
+      </ng-template>
+    </div>
+
+    <!-- Recent tab -->
+    <div *ngIf="activeTab === 'recent'" class="qap__pane" role="tabpanel">
+      <ng-container *ngIf="recentLoading; else recentListBlock">
+        <div class="qap__loading">Loading…</div>
+      </ng-container>
+      <ng-template #recentListBlock>
+        <ng-container *ngIf="recentResults.length > 0; else recentEmpty">
+          <ul class="qap__list">
+            <li
+              *ngFor="let part of recentResults; let i = index; trackBy: trackByPart"
+              class="qap__row"
+            >
+              <ng-container
+                *ngTemplateOutlet="rowTpl; context: { $implicit: part, index: i, list: recentResults }"
+              ></ng-container>
+            </li>
+          </ul>
+        </ng-container>
+        <ng-template #recentEmpty>
+          <div class="qap__empty">No recent receivings here yet</div>
+        </ng-template>
+      </ng-template>
+    </div>
+
+    <!-- Common tab -->
+    <div *ngIf="activeTab === 'common'" class="qap__pane" role="tabpanel">
+      <ng-container *ngIf="commonLoading; else commonListBlock">
+        <div class="qap__loading">Loading…</div>
+      </ng-container>
+      <ng-template #commonListBlock>
+        <ng-container *ngIf="commonResults.length > 0; else commonEmpty">
+          <ul class="qap__list">
+            <li
+              *ngFor="let part of commonResults; let i = index; trackBy: trackByPart"
+              class="qap__row"
+            >
+              <ng-container
+                *ngTemplateOutlet="rowTpl; context: { $implicit: part, index: i, list: commonResults }"
+              ></ng-container>
+            </li>
+          </ul>
+        </ng-container>
+        <ng-template #commonEmpty>
+          <div class="qap__empty">No common parts here yet</div>
+        </ng-template>
+      </ng-template>
+    </div>
+  </div>
+</div>
+
+<ng-template #rowTpl let-part let-i="index" let-list="list">
+  <div class="qap__row-grid">
+    <div class="qap__row-info">
+      <span class="qap__row-main">
+        <span class="qap__row-sku">{{ part.sku }}</span>
+        <span class="qap__row-name">{{ part.name }}</span>
+      </span>
+      <span class="qap__row-meta">
+        <span
+          *ngIf="part.on_hand_qty !== null && part.on_hand_qty !== undefined"
+          class="qap__pill"
+          [class.qap__pill--low]="(part.on_hand_qty || 0) <= 0"
+        >
+          {{ part.on_hand_qty }}
+        </span>
+      </span>
+    </div>
+    <input
+      type="number"
+      class="qap__row-qty"
+      min="1"
+      step="1"
+      inputmode="numeric"
+      [value]="getRowQty(part.id)"
+      (input)="setRowQty(part.id, $any($event.target).value)"
+      (keydown.enter)="onAddClick(part); $event.preventDefault()"
+      [disabled]="disabled"
+      [attr.aria-label]="'Quantity for ' + (part.sku || part.name || '')"
+    />
+    <input
+      type="number"
+      class="qap__row-cost-input"
+      min="0"
+      step="0.01"
+      inputmode="decimal"
+      [value]="getRowCost(part)"
+      (input)="setRowCost(part.id, $any($event.target).value)"
+      (keydown.enter)="onAddClick(part); $event.preventDefault()"
+      [disabled]="disabled"
+      [attr.aria-label]="'Unit cost for ' + (part.sku || part.name || '')"
+    />
+    <button
+      #rowBtn
+      type="button"
+      class="qap__row-add-btn"
+      [disabled]="disabled"
+      (click)="onAddClick(part)"
+      (keydown)="onRowKeydown($event, i, list)"
+      [attr.aria-label]="'Add ' + (part.sku || '') + ' ' + (part.name || '')"
+    >+ Add</button>
+  </div>
+</ng-template>

@@ -1,0 +1,511 @@
+// ── Backdrop ──────────────────────────────────────────────────────────────────
+
+.led-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(2, 6, 23, 0.85);
+  backdrop-filter: blur(8px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1100;
+  padding: 16px;
+}
+
+// ── Modal shell ───────────────────────────────────────────────────────────────
+
+.led-modal {
+  background:
+    radial-gradient(circle at 0 0, rgba(59, 130, 246, 0.12), transparent 50%),
+    rgba(15, 23, 42, 0.98);
+  border: 1px solid rgba(59, 130, 246, 0.4);
+  border-radius: 16px;
+  width: 100%;
+  max-width: 620px;
+  max-height: 92vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.6);
+}
+
+// ── Header ────────────────────────────────────────────────────────────────────
+
+.led-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 20px;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.2);
+  background: rgba(30, 41, 59, 0.5);
+  border-radius: 16px 16px 0 0;
+  flex-shrink: 0;
+}
+
+.led-header-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.led-header-icon {
+  font-size: 20px;
+  color: #38bdf8;
+}
+
+.led-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: #f1f5f9;
+  letter-spacing: 0.01em;
+}
+
+.led-mode-badge {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 2px 8px;
+  border-radius: 20px;
+  background: rgba(148, 163, 184, 0.15);
+  color: #94a3b8;
+  border: 1px solid rgba(148, 163, 184, 0.25);
+
+  &.edit {
+    background: rgba(56, 189, 248, 0.12);
+    color: #38bdf8;
+    border-color: rgba(56, 189, 248, 0.3);
+  }
+}
+
+.led-close-btn {
+  background: transparent;
+  border: none;
+  color: #64748b;
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  transition: color 0.15s, background 0.15s;
+
+  span { font-size: 20px; }
+
+  &:hover {
+    color: #e2e8f0;
+    background: rgba(255, 255, 255, 0.08);
+  }
+}
+
+// ── Tabs ──────────────────────────────────────────────────────────────────────
+
+.led-tabs {
+  display: flex;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.15);
+  background: rgba(15, 23, 42, 0.6);
+  flex-shrink: 0;
+}
+
+.led-tab {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 18px;
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: #64748b;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+  white-space: nowrap;
+
+  span.material-symbols-outlined { font-size: 16px; }
+
+  &:hover:not(.disabled) {
+    color: #94a3b8;
+  }
+
+  &.active {
+    color: #38bdf8;
+    border-bottom-color: #38bdf8;
+  }
+
+  &.disabled {
+    opacity: 0.35;
+    cursor: not-allowed;
+  }
+}
+
+// ── Body ──────────────────────────────────────────────────────────────────────
+
+.led-body {
+  padding: 20px;
+  overflow-y: auto;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+// ── Alert ─────────────────────────────────────────────────────────────────────
+
+.led-alert-error {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  background: rgba(239, 68, 68, 0.1);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  border-radius: 8px;
+  color: #fca5a5;
+  font-size: 13px;
+  margin-bottom: 8px;
+
+  span.material-symbols-outlined { font-size: 18px; flex-shrink: 0; }
+}
+
+// ── Section label ─────────────────────────────────────────────────────────────
+
+.led-section-label {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #475569;
+  margin-top: 16px;
+  margin-bottom: 8px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.1);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+
+  &:first-child { margin-top: 0; }
+}
+
+.led-section-sub {
+  font-size: 11px;
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: 0;
+  color: #334155;
+}
+
+// ── Row & field layout ────────────────────────────────────────────────────────
+
+.led-row {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  margin-bottom: 4px;
+}
+
+.led-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1;
+  margin-bottom: 8px;
+
+  &--sm  { flex: 0 0 130px; }
+  &--xs  { flex: 0 0 100px; }
+  &--half{ flex: 0 0 50%; }
+  &--grow{ flex: 1; }
+  &--state{ flex: 0 0 80px; }
+  &--zip  { flex: 0 0 110px; }
+
+  &.has-error .led-input,
+  &.has-error .led-select {
+    border-color: rgba(239, 68, 68, 0.6);
+  }
+}
+
+// ── Inputs ────────────────────────────────────────────────────────────────────
+
+.led-label {
+  font-size: 12px;
+  font-weight: 500;
+  color: #94a3b8;
+}
+
+.led-required {
+  color: #f87171;
+  margin-left: 2px;
+}
+
+.led-input {
+  background: rgba(30, 41, 59, 0.6);
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  border-radius: 8px;
+  padding: 8px 12px;
+  color: #e2e8f0;
+  font-size: 13px;
+  outline: none;
+  transition: border-color 0.15s, background 0.15s;
+  width: 100%;
+  box-sizing: border-box;
+
+  &::placeholder { color: #475569; }
+
+  &:focus {
+    border-color: rgba(56, 189, 248, 0.5);
+    background: rgba(30, 41, 59, 0.8);
+  }
+
+  &--time {
+    width: auto;
+    flex: 0 0 auto;
+    padding: 6px 8px;
+    font-size: 12px;
+    color-scheme: dark;
+  }
+}
+
+// ── Select ────────────────────────────────────────────────────────────────────
+
+.led-select-wrapper {
+  position: relative;
+}
+
+.led-select {
+  appearance: none;
+  background: rgba(30, 41, 59, 0.6);
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  border-radius: 8px;
+  padding: 8px 32px 8px 12px;
+  color: #e2e8f0;
+  font-size: 13px;
+  outline: none;
+  cursor: pointer;
+  width: 100%;
+  transition: border-color 0.15s;
+
+  option {
+    background: #1e293b;
+    color: #e2e8f0;
+  }
+
+  &:focus {
+    border-color: rgba(56, 189, 248, 0.5);
+  }
+}
+
+.led-select-arrow {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 18px;
+  color: #64748b;
+  pointer-events: none;
+}
+
+// ── Error message ─────────────────────────────────────────────────────────────
+
+.led-error-msg {
+  font-size: 11px;
+  color: #f87171;
+  margin-top: 2px;
+}
+
+// ── Toggle ────────────────────────────────────────────────────────────────────
+
+.led-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  margin-top: 6px;
+
+  input[type="checkbox"] { display: none; }
+
+  &--sm { margin-top: 0; }
+}
+
+.led-toggle-track {
+  width: 34px;
+  height: 18px;
+  background: rgba(148, 163, 184, 0.2);
+  border-radius: 9px;
+  position: relative;
+  transition: background 0.2s;
+
+  .led-toggle input:checked + & {
+    background: rgba(56, 189, 248, 0.4);
+  }
+}
+
+.led-toggle-thumb {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #64748b;
+  transition: transform 0.2s, background 0.2s;
+
+  .led-toggle input:checked ~ .led-toggle-track & {
+    transform: translateX(16px);
+    background: #38bdf8;
+  }
+}
+
+.led-toggle-label {
+  font-size: 13px;
+  color: #94a3b8;
+
+  &--sm { font-size: 12px; }
+}
+
+// ── Operating hours grid ──────────────────────────────────────────────────────
+
+.led-hours-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px 0;
+}
+
+.led-hours-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.led-day-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: #94a3b8;
+  width: 32px;
+  flex-shrink: 0;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.led-hours-sep {
+  color: #475569;
+  font-size: 12px;
+  flex-shrink: 0;
+}
+
+.led-closed-label {
+  font-size: 12px;
+  color: #475569;
+  font-style: italic;
+  flex: 1;
+}
+
+// ── Placeholder (other tabs) ──────────────────────────────────────────────────
+
+.led-placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 48px 24px;
+  text-align: center;
+  gap: 8px;
+
+  p {
+    margin: 0;
+    color: #475569;
+    font-size: 14px;
+  }
+}
+
+.led-placeholder-icon {
+  font-size: 40px;
+  color: #334155;
+  margin-bottom: 8px;
+}
+
+.led-placeholder-sub {
+  font-size: 12px !important;
+  color: #334155 !important;
+}
+
+// ── Footer ────────────────────────────────────────────────────────────────────
+
+.led-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 14px 20px;
+  border-top: 1px solid rgba(148, 163, 184, 0.15);
+  background: rgba(15, 23, 42, 0.5);
+  border-radius: 0 0 16px 16px;
+  flex-shrink: 0;
+}
+
+.led-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 18px;
+  border-radius: 10px;
+  border: 1px solid rgba(148, 163, 184, 0.3);
+  background: transparent;
+  color: #cbd5e1;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+
+  span.material-symbols-outlined { font-size: 16px; }
+
+  &:hover:not(:disabled) {
+    background: rgba(255, 255, 255, 0.06);
+    border-color: rgba(148, 163, 184, 0.45);
+  }
+
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  &--primary {
+    background:
+      radial-gradient(circle at 0 0, rgba(34, 197, 94, 0.35), transparent 55%),
+      rgba(22, 101, 52, 0.65);
+    border-color: rgba(34, 197, 94, 0.5);
+    color: #bbf7d0;
+
+    &:hover:not(:disabled) {
+      background:
+        radial-gradient(circle at 0 0, rgba(34, 197, 94, 0.5), transparent 55%),
+        rgba(22, 101, 52, 0.8);
+      border-color: rgba(34, 197, 94, 0.7);
+    }
+  }
+}
+
+// ── Spinner ───────────────────────────────────────────────────────────────────
+
+.led-spinner {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border: 2px solid rgba(187, 247, 208, 0.3);
+  border-top-color: #bbf7d0;
+  border-radius: 50%;
+  animation: led-spin 0.7s linear infinite;
+  flex-shrink: 0;
+}
+
+@keyframes led-spin {
+  to { transform: rotate(360deg); }
+}
+
+// ── Responsive ────────────────────────────────────────────────────────────────
+
+@media (max-width: 600px) {
+  .led-modal { max-width: 100%; border-radius: 12px; }
+  .led-row   { flex-direction: column; gap: 0; }
+  .led-field--sm, .led-field--xs, .led-field--half,
+  .led-field--state, .led-field--zip { flex: 1; }
+  .led-tabs  { overflow-x: auto; }
+  .led-tab   { padding: 10px 12px; font-size: 12px; }
+}

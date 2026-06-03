@@ -81,6 +81,63 @@ async function findOrCreateDriverFromPayload(payload) {
   return created.rows[0].id;
 }
 
+/**
+ * @openapi
+ * /api/onboarding/packets:
+ *   post:
+ *     summary: Create an onboarding packet
+ *     description: Creates a new driver onboarding packet with a secure token link. Optionally creates a new driver record from CDL information. Per 49 CFR 391.21 — Application for employment.
+ *     tags:
+ *       - Onboarding
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               driverId:
+ *                 type: integer
+ *                 nullable: true
+ *                 description: Existing driver ID. If omitted, a new driver is created from the driver object.
+ *               driver:
+ *                 type: object
+ *                 description: Driver payload used to find or create a driver when driverId is not provided
+ *                 properties:
+ *                   firstName:
+ *                     type: string
+ *                   lastName:
+ *                     type: string
+ *                   phone:
+ *                     type: string
+ *                   email:
+ *                     type: string
+ *                   cdlNumber:
+ *                     type: string
+ *                   cdlState:
+ *                     type: string
+ *     responses:
+ *       201:
+ *         description: Onboarding packet created
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 packetId:
+ *                   type: string
+ *                   format: uuid
+ *                 token:
+ *                   type: string
+ *                 publicUrl:
+ *                   type: string
+ *       401:
+ *         description: Unauthorized
+ *       500:
+ *         description: Server error
+ */
 // POST /api/onboarding/packets
 router.post('/packets', async (req, res) => {
   const start = Date.now();
@@ -157,6 +214,91 @@ router.post('/packets', async (req, res) => {
   }
 });
 
+/**
+ * @openapi
+ * /api/onboarding/packets/{id}/send:
+ *   post:
+ *     summary: Send an onboarding packet link
+ *     description: Regenerates the token and sends the onboarding link via SMS, email, or both. Per 49 CFR 391.21 — Application for employment.
+ *     tags:
+ *       - Onboarding
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Onboarding packet ID
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - via
+ *             properties:
+ *               via:
+ *                 type: string
+ *                 enum: [sms, email, both]
+ *                 description: Delivery channel
+ *               phone:
+ *                 type: string
+ *                 description: Phone number (optional, falls back to packet record)
+ *               email:
+ *                 type: string
+ *                 description: Email address (optional, falls back to packet record)
+ *     responses:
+ *       200:
+ *         description: Onboarding link sent
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 packetId:
+ *                   type: string
+ *                 sentVia:
+ *                   type: string
+ *                 sentToPhone:
+ *                   type: string
+ *                   nullable: true
+ *                 sentToEmail:
+ *                   type: string
+ *                   nullable: true
+ *                 publicUrl:
+ *                   type: string
+ *                 delivery:
+ *                   type: object
+ *                   properties:
+ *                     sms:
+ *                       type: object
+ *                       properties:
+ *                         sent:
+ *                           type: boolean
+ *                         error:
+ *                           type: string
+ *                           nullable: true
+ *                     email:
+ *                       type: object
+ *                       properties:
+ *                         sent:
+ *                           type: boolean
+ *                         error:
+ *                           type: string
+ *                           nullable: true
+ *       400:
+ *         description: Invalid via parameter
+ *       404:
+ *         description: Onboarding packet not found
+ *       401:
+ *         description: Unauthorized
+ *       500:
+ *         description: Server error
+ */
 // POST /api/onboarding/packets/:id/send
 router.post('/packets/:id/send', async (req, res) => {
   const start = Date.now();
@@ -268,6 +410,62 @@ router.post('/packets/:id/send', async (req, res) => {
   }
 });
 
+/**
+ * @openapi
+ * /api/onboarding/invite:
+ *   post:
+ *     summary: Invite a driver to onboard
+ *     description: Creates a pending driver record (or reuses an existing one), generates an onboarding packet, and sends an invite email. Per 49 CFR 391.21 — Application for employment.
+ *     tags:
+ *       - Onboarding
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - firstName
+ *               - lastName
+ *               - email
+ *             properties:
+ *               firstName:
+ *                 type: string
+ *               lastName:
+ *                 type: string
+ *               email:
+ *                 type: string
+ *                 format: email
+ *               phone:
+ *                 type: string
+ *     responses:
+ *       201:
+ *         description: Driver invited and onboarding packet created
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 driverId:
+ *                   type: integer
+ *                 packetId:
+ *                   type: string
+ *                   format: uuid
+ *                 publicUrl:
+ *                   type: string
+ *                 sentTo:
+ *                   type: string
+ *                 isNewDriver:
+ *                   type: boolean
+ *       400:
+ *         description: Missing required fields (firstName, lastName, email)
+ *       401:
+ *         description: Unauthorized
+ *       500:
+ *         description: Server error
+ */
 // POST /api/onboarding/invite
 // Creates a pending driver record, generates onboarding packet, and sends invite email.
 router.post('/invite', async (req, res) => {
@@ -405,6 +603,62 @@ router.post('/invite', async (req, res) => {
   }
 });
 
+/**
+ * @openapi
+ * /api/onboarding/packets/{id}/resend:
+ *   post:
+ *     summary: Resend an onboarding packet link
+ *     description: Refreshes the packet token, extends expiry by 7 days, and re-sends the onboarding link via email. Per 49 CFR 391.21 — Application for employment.
+ *     tags:
+ *       - Onboarding
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Onboarding packet ID
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               email:
+ *                 type: string
+ *                 format: email
+ *                 description: Override email address (optional, falls back to packet record)
+ *     responses:
+ *       200:
+ *         description: Onboarding link resent
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 packetId:
+ *                   type: string
+ *                 sentTo:
+ *                   type: string
+ *                 publicUrl:
+ *                   type: string
+ *                 emailSent:
+ *                   type: boolean
+ *                 emailError:
+ *                   type: string
+ *                   nullable: true
+ *       404:
+ *         description: Onboarding packet not found
+ *       409:
+ *         description: Cannot resend — packet already submitted
+ *       401:
+ *         description: Unauthorized
+ *       500:
+ *         description: Server error
+ */
 // POST /api/onboarding/packets/:id/resend
 // Refreshes the token and re-sends the onboarding link via email.
 router.post('/packets/:id/resend', async (req, res) => {

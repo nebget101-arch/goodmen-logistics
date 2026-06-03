@@ -102,8 +102,48 @@ router.get('/', authMiddleware, async (req, res) => {
 });
 
 /**
- * GET /api/inventory/alerts
- * Get alerts (low stock + out of stock) for a location
+ * @openapi
+ * /api/inventory/alerts:
+ *   get:
+ *     summary: Get inventory alerts
+ *     description: Returns low-stock and out-of-stock alerts for a location. Supports severity filter (ALL, LOW, OUT).
+ *     tags:
+ *       - Inventory
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: locationId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Location UUID
+ *       - in: query
+ *         name: severity
+ *         schema:
+ *           type: string
+ *           enum: [ALL, LOW, OUT]
+ *           default: ALL
+ *         description: Alert severity filter
+ *     responses:
+ *       200:
+ *         description: Alerts list returned
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *       400:
+ *         description: Missing locationId
+ *       500:
+ *         description: Server error
  */
 router.get('/alerts', authMiddleware, async (req, res) => {
 	try {
@@ -129,8 +169,37 @@ router.get('/alerts', authMiddleware, async (req, res) => {
 });
 
 /**
- * GET /api/inventory/status/:locationId
- * Get inventory status summary for a location
+ * @openapi
+ * /api/inventory/status/{locationId}:
+ *   get:
+ *     summary: Get inventory status summary
+ *     description: Returns aggregate inventory status metrics (total SKUs, on-hand, reserved, alert counts) for a location.
+ *     tags:
+ *       - Inventory
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: locationId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Location UUID
+ *     responses:
+ *       200:
+ *         description: Status summary returned
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *       500:
+ *         description: Server error
  */
 router.get('/status/:locationId', authMiddleware, async (req, res) => {
 	try {
@@ -147,8 +216,42 @@ router.get('/status/:locationId', authMiddleware, async (req, res) => {
 });
 
 /**
- * GET /api/inventory/location-summary
- * Get inventory totals grouped by location.
+ * @openapi
+ * /api/inventory/location-summary:
+ *   get:
+ *     summary: Get inventory totals by location
+ *     description: Returns on-hand and reserved quantities grouped by location across all active inventory rows.
+ *     tags:
+ *       - Inventory
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Location summary returned
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       id:
+ *                         type: string
+ *                       name:
+ *                         type: string
+ *                       on_hand_qty:
+ *                         type: number
+ *                       reserved_qty:
+ *                         type: number
+ *                       row_count:
+ *                         type: integer
+ *       500:
+ *         description: Server error
  */
 router.get('/location-summary', authMiddleware, async (_req, res) => {
 	try {
@@ -173,9 +276,147 @@ router.get('/location-summary', authMiddleware, async (_req, res) => {
 });
 
 /**
- * PUT /api/inventory/:id
- * Update inventory min level and bin location
- * Requires: Admin or Parts Manager role
+ * @openapi
+ * /api/inventory/by-part/{partId}:
+ *   get:
+ *     summary: List inventory rows for a part across all locations
+ *     description: Returns one inventory row per (location, bin) carrying the given part. Used by the Parts Catalog stock-breakdown expand row. Returns an empty array (200) when the part has no inventory anywhere.
+ *     tags:
+ *       - Inventory
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: partId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Part UUID
+ *     responses:
+ *       200:
+ *         description: Cross-location inventory rows for the part
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       id:
+ *                         type: string
+ *                         format: uuid
+ *                       location_id:
+ *                         type: string
+ *                         format: uuid
+ *                       location_name:
+ *                         type: string
+ *                       on_hand_qty:
+ *                         type: number
+ *                       reserved_qty:
+ *                         type: number
+ *                       available_qty:
+ *                         type: number
+ *                       bin_location:
+ *                         type: string
+ *                         nullable: true
+ *                       bin_id:
+ *                         type: string
+ *                         format: uuid
+ *                         nullable: true
+ *                       bin_code:
+ *                         type: string
+ *                         nullable: true
+ *                       bin_name:
+ *                         type: string
+ *                         nullable: true
+ *       500:
+ *         description: Server error
+ */
+router.get('/by-part/:partId', authMiddleware, async (req, res) => {
+	try {
+		const rows = await db('inventory')
+			.where('inventory.part_id', req.params.partId)
+			.join('locations', 'locations.id', 'inventory.location_id')
+			.leftJoin('location_bins', 'location_bins.id', 'inventory.bin_id')
+			.select(
+				'inventory.id',
+				'inventory.location_id',
+				'locations.name as location_name',
+				'inventory.on_hand_qty',
+				'inventory.reserved_qty',
+				db.raw('(inventory.on_hand_qty - inventory.reserved_qty) as available_qty'),
+				'inventory.bin_location',
+				'inventory.bin_id',
+				'location_bins.bin_code',
+				'location_bins.bin_name'
+			)
+			.orderBy('locations.name', 'asc');
+
+		res.json({ success: true, data: rows });
+	} catch (error) {
+		dtLogger.error('inventory_by_part_get_failed', { partId: req.params.partId, error: error.message });
+		res.status(500).json({ error: error.message });
+	}
+});
+
+/**
+ * @openapi
+ * /api/inventory/{id}:
+ *   put:
+ *     summary: Update inventory settings
+ *     description: Updates min stock level, bin location, and reorder quantity for an inventory record. Requires Admin or Parts Manager role.
+ *     tags:
+ *       - Inventory
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Inventory record UUID
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               minStockLevel:
+ *                 type: number
+ *                 description: Minimum stock level threshold
+ *               binLocation:
+ *                 type: string
+ *                 description: Physical bin location identifier
+ *               reorderQty:
+ *                 type: number
+ *                 description: Default reorder quantity
+ *     responses:
+ *       200:
+ *         description: Inventory record updated
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *                 message:
+ *                   type: string
+ *       404:
+ *         description: Inventory record not found
+ *       400:
+ *         description: Invalid input
  */
 router.put('/:id', authMiddleware, requireRole(['admin', 'parts_manager']), async (req, res) => {
 	try {
@@ -207,8 +448,60 @@ router.put('/:id', authMiddleware, requireRole(['admin', 'parts_manager']), asyn
 });
 
 /**
- * POST /api/inventory/receive
- * Add stock to inventory and write RECEIVE transaction
+ * @openapi
+ * /api/inventory/receive:
+ *   post:
+ *     summary: Receive inventory
+ *     description: Adds stock to inventory and writes a RECEIVE transaction. Transaction type RECEIVE increases on-hand quantity. Requires Admin, Parts Manager, or Shop Manager role.
+ *     tags:
+ *       - Inventory
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - locationId
+ *               - partId
+ *               - qty
+ *             properties:
+ *               locationId:
+ *                 type: string
+ *                 format: uuid
+ *               partId:
+ *                 type: string
+ *                 format: uuid
+ *               qty:
+ *                 type: number
+ *                 description: Quantity to receive
+ *               unitCostAtTime:
+ *                 type: number
+ *                 description: Unit cost at time of receipt
+ *               referenceType:
+ *                 type: string
+ *                 description: Reference document type (e.g. PO, RECEIVING_TICKET)
+ *               referenceId:
+ *                 type: string
+ *                 description: Reference document UUID
+ *               notes:
+ *                 type: string
+ *     responses:
+ *       201:
+ *         description: Inventory received and RECEIVE transaction created
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *       400:
+ *         description: Missing required fields or invalid input
  */
 router.post('/receive', authMiddleware, requireRole(['admin', 'parts_manager', 'shop_manager']), async (req, res) => {
 	try {
@@ -237,8 +530,58 @@ router.post('/receive', authMiddleware, requireRole(['admin', 'parts_manager', '
 });
 
 /**
- * POST /api/inventory/transfer
- * Create + send a transfer (TRANSFER_OUT posted immediately)
+ * @openapi
+ * /api/inventory/transfer:
+ *   post:
+ *     summary: Create inventory transfer
+ *     description: Creates an inter-location transfer and immediately posts a TRANSFER_OUT transaction reducing the source location stock. Requires Admin, Parts Manager, or Shop Manager role.
+ *     tags:
+ *       - Inventory
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - fromLocationId
+ *               - toLocationId
+ *               - lines
+ *             properties:
+ *               fromLocationId:
+ *                 type: string
+ *                 format: uuid
+ *               toLocationId:
+ *                 type: string
+ *                 format: uuid
+ *               lines:
+ *                 type: array
+ *                 items:
+ *                   type: object
+ *                   properties:
+ *                     partId:
+ *                       type: string
+ *                       format: uuid
+ *                     qty:
+ *                       type: number
+ *               notes:
+ *                 type: string
+ *     responses:
+ *       201:
+ *         description: Transfer created
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *       400:
+ *         description: Invalid input or insufficient stock
  */
 router.post('/transfer', authMiddleware, requireRole(['admin', 'parts_manager', 'shop_manager']), async (req, res) => {
 	try {
@@ -260,8 +603,45 @@ router.post('/transfer', authMiddleware, requireRole(['admin', 'parts_manager', 
 });
 
 /**
- * POST /api/inventory/transfer/:id/receive
- * Confirm transfer receipt (posts TRANSFER_IN)
+ * @openapi
+ * /api/inventory/transfer/{id}/receive:
+ *   post:
+ *     summary: Receive an inventory transfer
+ *     description: Confirms receipt of a transfer at the destination location and posts a TRANSFER_IN transaction increasing the destination stock. Requires Admin, Parts Manager, or Shop Manager role.
+ *     tags:
+ *       - Inventory
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Transfer UUID
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               notes:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Transfer received and TRANSFER_IN transaction posted
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *       400:
+ *         description: Invalid transfer or already received
  */
 router.post('/transfer/:id/receive', authMiddleware, requireRole(['admin', 'parts_manager', 'shop_manager']), async (req, res) => {
 	try {
@@ -280,8 +660,54 @@ router.post('/transfer/:id/receive', authMiddleware, requireRole(['admin', 'part
 });
 
 /**
- * POST /api/inventory/consume
- * Deduct stock for work order usage (CONSUME)
+ * @openapi
+ * /api/inventory/consume:
+ *   post:
+ *     summary: Consume inventory for a work order
+ *     description: Deducts stock for work-order usage and writes an ISSUE transaction. Transaction type ISSUE decreases on-hand quantity. Requires Admin, Parts Manager, Shop Manager, or Technician role.
+ *     tags:
+ *       - Inventory
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - locationId
+ *               - partId
+ *               - qty
+ *               - workOrderId
+ *             properties:
+ *               locationId:
+ *                 type: string
+ *                 format: uuid
+ *               partId:
+ *                 type: string
+ *                 format: uuid
+ *               qty:
+ *                 type: number
+ *               workOrderId:
+ *                 type: string
+ *                 format: uuid
+ *               notes:
+ *                 type: string
+ *     responses:
+ *       201:
+ *         description: Inventory consumed and ISSUE transaction created
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *       400:
+ *         description: Missing required fields or insufficient stock
  */
 router.post('/consume', authMiddleware, requireRole(['admin', 'parts_manager', 'shop_manager', 'technician']), async (req, res) => {
 	try {
@@ -308,8 +734,62 @@ router.post('/consume', authMiddleware, requireRole(['admin', 'parts_manager', '
 });
 
 /**
- * POST /api/inventory/sale
- * Direct customer sale (no work order): deduct stock + create invoice
+ * @openapi
+ * /api/inventory/sale:
+ *   post:
+ *     summary: Create a direct customer sale
+ *     description: Processes a counter sale (no work order) by deducting stock via ISSUE transactions and creating an invoice. Requires Admin, Parts Manager, Shop Manager, Service Advisor, or Accounting role.
+ *     tags:
+ *       - Inventory
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - customerId
+ *               - locationId
+ *               - items
+ *             properties:
+ *               customerId:
+ *                 type: string
+ *                 format: uuid
+ *               locationId:
+ *                 type: string
+ *                 format: uuid
+ *               items:
+ *                 type: array
+ *                 items:
+ *                   type: object
+ *                   properties:
+ *                     partId:
+ *                       type: string
+ *                       format: uuid
+ *                     qty:
+ *                       type: number
+ *                     unitPrice:
+ *                       type: number
+ *               notes:
+ *                 type: string
+ *               taxRatePercent:
+ *                 type: number
+ *     responses:
+ *       201:
+ *         description: Sale processed, invoice created
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *       400:
+ *         description: Missing required fields or insufficient stock
  */
 router.post('/sale', authMiddleware, requireRole(['admin', 'parts_manager', 'shop_manager', 'service_advisor', 'accounting']), async (req, res) => {
 	try {
@@ -336,8 +816,77 @@ router.post('/sale', authMiddleware, requireRole(['admin', 'parts_manager', 'sho
 });
 
 /**
- * GET /api/inventory/transactions
- * Audit trail filters: date, location, user, tx type, reference
+ * @openapi
+ * /api/inventory/transactions:
+ *   get:
+ *     summary: List inventory transactions
+ *     description: Returns an audit trail of inventory transactions. Supported transaction types are RECEIVE, ADJUST, RESERVE, ISSUE, and RETURN. Filterable by location, user, transaction type, reference, and date range.
+ *     tags:
+ *       - Inventory
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: locationId
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Filter by location
+ *       - in: query
+ *         name: userId
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Filter by user who performed the transaction
+ *       - in: query
+ *         name: txType
+ *         schema:
+ *           type: string
+ *           enum: [RECEIVE, ADJUST, RESERVE, ISSUE, RETURN, TRANSFER_OUT, TRANSFER_IN, CONSUME, CYCLE_COUNT_ADJUST]
+ *         description: Filter by transaction type
+ *       - in: query
+ *         name: referenceType
+ *         schema:
+ *           type: string
+ *         description: Filter by reference document type
+ *       - in: query
+ *         name: referenceId
+ *         schema:
+ *           type: string
+ *         description: Filter by reference document UUID
+ *       - in: query
+ *         name: dateFrom
+ *         schema:
+ *           type: string
+ *           format: date
+ *         description: Start date filter (inclusive)
+ *       - in: query
+ *         name: dateTo
+ *         schema:
+ *           type: string
+ *           format: date
+ *         description: End date filter (inclusive)
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *         description: Max rows to return
+ *     responses:
+ *       200:
+ *         description: Transaction list returned
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *       500:
+ *         description: Server error
  */
 router.get('/transactions', authMiddleware, async (req, res) => {
 	try {

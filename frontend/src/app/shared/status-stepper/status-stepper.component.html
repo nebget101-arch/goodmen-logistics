@@ -1,0 +1,39 @@
+<ol class="status-stepper" role="list">
+  <li
+    class="status-stepper__step"
+    role="listitem"
+    *ngFor="let step of steps; let i = index; trackBy: trackByKey"
+  >
+    <button
+      #stepEl
+      type="button"
+      class="status-stepper__node"
+      [class.is-pending]="step.status === 'pending'"
+      [class.is-current]="step.status === 'current'"
+      [class.is-complete]="step.status === 'complete'"
+      [class.is-skipped]="step.status === 'skipped'"
+      [class.is-blocked]="step.status === 'blocked'"
+      [attr.aria-current]="step.key === activeKey ? 'step' : null"
+      [attr.aria-disabled]="step.status === 'blocked' ? 'true' : null"
+      [attr.tabindex]="isFocusable(step, i) ? 0 : -1"
+      [disabled]="step.status === 'blocked'"
+      (click)="onActivate(step)"
+      (keydown)="onKeydown($event, i)"
+    >
+      <span class="status-stepper__circle" aria-hidden="true">
+        <span class="status-stepper__check" *ngIf="step.status === 'complete'">✓</span>
+        <span class="status-stepper__index" *ngIf="step.status !== 'complete'">{{ i + 1 }}</span>
+      </span>
+      <span class="status-stepper__meta">
+        <span class="status-stepper__kicker" *ngIf="step.kicker">{{ step.kicker }}</span>
+        <span class="status-stepper__label">{{ step.label }}</span>
+        <span class="status-stepper__value" *ngIf="step.value">{{ step.value }}</span>
+      </span>
+    </button>
+    <span
+      class="status-stepper__connector"
+      aria-hidden="true"
+      *ngIf="i < steps.length - 1"
+    ></span>
+  </li>
+</ol>

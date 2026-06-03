@@ -1,4 +1,5 @@
 import { Component, Input, OnChanges } from '@angular/core';
+import { DrilldownTarget, RowDrilldownFn } from '../../reports.models';
 
 export interface ReportColumn {
   key: string;
@@ -16,6 +17,9 @@ export class ReportTableComponent implements OnChanges {
   @Input() rows: Record<string, unknown>[] = [];
   @Input() columns: ReportColumn[] = [];
   @Input() exportFileName = 'export.csv';
+  // FN-1183: optional drill-down. When set, rows resolve to a router target
+  // and render as anchors. Rows where the fn returns null render plain.
+  @Input() rowDrilldown: RowDrilldownFn | null = null;
 
   sortKey = '';
   sortDir: 'asc' | 'desc' = 'asc';
@@ -24,6 +28,17 @@ export class ReportTableComponent implements OnChanges {
   pagedRows: Record<string, unknown>[] = [];
   totalPages = 1;
   private sortedRows: Record<string, unknown>[] = [];
+
+  /**
+   * FN-1191 — stable per-instance prefix so each <th>/headers pair is unique
+   * when multiple report-tables coexist on the same page (caption + each col).
+   */
+  private readonly idPrefix = `rpt-tbl-${Math.random().toString(36).slice(2, 9)}`;
+  readonly captionId = `${this.idPrefix}-caption`;
+
+  columnHeaderId(key: string): string {
+    return `${this.idPrefix}-col-${key}`;
+  }
 
   ngOnChanges(): void {
     this.applySort();
@@ -35,6 +50,10 @@ export class ReportTableComponent implements OnChanges {
     else { this.sortKey = key; this.sortDir = 'asc'; }
     this.applySort();
     this.updatePaged();
+  }
+
+  targetFor(row: Record<string, unknown>): DrilldownTarget | null {
+    return this.rowDrilldown ? this.rowDrilldown(row) : null;
   }
 
   private applySort(): void {

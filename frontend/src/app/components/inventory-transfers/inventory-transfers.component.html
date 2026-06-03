@@ -12,17 +12,45 @@
       <div class="toolbar-grid">
         <div class="field">
           <label for="xf-from">From</label>
-          <select id="xf-from" class="form-control" [(ngModel)]="fromLocationId" [disabled]="!canCreateTransfer()">
+          <select
+            id="xf-from"
+            class="form-control"
+            [(ngModel)]="fromLocationId"
+            (ngModelChange)="onFromLocationChange()"
+            [disabled]="!canCreateTransfer()"
+          >
             <option value="">-- Select --</option>
             <option *ngFor="let l of locations" [value]="l.id">{{ l.name }}</option>
           </select>
         </div>
+
         <div class="field">
-          <label for="xf-to">To</label>
-          <select id="xf-to" class="form-control" [(ngModel)]="toLocationId" [disabled]="!canCreateTransfer()">
+          <div class="to-label-row">
+            <label for="xf-to">To</label>
+            <!-- FN-710: Show All toggle (only visible when source is WAREHOUSE) -->
+            <label *ngIf="isFromWarehouse" class="toggle-show-all">
+              <input type="checkbox" [(ngModel)]="showAllDestinations" />
+              Show all locations
+            </label>
+            <span *ngIf="isFromWarehouse && loadingSupplyRules" class="rules-loading">Loading rules…</span>
+          </div>
+          <select
+            id="xf-to"
+            class="form-control"
+            [(ngModel)]="toLocationId"
+            (ngModelChange)="onToLocationChange()"
+            [disabled]="!canCreateTransfer()"
+          >
             <option value="">-- Select --</option>
-            <option *ngFor="let l of locations" [value]="l.id">{{ l.name }}</option>
+            <option *ngFor="let l of filteredDestinations" [value]="l.id">{{ l.name }}</option>
           </select>
+          <!-- Rule info badge -->
+          <div *ngIf="activeSupplyRule" class="rule-badge">
+            <span class="rule-badge-icon">⟳</span>
+            Supply rule active
+            <span *ngIf="activeSupplyRule.auto_replenish" class="rule-auto-badge">auto-replenish</span>
+            <span *ngIf="activeSupplyRule.delivery_days" class="rule-days">{{ activeSupplyRule.delivery_days }}d</span>
+          </div>
         </div>
         <div class="field scan-field">
           <label for="xf-scan">Scan barcode</label>
@@ -62,6 +90,51 @@
       <p class="qr-link"><a [href]="bridgeMobileUrl" target="_blank" rel="noopener">Or open this link on your phone</a></p>
       <p class="qr-link"><a [href]="bridgeMobileUrl" target="_self" class="link-camera-this-device">Open camera on this device (tablet)</a></p>
       <p class="qr-status">{{ bridgeConnected ? 'Phone connected' : 'Waiting for phone...' }}</p>
+    </div>
+
+    <!-- FN-710: Suggested Transfers panel -->
+    <div *ngIf="loadingSuggestions" class="suggestions-loading">
+      <span class="sug-spinner"></span> Loading suggested transfers…
+    </div>
+
+    <div *ngIf="showSuggestedPanel && !loadingSuggestions" class="suggestions-panel">
+      <div class="suggestions-header">
+        <div class="suggestions-title">
+          <span class="sug-icon">⟳</span>
+          Suggested Transfers
+          <span class="sug-dest">→ {{ getLocationName(toLocationId) }}</span>
+          <span class="sug-badge">auto-replenish</span>
+        </div>
+        <button
+          type="button"
+          class="btn-add-all"
+          (click)="addAllSuggested()"
+          [disabled]="!canCreateTransfer()"
+        >Add all ({{ suggestedItems.length }})</button>
+      </div>
+      <p class="suggestions-desc">
+        These parts are below reorder level at the destination. Suggested quantities will bring stock back to the reorder level.
+      </p>
+      <div class="suggestions-grid">
+        <div *ngFor="let item of suggestedItems" class="sug-card">
+          <div class="sug-sku">{{ item.sku }}</div>
+          <div class="sug-name">{{ item.name }}</div>
+          <div class="sug-qty-row">
+            <span class="sug-on-hand">{{ item.on_hand_qty }} on hand</span>
+            <span class="sug-arrow">→</span>
+            <span class="sug-target">{{ item.reorder_level }} target</span>
+          </div>
+          <div class="sug-footer">
+            <span class="sug-suggested-qty">+{{ item.suggestedQty }} units</span>
+            <button
+              type="button"
+              class="btn-add-sug"
+              (click)="addSuggestedLine(item)"
+              [disabled]="!canCreateTransfer()"
+            >Add</button>
+          </div>
+        </div>
+      </div>
     </div>
 
     <div class="table-section" *ngIf="lines.length > 0">

@@ -77,7 +77,7 @@ async function sendSms(toPhone, body) {
 
 /**
  * Send email via SendGrid.
- * @param {object} options - { to: string, subject: string, text?: string, html?: string }
+ * @param {object} options - { to: string|string[], subject: string, text?: string, html?: string, cc?: string|string[], replyTo?: string, attachments?: object[] }
  * @returns {Promise<{ sent: boolean, error?: string }>}
  */
 async function sendEmail(options) {
@@ -87,19 +87,42 @@ async function sendEmail(options) {
       error: 'Email not configured (set SENDGRID_API_KEY)'
     };
   }
-  const { to, subject, text, html } = options || {};
+  const { to, cc, subject, text, html, replyTo, attachments } = options || {};
   if (!to || !subject) {
     return { sent: false, error: 'Missing to or subject' };
   }
+
+  const normalizeRecipientList = (value) => {
+    return []
+      .concat(value || [])
+      .map((entry) => String(entry || '').trim())
+      .filter(Boolean);
+  };
+
+  const toList = normalizeRecipientList(to);
+  const ccList = normalizeRecipientList(cc);
+  if (!toList.length) {
+    return { sent: false, error: 'Missing to recipient list' };
+  }
+
+  const safeAttachments = Array.isArray(attachments)
+    ? attachments.filter((item) => item && item.content && item.filename)
+    : [];
   try {
-    await sgMail.send({
-      to,
+    const sendResult = await sgMail.send({
+      to: toList,
       from: FROM_EMAIL,
       subject,
+      ...(ccList.length ? { cc: ccList } : {}),
+      ...(replyTo ? { replyTo } : {}),
+      ...(safeAttachments.length ? { attachments: safeAttachments } : {}),
       ...(text ? { text } : {}),
       html: html || (text ? text.replace(/\n/g, '<br>') : subject)
     });
-    return { sent: true };
+    const firstResponse = Array.isArray(sendResult) ? sendResult[0] : sendResult;
+    const headers = firstResponse?.headers || {};
+    const messageId = headers['x-message-id'] || headers['X-Message-Id'] || null;
+    return { sent: true, messageId };
   } catch (err) {
     const message = err.response?.body?.errors?.[0]?.message || err.message || String(err);
     return { sent: false, error: message };
@@ -191,10 +214,80 @@ async function sendOnboardingLink({ publicUrl, phone, email, via, driverName }) 
   return result;
 }
 
+// ---------------------------------------------------------------------------
+// In-app notification bell (user_notifications table) — FN-507
+// ---------------------------------------------------------------------------
+
+/**
+ * Insert an in-app notification record for a single user.
+ * No-ops gracefully if the table does not exist (pre-migration safe).
+ *
+ * @param {object} knex - Knex instance
+ * @param {object} opts
+ * @param {string} opts.userId
+ * @param {string|null} opts.tenantId
+ * @param {string} opts.type       - e.g. 'idle_truck_week1'
+ * @param {string} opts.title
+ * @param {string} [opts.body]
+ * @param {object} [opts.meta]     - arbitrary JSON context
+ * @returns {Promise<{ saved: boolean, id?: string, error?: string }>}
+ */
+async function sendInAppNotification(knex, { userId, tenantId, type, title, body, meta }) {
+  if (!knex || !userId || !type || !title) {
+    return { saved: false, error: 'Missing required params (knex, userId, type, title)' };
+  }
+  try {
+    const hasTable = await knex.schema.hasTable('user_notifications').catch(() => false);
+    if (!hasTable) return { saved: false, error: 'user_notifications table not found' };
+
+    const [row] = await knex('user_notifications')
+      .insert({
+        tenant_id: tenantId || null,
+        user_id: userId,
+        type,
+        title,
+        body: body || null,
+        meta: meta ? JSON.stringify(meta) : null,
+        is_read: false
+      })
+      .returning('id');
+    return { saved: true, id: row?.id ?? row };
+  } catch (err) {
+    return { saved: false, error: err.message || String(err) };
+  }
+}
+
+/**
+ * Send in-app notifications to multiple users at once.
+ *
+ * @param {object} knex
+ * @param {Array<{ id: string, email?: string }>} users - each must have `id`
+ * @param {object} notification - { type, title, body, meta, tenantId }
+ * @returns {Promise<Array<{ userId: string, saved: boolean, error?: string }>>}
+ */
+async function sendInAppNotificationsToUsers(knex, users, { type, title, body, meta, tenantId }) {
+  const results = [];
+  for (const user of users) {
+    if (!user.id) continue;
+    const result = await sendInAppNotification(knex, {
+      userId: user.id,
+      tenantId: tenantId || null,
+      type,
+      title,
+      body,
+      meta
+    });
+    results.push({ userId: user.id, ...result });
+  }
+  return results;
+}
+
 module.exports = {
   sendSms,
   sendEmail,
   sendOnboardingLink,
   getConsent,
-  toE164
+  toE164,
+  sendInAppNotification,
+  sendInAppNotificationsToUsers
 };

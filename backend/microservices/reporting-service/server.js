@@ -1,3 +1,4 @@
+require('./tracing');
 require('dotenv').config();
 
 const express = require('express');
@@ -23,34 +24,15 @@ app.use(cors());
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 
-const swaggerOptions = {
-  definition: {
-    openapi: '3.0.0',
-    info: {
-      title: 'Reporting Service API',
-      version: '1.0.0',
-      description: 'API documentation for the Reporting & Audit microservice.'
-    },
-    components: {
-      securitySchemes: {
-        bearerAuth: {
-          type: 'http',
-          scheme: 'bearer',
-          bearerFormat: 'JWT'
-        }
-      }
-    },
-    security: [
-      {
-        bearerAuth: []
-      }
-    ]
-  },
+const { buildSwaggerOptions } = require('@goodmen/shared/config/swagger');
+const swaggerOptions = buildSwaggerOptions({
+  title: 'Reporting Service API',
+  description: 'API documentation for the Reporting & Audit microservice.',
   apis: [
     path.join(__dirname, '../../packages/goodmen-shared/routes/*.js'),
     __filename
   ]
-};
+});
 
 const swaggerSpec = swaggerJsdoc(swaggerOptions);
 
@@ -62,13 +44,30 @@ const tenantContextMiddleware = require('@goodmen/shared/middleware/tenant-conte
 const { loadUserRbac } = require('@goodmen/shared/middleware/rbac-middleware');
 const requirePlanAccess = require('@goodmen/shared/middleware/plan-access-middleware');
 
+const { buildTrendCache } = require('./services/trend-cache');
+const { buildTrendAggregator } = require('./services/trend-aggregator');
+const { buildInsightsRouter } = require('./routes/insights');
+
 const requireReportsPlan = requirePlanAccess('/reports');
 
+app.get('/api-docs-json', (_req, res) => res.json(swaggerSpec));
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 
 app.use('/api/dashboard', authMiddleware, tenantContextMiddleware, dashboardRouter);
 app.use('/api/reports', authMiddleware, tenantContextMiddleware, requireReportsPlan, reportsRouter);
 app.use('/api/audit', authMiddleware, tenantContextMiddleware, loadUserRbac, auditRouter);
+
+// FN-1306: Predictive Insights & Trends — relocated from gateway. Caches per-tenant
+// trend bundles for 10 min in-memory; sparse-data tolerant (returns nulls, not errors).
+const trendCache = buildTrendCache();
+const trendAggregator = buildTrendAggregator({ knex, cache: trendCache });
+app.use(
+  '/api/insights',
+  buildInsightsRouter({
+    aggregator: trendAggregator,
+    jwtSecret: process.env.JWT_SECRET || 'dev_secret'
+  })
+);
 
 /**
  * @openapi
@@ -90,6 +89,12 @@ app.get('/health', (req, res) => {
   res.json(healthStatus);
 });
 
-app.listen(PORT, () => {
+app.listen(PORT, async () => {
+  try {
+    await knex.migrate.latest();
+    console.log('✅ Database migrations applied');
+  } catch (err) {
+    console.error('⚠️  Migration error (non-fatal):', err.message);
+  }
   console.log(`📊 Reporting service running on http://localhost:${PORT}`);
 });

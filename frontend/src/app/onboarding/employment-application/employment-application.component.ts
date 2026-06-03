@@ -1,10 +1,20 @@
-import { Component, OnInit, OnDestroy } from '@angular/core';
+import { Component, OnInit, OnDestroy, ElementRef, HostListener } from '@angular/core';
 import { FormBuilder, FormGroup, FormArray, Validators } from '@angular/forms';
-import { Subscription, timer } from 'rxjs';
+import { HttpClient } from '@angular/common/http';
+import { Subject, Subscription, timer, of } from 'rxjs';
+import { debounceTime, switchMap, catchError, filter, take } from 'rxjs/operators';
 import { ActivatedRoute } from '@angular/router';
 import { EmploymentApplicationService } from '../../services/employment-application.service';
 import { ApiService } from '../../services/api.service';
 import { OperatingEntityContextService } from '../../services/operating-entity-context.service';
+import { environment } from '../../../environments/environment';
+
+interface AddressSuggestion {
+  street: string;
+  city: string;
+  state: string;
+  zip: string;
+}
 
 @Component({
   selector: 'app-employment-application',
@@ -19,6 +29,8 @@ export class EmploymentApplicationComponent implements OnInit, OnDestroy {
   submitted = false;
   applicationId: string | null = null;
   driverId: string | null = null;
+  private packetId: string | null = null;
+  private packetToken: string | null = null;
 
   // Employer info from tenant/operating entity
   employerName = '';
@@ -29,7 +41,6 @@ export class EmploymentApplicationComponent implements OnInit, OnDestroy {
 
   // SSN masking
   ssnRawValue = '';
-  ssnMasked = '';
 
   // Dynamic address tracking
   totalResidencyYears = 0;
@@ -38,6 +49,12 @@ export class EmploymentApplicationComponent implements OnInit, OnDestroy {
   // Dynamic employer tracking
   totalEmployerYears = 0;
   needMoreEmployers = true;
+
+  // Address autocomplete state
+  addressSuggestions: { [key: string]: AddressSuggestion[] } = {};
+  activeAutocompleteKey: string | null = null;
+  private addressInput$ = new Subject<{ key: string; query: string }>();
+  private autocompleteSub?: Subscription;
 
   // US States for dropdowns
   usStates = [
@@ -48,14 +65,18 @@ export class EmploymentApplicationComponent implements OnInit, OnDestroy {
 
   constructor(
     private fb: FormBuilder,
+    private http: HttpClient,
     private api: EmploymentApplicationService,
     private apiService: ApiService,
     private route: ActivatedRoute,
-    private oeContext: OperatingEntityContextService
+    private oeContext: OperatingEntityContextService,
+    private elRef: ElementRef
   ) {}
 
   ngOnInit() {
     this.driverId = this.route.snapshot.paramMap.get('driverId') || this.route.snapshot.queryParamMap.get('driverId');
+    this.packetId = this.route.snapshot.queryParamMap.get('packetId');
+    this.packetToken = this.route.snapshot.queryParamMap.get('token');
 
     this.form = this.fb.group({
       applicant: this.fb.group({
@@ -143,12 +164,23 @@ export class EmploymentApplicationComponent implements OnInit, OnDestroy {
         applicantPrintedName: ['', Validators.required],
         applicantSignature: ['', Validators.required],
         signatureDate: [new Date().toISOString().slice(0, 10), Validators.required],
-        certificationAccepted: [false, Validators.requiredTrue]
+        certificationAccepted: [false, Validators.requiredTrue],
+        // FN-535: Auto-populated from form data above; editable by driver
+        dateOfBirth: [''],
+        ssnLast4: [''],
+        driversLicenseNumber: [''],
+        stateOfIssue: ['']
       })
     });
 
     // Add one default license row
     this.addLicense();
+
+    // FN-535: Reactively sync certification section from applicant + license fields
+    this.setupCertificationSync();
+
+    // Pre-populate first license entry from driver's most recent license
+    this.prefillLicenseFromDriver();
 
     // Load employer info from operating entity / tenant
     this.loadEmployerInfo();
@@ -159,12 +191,75 @@ export class EmploymentApplicationComponent implements OnInit, OnDestroy {
     // Watch current employer from date for dynamic previous employers
     this.form.get('currentEmployer.fromDate')?.valueChanges.subscribe(() => this.recalcEmployerYears());
 
+    // Address autocomplete pipeline
+    this.autocompleteSub = this.addressInput$.pipe(
+      debounceTime(300),
+      filter(({ query }) => query.length >= 3),
+      switchMap(({ key, query }) =>
+        this.http.get<{ success: boolean; data: AddressSuggestion[] }>(`${environment.apiUrl}/address/autocomplete`, { params: { q: query } }).pipe(
+          catchError(() => of({ success: false, data: [] as AddressSuggestion[] }))
+        ).pipe(
+          switchMap(response => {
+            const results = response.data || [];
+            this.addressSuggestions[key] = results;
+            this.activeAutocompleteKey = results.length > 0 ? key : null;
+            return of(null);
+          })
+        )
+      )
+    ).subscribe();
+
+    // FN-548: Load existing draft so form state survives page reloads
+    this.loadExistingDraft();
+
     // Autosave every 20s
     this.autosaveSub = timer(20000, 20000).subscribe(() => this.autosave());
   }
 
   ngOnDestroy() {
     if (this.autosaveSub) this.autosaveSub.unsubscribe();
+    if (this.autocompleteSub) this.autocompleteSub.unsubscribe();
+  }
+
+  @HostListener('document:click', ['$event'])
+  onDocumentClick(event: Event) {
+    if (!this.elRef.nativeElement.contains(event.target)) {
+      this.dismissAutocomplete();
+    }
+  }
+
+  // === Address Autocomplete ===
+  onAddressInput(key: string, event: Event) {
+    const query = (event.target as HTMLInputElement).value;
+    if (query.length < 3) {
+      this.addressSuggestions[key] = [];
+      if (this.activeAutocompleteKey === key) this.activeAutocompleteKey = null;
+      return;
+    }
+    this.addressInput$.next({ key, query });
+  }
+
+  selectSuggestion(key: string, suggestion: AddressSuggestion, formGroup: FormGroup, fieldMap: { street: string; city: string; state: string; zip: string }) {
+    formGroup.patchValue({
+      [fieldMap.street]: suggestion.street,
+      [fieldMap.city]: suggestion.city,
+      [fieldMap.state]: suggestion.state,
+      [fieldMap.zip]: suggestion.zip
+    });
+    this.addressSuggestions[key] = [];
+    this.activeAutocompleteKey = null;
+  }
+
+  onAddressKeydown(key: string, event: KeyboardEvent) {
+    if (event.key === 'Escape') {
+      this.addressSuggestions[key] = [];
+      this.activeAutocompleteKey = null;
+    }
+  }
+
+  dismissAutocomplete() {
+    this.activeAutocompleteKey = null;
+    this.addressSuggestions = {};
   }
 
   // === Form Array Getters ===
@@ -196,27 +291,234 @@ export class EmploymentApplicationComponent implements OnInit, OnDestroy {
     }
   }
 
-  // === SSN Masking ===
-  onSsnInput(event: Event) {
-    const input = event.target as HTMLInputElement;
-    // Strip non-digits
-    const digits = input.value.replace(/\D/g, '').slice(0, 9);
-    this.ssnRawValue = digits;
+  // === FN-548: Load Existing Draft ===
+  // On page reload, fetch the most recent draft for this driver and restore form state.
+  private loadExistingDraft(): void {
+    if (!this.driverId) return;
 
-    // Format as XXX-XX-XXXX
-    let formatted = '';
-    if (digits.length > 5) {
-      formatted = `***-**-${digits.slice(5)}`;
-    } else if (digits.length > 3) {
-      formatted = `***-${digits.slice(3, 5).replace(/./g, '*')}-${digits.slice(5)}`;
-    } else {
-      formatted = digits.replace(/./g, '*');
+    this.api.getByDriver(this.driverId).pipe(take(1)).subscribe({
+      next: (apps: Array<{ id: string; status: string; applicant_snapshot: Record<string, unknown> }>) => {
+        if (!apps || !apps.length) return;
+        // Pick the most recent draft (backend returns ordered by created_at desc)
+        const draft = apps.find((a: { status: string }) => a.status === 'draft') || apps[0];
+        if (!draft || draft.status === 'submitted_completed') {
+          // Already submitted — mark as submitted so the form stays read-only
+          this.submitted = true;
+          return;
+        }
+        this.applicationId = draft.id;
+        this.restoreFormFromDraft(draft);
+      },
+      error: () => {
+        // Silently ignore — form starts empty for manual entry
+      }
+    });
+  }
+
+  private restoreFormFromDraft(draft: Record<string, unknown>): void {
+    const snapshot = (draft['applicant_snapshot'] || {}) as Record<string, unknown>;
+
+    // Restore applicant info
+    const applicant = this.form.get('applicant');
+    if (applicant && snapshot) {
+      applicant.patchValue({
+        firstName: snapshot['firstName'] || '',
+        middleName: snapshot['middleName'] || '',
+        lastName: snapshot['lastName'] || '',
+        phone: snapshot['phone'] || '',
+        email: snapshot['email'] || '',
+        dateOfBirth: snapshot['dateOfBirth'] || '',
+        ssn: snapshot['ssn'] ? '***masked***' : '',
+        positionAppliedFor: snapshot['positionAppliedFor'] || '',
+        dateOfApplication: snapshot['dateOfApplication'] || ''
+      }, { emitEvent: false });
+
+      // Restore raw SSN for masking display
+      if (snapshot['ssn']) {
+        this.ssnRawValue = snapshot['ssn'] as string;
+        applicant.get('ssn')?.setValue(this.ssnRawValue, { emitEvent: false });
+      }
     }
 
-    // Show masked version
-    this.ssnMasked = formatted;
-    // Store full SSN in form (will be masked on display but stored fully)
-    this.form.get('applicant.ssn')?.setValue(digits, { emitEvent: false });
+    // Restore work authorization
+    const wa = snapshot['workAuthorization'] as Record<string, unknown> | null;
+    if (wa) {
+      this.form.get('workAuthorization')?.patchValue(wa, { emitEvent: false });
+    }
+
+    // Restore drug/alcohol
+    const da = snapshot['drugAlcohol'] as Record<string, unknown> | null;
+    if (da) {
+      this.form.get('drugAlcohol')?.patchValue(da, { emitEvent: false });
+    }
+
+    // Restore accidents/violations flags
+    if (snapshot['hasAccidents']) {
+      this.form.get('hasAccidents')?.setValue(snapshot['hasAccidents'], { emitEvent: false });
+    }
+    if (snapshot['hasViolations']) {
+      this.form.get('hasViolations')?.setValue(snapshot['hasViolations'], { emitEvent: false });
+    }
+
+    // Restore licenses from draft snapshot
+    const savedLicenses = (snapshot['licenses'] || draft['licenses'] || []) as any[];
+    if (Array.isArray(savedLicenses) && savedLicenses.length > 0) {
+      this.licenses.clear();
+      for (const lic of savedLicenses) {
+        this.licenses.push(this.fb.group({
+          state: [lic.state || '', Validators.required],
+          licenseNumber: [lic.licenseNumber || lic.license_number || '', Validators.required],
+          type: [lic.type || 'CDL-A', Validators.required],
+          expirationDate: [lic.expirationDate || lic.expiration_date || '', Validators.required]
+        }));
+      }
+    }
+
+    // Re-sync certification fields after restoring form data
+    this.syncCertificationNow();
+  }
+
+  // === FN-535: Certification Auto-Population ===
+  // Reactively mirrors applicant + license data into the certification section
+  // so drivers don't have to re-type information already entered above.
+  private setupCertificationSync(): void {
+    const cert = this.form.get('certification');
+    if (!cert) return;
+
+    const buildFullName = () => {
+      const a = this.form.get('applicant')?.value || {};
+      return [a.firstName, a.middleName, a.lastName].filter(Boolean).join(' ');
+    };
+
+    // Sync full name to applicantPrintedName and applicantSignature
+    ['applicant.firstName', 'applicant.middleName', 'applicant.lastName'].forEach(field => {
+      this.form.get(field)?.valueChanges.subscribe(() => {
+        const name = buildFullName();
+        cert.get('applicantPrintedName')?.setValue(name, { emitEvent: false });
+        cert.get('applicantSignature')?.setValue(name, { emitEvent: false });
+      });
+    });
+
+    // Sync DOB
+    this.form.get('applicant.dateOfBirth')?.valueChanges.subscribe(dob => {
+      cert.get('dateOfBirth')?.setValue(dob || '', { emitEvent: false });
+    });
+
+    // Sync license number + state from first license row
+    // Watch the entire licenses FormArray — whenever any value changes,
+    // sync first license's data to certification fields
+    this.licenses.valueChanges.subscribe((licArray: any[]) => {
+      if (licArray && licArray.length > 0) {
+        const first = licArray[0];
+        cert.get('driversLicenseNumber')?.setValue(first.licenseNumber || '', { emitEvent: false });
+        cert.get('stateOfIssue')?.setValue(first.state || '', { emitEvent: false });
+      }
+    });
+
+    // SSN Last 4 — subscribe to applicant.ssn changes AND handle emitEvent:false
+    // by also syncing directly in onSsnInput() (see line ~516)
+    this.form.get('applicant.ssn')?.valueChanges.subscribe(() => {
+      const last4 = this.ssnRawValue.slice(-4);
+      cert.get('ssnLast4')?.setValue(last4 || '', { emitEvent: false });
+    });
+
+    // Immediate one-time sync so values already in the form populate cert
+    this.syncCertificationNow();
+  }
+
+  // FN-546: one-time snapshot of current form values into the certification section
+  private syncCertificationNow(): void {
+    const cert = this.form.get('certification');
+    if (!cert) return;
+    const a = this.form.get('applicant')?.value || {};
+    const name = [a.firstName, a.middleName, a.lastName].filter(Boolean).join(' ');
+    if (name) {
+      cert.get('applicantPrintedName')?.setValue(name, { emitEvent: false });
+      cert.get('applicantSignature')?.setValue(name, { emitEvent: false });
+    }
+    if (a.dateOfBirth) {
+      cert.get('dateOfBirth')?.setValue(a.dateOfBirth, { emitEvent: false });
+    }
+    const last4 = this.ssnRawValue.slice(-4);
+    if (last4) {
+      cert.get('ssnLast4')?.setValue(last4, { emitEvent: false });
+    }
+    const lic = this.licenses.at(0) as FormGroup | undefined;
+    if (lic?.get('licenseNumber')?.value) {
+      cert.get('driversLicenseNumber')?.setValue(lic.get('licenseNumber')!.value, { emitEvent: false });
+    }
+    if (lic?.get('state')?.value) {
+      cert.get('stateOfIssue')?.setValue(lic.get('state')!.value, { emitEvent: false });
+    }
+  }
+
+  // === License Pre-fill (FN-532: use public endpoint, not auth-protected) ===
+  private prefillLicenseFromDriver(): void {
+    if (!this.packetId || !this.packetToken) return;
+
+    const publicBase = environment.apiUrl.replace(/\/api\/?$/, '/public/onboarding');
+    this.http.get<{ licenseNumber?: string; licenseState?: string }>(
+      `${publicBase}/${this.packetId}/license`,
+      { params: { token: this.packetToken } }
+    ).pipe(take(1)).subscribe({
+      next: (data) => {
+        if (!data) return;
+
+        const firstLicense = this.licenses.at(0) as FormGroup | undefined;
+        if (!firstLicense) return;
+
+        if (data.licenseNumber && !firstLicense.get('licenseNumber')?.value) {
+          firstLicense.get('licenseNumber')?.setValue(data.licenseNumber);
+        }
+        if (data.licenseState && !firstLicense.get('state')?.value) {
+          firstLicense.get('state')?.setValue(data.licenseState);
+        }
+        // FN-546: re-sync certification after license prefill so DL# and State populate
+        this.syncCertificationNow();
+      },
+      error: () => {
+        // Silently skip — section remains blank for manual entry
+      }
+    });
+  }
+
+  // === SSN Masking ===
+  // FN-531: [value]="getSsnDisplay()" was removed from the template — Angular's one-way
+  // property binding resets input.value on every CD cycle, fighting the browser and causing
+  // each keypress to appear to wipe the field. We now own the DOM value entirely here.
+  onSsnInput(event: Event) {
+    const input = event.target as HTMLInputElement;
+    const raw = input.value;
+
+    // Each '*' in the display represents a preserved hidden digit from ssnRawValue.
+    // Count '*' chars (= number of masked prefix digits to keep), then extract only
+    // the visible (non-mask, non-dash) digit chars typed by the user.
+    const maskCount = (raw.match(/\*/g) ?? []).length;
+    const visibleDigits = raw.replace(/[^\d]/g, '');
+
+    if (maskCount > 0) {
+      // Preserve the first `maskCount` raw digits; append newly-typed visible digits
+      const preservedPrefix = this.ssnRawValue.slice(0, maskCount);
+      this.ssnRawValue = (preservedPrefix + visibleDigits).slice(0, 9);
+    } else {
+      // No mask chars — user cleared the field or pasted plain digits
+      this.ssnRawValue = visibleDigits.slice(0, 9);
+    }
+
+    // Store sanitised value in form control
+    this.form.get('applicant.ssn')?.setValue(this.ssnRawValue, { emitEvent: false });
+
+    // FN-535: Keep certification.ssnLast4 in sync
+    this.form.get('certification.ssnLast4')?.setValue(
+      this.ssnRawValue.length >= 4 ? this.ssnRawValue.slice(-4) : '',
+      { emitEvent: false }
+    );
+
+    // FN-531: Imperatively update the input display value so Angular CD never touches it.
+    // Place cursor at end — standard behaviour for a masked SSN field.
+    const display = this.getSsnDisplay();
+    input.value = display;
+    input.setSelectionRange(display.length, display.length);
   }
 
   getSsnDisplay(): string {
@@ -398,6 +700,7 @@ export class EmploymentApplicationComponent implements OnInit, OnDestroy {
   buildPayload() {
     const v = this.form.value;
     return {
+      operatingEntityId: this.oeContext.getSelectedOperatingEntityId(),
       applicantSnapshot: {
         ...v.applicant,
         ssn: this.ssnRawValue // store full SSN
@@ -450,11 +753,32 @@ export class EmploymentApplicationComponent implements OnInit, OnDestroy {
       if (this.applicationId) {
         await this.api.submit(this.applicationId).toPromise();
         this.submitted = true;
+        this.storeSessionDataForConsentForms();
       }
     } catch (e: any) {
       alert('Submission failed: ' + (e?.error?.error || e?.message || 'Unknown error'));
     } finally {
       this.submitting = false;
+    }
+  }
+
+  private storeSessionDataForConsentForms(): void {
+    try {
+      const applicant = this.form.get('applicant')?.value || {};
+      const licenses = this.form.get('licenses') as FormArray;
+      const firstLicense = licenses?.length > 0 ? licenses.at(0).value : {};
+
+      const sessionData = {
+        fullName: `${applicant.firstName || ''} ${applicant.middleName || ''} ${applicant.lastName || ''}`.replace(/\s+/g, ' ').trim(),
+        dateOfBirth: applicant.dateOfBirth || '',
+        ssnLast4: (this.ssnRawValue || '').slice(-4),
+        driversLicenseNumber: firstLicense.licenseNumber || '',
+        stateOfIssue: firstLicense.state || ''
+      };
+
+      sessionStorage.setItem('fn_onboarding_applicant', JSON.stringify(sessionData));
+    } catch {
+      // Silently ignore if sessionStorage is unavailable
     }
   }
 }

@@ -44,12 +44,31 @@ The argument is the Jira key (e.g., `FN-42`).
 - Branch: `<agent>/$ARGS/<slug>` (use subtask key, not parent story key)
 - Scope work to subtask acceptance criteria only
 
-### 3. Create Branch
+### 3. Create Branch (in an isolated worktree)
+
+Every agent MUST work in its own `git worktree`. Never run `git checkout -b` in a shared working tree — that's how parallel agents collide and lose changes.
+
+**Determine the base branch:**
+- **Story without subtasks**: base is `origin/dev`
+- **Subtask under a story with subtasks**: base is `origin/integration/FN-PARENT`
+
+**Ensure the integration branch exists (subtask path only):**
 ```
-git fetch origin dev
-git checkout -b <agent>/$ARGS/<slug> origin/dev
+git fetch origin
+if ! git rev-parse --verify origin/integration/FN-PARENT >/dev/null 2>&1; then
+  # First subtask agent — create the integration branch from current dev tip
+  git push origin origin/dev:refs/heads/integration/FN-PARENT
+  git fetch origin integration/FN-PARENT
+fi
 ```
-Where `<agent>` matches the label (`frontend`, `backend`, `ai`, `database`, `devops`, `qa`) and `<slug>` is a short kebab-case description.
+
+**Create the worktree + branch:**
+```
+git worktree add .claude/worktrees/$ARGS -b <agent>/$ARGS/<slug> origin/<base>
+cd .claude/worktrees/$ARGS
+```
+
+Where `<agent>` matches the label (`frontend`, `backend`, `ai`, `database`, `devops`, `qa`), `<slug>` is a short kebab-case description, and `<base>` is `dev` (no-subtask story) or `integration/FN-PARENT` (subtask).
 
 ### 4. Move to In Progress
 - Transition the Jira issue to "In Progress" using `transitionJiraIssue` (transition ID `31`)
@@ -90,11 +109,36 @@ Stage and commit changes with message: `[$ARGS] <description>`
 
 ### 9. Handle Subtask Completion
 **If Subtask:**
-- Push the branch: `git push -u origin HEAD`
-- Transition the subtask to "Done" in Jira (transition ID `41`)
-- Check sibling subtasks (other subtasks under the same parent story):
-  - If ALL sibling subtasks are Done: print "All subtasks complete. Run `/create-pr FN-PARENT` to merge and create the story PR."
-  - If some remain: print "Subtask FN-XXX done. Remaining: FN-YYY (status), FN-ZZZ (status)"
+
+1. **Push the subtask branch:**
+   ```
+   git push -u origin HEAD
+   ```
+
+2. **Integrate into the integration branch (rebase + ff-merge):**
+   ```
+   git fetch origin integration/FN-PARENT
+   git rebase origin/integration/FN-PARENT
+   ```
+   - If rebase has conflicts: resolve them (you wrote this code — you have full context). Re-run tests/build after resolution.
+   - If conflicts are too tangled to safely resolve: STOP, push WIP, and report to user.
+
+   ```
+   git push --force-with-lease origin HEAD
+   git fetch origin integration/FN-PARENT
+   git checkout -B integration/FN-PARENT origin/integration/FN-PARENT
+   git merge --ff-only <agent>/$ARGS/<slug>
+   git push origin integration/FN-PARENT
+   git checkout <agent>/$ARGS/<slug>
+   ```
+
+   The `--ff-only` is intentional: the rebase guarantees a fast-forward, so any non-ff outcome means something went wrong (concurrent push) and you must re-fetch and retry.
+
+3. **Transition the subtask to "Done"** in Jira (transition ID `41`).
+
+4. **Check sibling subtasks** (other subtasks under the same parent story):
+   - If ALL sibling subtasks are Done: print "All subtasks complete. Run `/create-pr FN-PARENT` to open the integration-branch PR."
+   - If some remain: print "Subtask FN-XXX done, integrated into integration/FN-PARENT. Remaining: FN-YYY (status), FN-ZZZ (status)"
 
 ### 10. Output
 Print:

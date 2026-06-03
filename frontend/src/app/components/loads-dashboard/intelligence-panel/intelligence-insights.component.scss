@@ -1,0 +1,121 @@
+:host {
+  display: block;
+}
+
+.intel-insights {
+  padding: 12px 14px;
+  background: rgba(15, 23, 42, 0.72);
+  border: 1px solid rgba(71, 85, 105, 0.55);
+  border-radius: 12px;
+  color: #e2e8f0;
+}
+
+.intel-insights__header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.intel-insights__header-icon {
+  color: #a78bfa;
+  font-size: 18px;
+}
+
+.intel-insights__title {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: rgba(203, 213, 225, 0.9);
+}
+
+.intel-insights__spinner {
+  margin-left: auto;
+  width: 12px;
+  height: 12px;
+  border: 2px solid rgba(148, 163, 184, 0.35);
+  border-top-color: #38bdf8;
+  border-radius: 50%;
+  animation: intelSpin 0.8s linear infinite;
+}
+
+@keyframes intelSpin {
+  to { transform: rotate(360deg); }
+}
+
+/* ─── List ────────────────────────────────────────────────────────────────── */
+
+.intel-insights__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.intel-insights__item {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  background: rgba(30, 41, 59, 0.75);
+  border: 1px solid rgba(71, 85, 105, 0.55);
+  border-left-width: 3px;
+  border-radius: 8px;
+  transition: background 0.15s ease, border-color 0.15s ease;
+
+  &[data-severity="info"]     { border-left-color: #38bdf8; }
+  &[data-severity="warn"]     { border-left-color: #f59e0b; }
+  &[data-severity="critical"] { border-left-color: #ef4444; }
+
+  &:hover { background: rgba(51, 65, 85, 0.7); }
+}
+
+.intel-insights__icon {
+  font-size: 20px;
+  color: #94a3b8;
+  margin-top: 2px;
+}
+
+.intel-insights__item[data-severity="warn"]     .intel-insights__icon { color: #f59e0b; }
+.intel-insights__item[data-severity="critical"] .intel-insights__icon { color: #ef4444; }
+
+.intel-insights__title-link {
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: #f1f5f9;
+  line-height: 1.35;
+  text-decoration: none;
+  /* FN-1353: was an <a>; now a <button> — strip default UA chrome and align
+     left so the click target reads identically to the previous link. */
+  background: transparent;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  text-align: left;
+
+  &:hover { color: #38bdf8; text-decoration: underline; }
+}
+
+/* ─── Empty / loading states ──────────────────────────────────────────────── */
+
+.intel-insights__empty {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 2px;
+  font-size: 13px;
+  color: rgba(148, 163, 184, 0.9);
+
+  .material-symbols-outlined {
+    color: #22c55e;
+    font-size: 18px;
+  }
+
+  &--loading { font-style: italic; }
+}

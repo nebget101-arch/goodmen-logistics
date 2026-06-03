@@ -1,0 +1,54 @@
+<div class="loads-empty" [attr.data-mode]="mode" role="status" aria-live="polite">
+  <div class="loads-empty__icon-ring">
+    <span class="material-symbols-outlined loads-empty__icon">{{ iconName }}</span>
+  </div>
+
+  <h3 class="loads-empty__headline">{{ headline }}</h3>
+  <p class="loads-empty__subtext">{{ subtext }}</p>
+
+  <p class="loads-empty__detail" *ngIf="mode === 'api-error' && errorDetail">{{ errorDetail }}</p>
+
+  <div class="loads-empty__actions">
+    <ng-container [ngSwitch]="mode">
+      <!-- Filtered empty -->
+      <ng-container *ngSwitchCase="'filtered'">
+        <button type="button" class="loads-empty__btn loads-empty__btn--primary" (click)="onClearFilters()">
+          <span class="material-symbols-outlined">filter_alt_off</span>
+          Clear filters
+        </button>
+      </ng-container>
+
+      <!-- Tenant with zero loads -->
+      <ng-container *ngSwitchCase="'no-loads'">
+        <button type="button" class="loads-empty__btn loads-empty__btn--primary" (click)="onCreateLoad()">
+          <span class="material-symbols-outlined">add</span>
+          Create your first load
+        </button>
+        <button type="button" class="loads-empty__btn loads-empty__btn--secondary" (click)="onImportFromPdf()">
+          <span class="material-symbols-outlined">upload_file</span>
+          Import from PDF
+        </button>
+      </ng-container>
+
+      <!-- Smart-filter empty (celebration variant) -->
+      <ng-container *ngSwitchCase="'smart-filter-celebrate'">
+        <button type="button" class="loads-empty__btn loads-empty__btn--ghost" (click)="onClearFilters()">
+          Show all loads
+        </button>
+      </ng-container>
+
+      <!-- API failure -->
+      <ng-container *ngSwitchCase="'api-error'">
+        <button type="button" class="loads-empty__btn loads-empty__btn--primary" (click)="onRetry()">
+          <span class="material-symbols-outlined">refresh</span>
+          Try again
+        </button>
+      </ng-container>
+
+      <!-- Permission denied -->
+      <ng-container *ngSwitchCase="'permission-denied'">
+        <!-- intentional: no action — requires an admin -->
+      </ng-container>
+    </ng-container>
+  </div>
+</div>

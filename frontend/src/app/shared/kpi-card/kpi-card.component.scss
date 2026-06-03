@@ -1,0 +1,132 @@
+/* FN-1636 kpi-card. Colors are rgba() drawn from the documented dark-theme
+   palette (see docs/AI_THEME_VISUAL_REFERENCE.md) — no new hex literals. */
+:host {
+  display: block;
+}
+
+.kpi-card {
+  position: relative;
+  display: block;
+  overflow: hidden;
+  border-radius: 14px;
+  padding: 14px 16px 14px 18px;
+  background:
+    radial-gradient(circle at 0% 0%, rgba(45, 212, 191, 0.08), transparent 45%),
+    rgba(15, 23, 42, 0.95);
+  border: 1px solid rgba(51, 65, 85, 0.9);
+  box-shadow: 0 16px 35px rgba(2, 6, 23, 0.55);
+  color: rgba(226, 232, 240, 1);
+  text-decoration: none;
+  transition: transform 120ms ease, box-shadow 150ms ease, border-color 150ms ease;
+}
+
+/* Left accent strip — 3px, colored by status. */
+.kpi-accent {
+  position: absolute;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  width: 3px;
+  border-radius: 14px 0 0 14px;
+}
+
+.kpi-label {
+  margin: 0 0 6px;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: rgba(148, 163, 184, 1);
+}
+
+.kpi-value {
+  margin: 0;
+  font-size: 1.8rem;
+  font-weight: 700;
+  line-height: 1.1;
+  color: rgba(248, 250, 252, 1);
+}
+
+.kpi-subline {
+  margin: 6px 0 0;
+  font-size: 0.8rem;
+  color: rgba(148, 163, 184, 1);
+}
+
+.kpi-trend {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 10px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  border: 1px solid rgba(51, 65, 85, 0.9);
+}
+
+.kpi-trend-icon {
+  font-size: 1rem;
+  line-height: 1;
+}
+
+.kpi-trend[data-direction='up'] {
+  color: rgba(134, 239, 172, 1);
+  border-color: rgba(34, 197, 94, 0.5);
+}
+
+.kpi-trend[data-direction='down'] {
+  color: rgba(252, 165, 165, 1);
+  border-color: rgba(248, 113, 113, 0.5);
+}
+
+.kpi-trend[data-direction='flat'] {
+  color: rgba(148, 163, 184, 1);
+}
+
+/* Interactive (link) cards lift + glow on hover/focus. */
+.kpi-card.is-link {
+  cursor: pointer;
+}
+
+.kpi-card.is-link:hover,
+.kpi-card.is-link:focus-visible {
+  transform: translateY(-1px);
+  outline: none;
+}
+
+/* ── Status color map ──────────────────────────────────────────────── */
+.kpi-card[data-status='good'] .kpi-accent {
+  background: rgba(34, 197, 94, 0.9);
+}
+.kpi-card[data-status='good'].is-link:hover,
+.kpi-card[data-status='good'].is-link:focus-visible {
+  border-color: rgba(34, 197, 94, 0.6);
+  box-shadow: 0 0 0 1px rgba(34, 197, 94, 0.4), 0 8px 22px rgba(34, 197, 94, 0.25);
+}
+
+.kpi-card[data-status='info'] .kpi-accent {
+  background: rgba(56, 189, 248, 0.9);
+}
+.kpi-card[data-status='info'].is-link:hover,
+.kpi-card[data-status='info'].is-link:focus-visible {
+  border-color: rgba(56, 189, 248, 0.6);
+  box-shadow: 0 0 0 1px rgba(56, 189, 248, 0.4), 0 8px 22px rgba(56, 189, 248, 0.25);
+}
+
+.kpi-card[data-status='warning'] .kpi-accent {
+  background: rgba(217, 119, 6, 0.95);
+}
+.kpi-card[data-status='warning'].is-link:hover,
+.kpi-card[data-status='warning'].is-link:focus-visible {
+  border-color: rgba(217, 119, 6, 0.6);
+  box-shadow: 0 0 0 1px rgba(217, 119, 6, 0.4), 0 8px 22px rgba(217, 119, 6, 0.25);
+}
+
+.kpi-card[data-status='critical'] .kpi-accent {
+  background: rgba(239, 68, 68, 0.95);
+}
+.kpi-card[data-status='critical'].is-link:hover,
+.kpi-card[data-status='critical'].is-link:focus-visible {
+  border-color: rgba(248, 113, 113, 0.6);
+  box-shadow: 0 0 0 1px rgba(248, 113, 113, 0.4), 0 8px 22px rgba(248, 113, 113, 0.25);
+}

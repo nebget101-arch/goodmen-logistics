@@ -540,3 +540,173 @@
 .vehicle-form-modal app-ai-select .mat-mdc-select-placeholder {
   text-align: center;
 }
+
+/* FN-496: Equipment Owner field hint */
+.vehicle-form-modal .field-hint {
+  display: block;
+  margin-top: 4px;
+  font-size: 11px;
+  color: rgba(148, 163, 184, 0.8);
+  line-height: 1.4;
+}
+
+/* ============================================================
+   FN-1387: Ownership Type segmented control + conditional fields
+   ============================================================ */
+
+.vehicle-form-modal .ownership-section {
+  background: rgba(15, 23, 42, 0.55);
+  border: 1px solid rgba(56, 189, 248, 0.22);
+  border-radius: 12px;
+  padding: 16px 18px 18px;
+}
+
+.vehicle-form-modal .ownership-segmented {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  background: rgba(2, 6, 23, 0.55);
+  border: 1px solid rgba(51, 65, 85, 0.85);
+  border-radius: 12px;
+  padding: 6px;
+  margin-bottom: 14px;
+}
+
+.vehicle-form-modal .ownership-seg-btn {
+  appearance: none;
+  border: 1px solid transparent;
+  background: transparent;
+  color: rgba(203, 213, 225, 0.85);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: 9px;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  transition: background 0.18s ease, color 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
+}
+
+.vehicle-form-modal .ownership-seg-btn .material-symbols-outlined {
+  font-size: 18px;
+}
+
+.vehicle-form-modal .ownership-seg-btn:hover:not(.active) {
+  background: rgba(56, 189, 248, 0.10);
+  color: #e2e8f0;
+}
+
+.vehicle-form-modal .ownership-seg-btn.active {
+  background: radial-gradient(circle at 0 0, rgba(56, 189, 248, 0.32), transparent 60%),
+    rgba(14, 116, 144, 0.55);
+  border-color: rgba(56, 189, 248, 0.7);
+  color: #f1f5f9;
+  box-shadow: 0 0 0 2px rgba(14, 165, 233, 0.18), 0 6px 18px rgba(14, 116, 144, 0.35);
+}
+
+.vehicle-form-modal .ownership-seg-btn:focus-visible {
+  outline: none;
+  border-color: rgba(56, 189, 248, 0.85);
+  box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.3);
+}
+
+.vehicle-form-modal .ownership-fields {
+  margin-top: 4px;
+  padding-top: 12px;
+  border-top: 1px dashed rgba(56, 189, 248, 0.18);
+}
+
+.vehicle-form-modal .ownership-fields .form-row {
+  margin-bottom: 0;
+}
+
+/* Equipment owner typeahead — anchor dropdown to the search field */
+.vehicle-form-modal .equipment-owner-group {
+  position: relative;
+}
+
+.vehicle-form-modal .equipment-owner-group .type-dropdown {
+  z-index: 20;
+}
+
+.vehicle-form-modal .equipment-owner-group .type-option .material-symbols-outlined {
+  font-size: 16px;
+  color: #7dd3fc;
+}
+
+/* ============================================================
+   FN-1387: Trailer Details accordion
+   ============================================================ */
+
+.vehicle-form-modal .trailer-accordion {
+  border: 1px solid rgba(148, 163, 184, 0.3);
+  border-radius: 12px;
+  background: rgba(15, 23, 42, 0.4);
+  margin-bottom: 24px;
+  overflow: hidden;
+}
+
+.vehicle-form-modal .trailer-accordion .accordion-header {
+  appearance: none;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: transparent;
+  border: 0;
+  padding: 12px 16px;
+  cursor: pointer;
+  color: rgba(203, 213, 225, 0.95);
+  text-align: left;
+  transition: background 0.18s ease;
+}
+
+.vehicle-form-modal .trailer-accordion .accordion-header:hover {
+  background: rgba(56, 189, 248, 0.08);
+}
+
+.vehicle-form-modal .trailer-accordion .accordion-header .material-symbols-outlined {
+  font-size: 20px;
+  color: #7dd3fc;
+}
+
+.vehicle-form-modal .trailer-accordion .accordion-title {
+  flex: 1;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  font-size: 14px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: inherit;
+}
+
+.vehicle-form-modal .trailer-accordion .accordion-chevron {
+  transition: transform 0.2s ease;
+}
+
+.vehicle-form-modal .trailer-accordion .accordion-chevron.open {
+  transform: rotate(180deg);
+}
+
+.vehicle-form-modal .trailer-accordion .accordion-body {
+  padding: 16px 16px 8px;
+  border-top: 1px solid rgba(148, 163, 184, 0.18);
+}
+
+.vehicle-form-modal .trailer-accordion .trailer-type-group {
+  position: relative;
+}
+
+@media (max-width: 768px) {
+  .vehicle-form-modal .ownership-segmented {
+    grid-template-columns: 1fr;
+  }
+  .vehicle-form-modal .ownership-section {
+    padding: 12px;
+  }
+}

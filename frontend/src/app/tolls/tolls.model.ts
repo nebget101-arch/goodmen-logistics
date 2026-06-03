@@ -192,6 +192,12 @@ export interface ExtractedTollTransaction {
   plate_unmatched?: boolean;
   /** Set by the AI if a similar existing transaction was found */
   possible_duplicate?: boolean;
+  /** True when overall extraction confidence is below threshold; renders a "Verify" badge */
+  low_confidence?: boolean;
+  city?: string;
+  state?: string;
+  external_transaction_id?: string;
+  notes?: string;
 }
 
 /** A single file result from the invoice extraction endpoint */

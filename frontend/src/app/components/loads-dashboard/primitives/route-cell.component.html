@@ -1,0 +1,9 @@
+<span class="route-cell" [attr.aria-label]="'Route: ' + format(pickup) + ' to ' + format(delivery)">
+  <span class="route-cell__endpoint route-cell__endpoint--pickup" [title]="format(pickup)">
+    {{ format(pickup) }}
+  </span>
+  <span class="material-symbols-outlined route-cell__arrow" aria-hidden="true">arrow_forward</span>
+  <span class="route-cell__endpoint route-cell__endpoint--delivery" [title]="format(delivery)">
+    {{ format(delivery) }}
+  </span>
+</span>

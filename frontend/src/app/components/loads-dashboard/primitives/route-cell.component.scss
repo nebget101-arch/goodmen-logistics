@@ -1,0 +1,50 @@
+/* FN-1353: Route cell — Pickup → Delivery in a single cell.
+   Tokens-only. No hex literals introduced. */
+
+.route-cell {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  max-width: 100%;
+  font-size: 0.85rem;
+  color: var(--ai-text-body);
+  flex-wrap: wrap;
+}
+
+.route-cell__endpoint {
+  display: inline-block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
+.route-cell__endpoint--pickup {
+  color: var(--ai-text-strong);
+}
+
+.route-cell__endpoint--delivery {
+  color: var(--ai-text-soft);
+}
+
+.route-cell__arrow {
+  flex-shrink: 0;
+  font-size: 1rem;
+  color: var(--ai-accent-cyan);
+  opacity: 0.85;
+}
+
+@media (max-width: 600px) {
+  .route-cell {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 2px;
+  }
+
+  .route-cell__arrow {
+    transform: rotate(90deg);
+  }
+}

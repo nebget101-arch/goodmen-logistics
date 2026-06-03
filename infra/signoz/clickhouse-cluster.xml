@@ -1,0 +1,22 @@
+<clickhouse>
+    <!-- Single-node cluster definition required by SigNoz OTel Collector.
+         The collector runs CREATE TABLE ... ON CLUSTER cluster DDL.
+         This satisfies that requirement without a real multi-node cluster. -->
+    <remote_servers>
+        <cluster>
+            <shard>
+                <internal_replication>false</internal_replication>
+                <replica>
+                    <host>localhost</host>
+                    <port>9000</port>
+                </replica>
+            </shard>
+        </cluster>
+    </remote_servers>
+
+    <macros>
+        <cluster>cluster</cluster>
+        <shard>01</shard>
+        <replica>cluster-01-01</replica>
+    </macros>
+</clickhouse>

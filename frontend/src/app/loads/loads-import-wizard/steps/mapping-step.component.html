@@ -1,0 +1,72 @@
+<div class="li-step-panel">
+  <div class="li-step-heading">
+    <h2>Map Columns</h2>
+    <p>Match each FleetNeuron field to a column from your file. <span class="li-req-badge">Required</span> fields must be mapped.</p>
+  </div>
+
+  <div class="li-pattern-toggle">
+    <div class="li-pattern-label">
+      <strong>Multi-stop pattern</strong>
+      Choose <em>Multi-row</em> when each stop appears on its own row, or <em>Extra columns</em> when extra stops are encoded as additional columns.
+    </div>
+    <div class="li-pattern-pills">
+      <button type="button"
+              [class.active]="localPattern === 'single'"
+              (click)="setPattern('single')">Single</button>
+      <button type="button"
+              [class.active]="localPattern === 'multi_row'"
+              (click)="setPattern('multi_row')">Multi-row</button>
+      <button type="button"
+              [class.active]="localPattern === 'extra_columns'"
+              (click)="setPattern('extra_columns')">Extra columns</button>
+      <button type="button"
+              [class.active]="localPattern === 'free_text'"
+              (click)="setPattern('free_text')">Free-text</button>
+    </div>
+  </div>
+
+  <div class="li-map-grid">
+    <ng-container *ngFor="let group of groupedFields">
+      <div class="li-map-group-title">{{ group.title }}</div>
+      <div *ngFor="let f of group.items" class="li-map-row">
+        <div class="li-map-field-info">
+          <span class="li-map-field-name">{{ f.label }}</span>
+          <span class="li-req-badge" *ngIf="f.required">req</span>
+          <span class="li-opt-badge" *ngIf="!f.required">opt</span>
+          <span class="li-confidence-badge"
+                *ngIf="columnMapping && columnMapping[f.key]"
+                [ngClass]="confidenceClass(f.key)"
+                [title]="'AI confidence'">
+            {{ confidenceLabel(f.key) }}
+          </span>
+        </div>
+        <div class="li-map-arrow">
+          <span class="material-symbols-outlined">arrow_forward</span>
+        </div>
+        <app-ai-select class="li-map-select"
+                       [(ngModel)]="localMap[f.key]"
+                       [options]="headerOptions"
+                       [allowEmpty]="true"
+                       emptyLabel="— Skip —"
+                       [placeholder]="'Map column'">
+        </app-ai-select>
+        <span class="li-map-status-icon material-symbols-outlined" *ngIf="localMap[f.key]">check_circle</span>
+        <span class="li-map-status-icon warn material-symbols-outlined" *ngIf="!localMap[f.key] && f.required">error</span>
+      </div>
+    </ng-container>
+  </div>
+
+  <div class="li-map-warnings" *ngIf="requiredUnmapped.length > 0">
+    <span class="material-symbols-outlined">warning</span>
+    Still required: <strong>{{ requiredUnmapped.join(', ') }}</strong>
+  </div>
+
+  <div class="li-step-footer">
+    <button type="button" class="li-btn-ghost" (click)="onBack()">
+      <span class="material-symbols-outlined">arrow_back</span> Back
+    </button>
+    <button type="button" class="li-btn-primary" (click)="onNext()" [disabled]="!canProceed">
+      Validate Rows <span class="material-symbols-outlined">arrow_forward</span>
+    </button>
+  </div>
+</div>

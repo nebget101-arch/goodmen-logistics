@@ -1,0 +1,125 @@
+.ksh-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 2000;
+  background: rgba(2, 6, 23, 0.72);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+
+.ksh-modal {
+  background: rgba(15, 23, 42, 0.98);
+  border: 1px solid rgba(59, 130, 246, 0.4);
+  border-radius: 12px;
+  min-width: 360px;
+  max-width: 560px;
+  width: 100%;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.55);
+  color: #e2e8f0;
+}
+
+.ksh-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-bottom: 1px solid rgba(51, 65, 85, 0.8);
+
+  h3 {
+    margin: 0;
+    font-size: 16px;
+    font-weight: 600;
+    color: #f1f5f9;
+  }
+}
+
+.ksh-close {
+  background: none;
+  border: none;
+  color: #94a3b8;
+  font-size: 22px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0 4px;
+
+  &:hover { color: #ef4444; }
+}
+
+.ksh-body {
+  padding: 16px 20px;
+  overflow-y: auto;
+}
+
+.ksh-empty {
+  color: #94a3b8;
+  font-style: italic;
+  margin: 0;
+}
+
+.ksh-group {
+  margin-bottom: 18px;
+
+  &:last-child { margin-bottom: 0; }
+}
+
+.ksh-group-title {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-weight: 600;
+  color: #38bdf8;
+  margin: 0 0 8px;
+}
+
+.ksh-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.ksh-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 6px 0;
+  border-bottom: 1px solid rgba(51, 65, 85, 0.35);
+
+  &:last-child { border-bottom: none; }
+}
+
+.ksh-keys {
+  display: inline-block;
+  min-width: 56px;
+  text-align: center;
+  padding: 3px 8px;
+  background: rgba(30, 41, 59, 0.9);
+  border: 1px solid rgba(71, 85, 105, 0.9);
+  border-radius: 6px;
+  font-family: "SFMono-Regular", Menlo, Consolas, monospace;
+  font-size: 12px;
+  font-weight: 600;
+  color: #f1f5f9;
+}
+
+.ksh-desc {
+  font-size: 13px;
+  color: #e2e8f0;
+}
+
+.ksh-footer {
+  padding: 10px 20px 14px;
+  border-top: 1px solid rgba(51, 65, 85, 0.8);
+  font-size: 12px;
+  color: #94a3b8;
+
+  kbd {
+    min-width: auto;
+    padding: 2px 6px;
+    font-size: 11px;
+  }
+}

@@ -3,6 +3,8 @@ const router = express.Router();
 const authMiddleware = require('../middleware/auth-middleware');
 const dtLogger = require('../utils/logger');
 const db = require('../internal/db').knex;
+const { renderBrandedPdf } = require('../services/pdf-template');
+const { fetchNarrative, fetchAnomalies } = require('../services/ai-narrative-client');
 
 const v2Cache = new Map();
 const V2_CACHE_TTL_MS = 60 * 1000;
@@ -126,8 +128,57 @@ router.get('/inventory-status', authMiddleware, async (req, res) => {
 });
 
 /**
- * GET /api/reports/low-stock
- * Low and out of stock items report
+ * @openapi
+ * /api/reports/low-stock:
+ *   get:
+ *     summary: Low and out-of-stock items report
+ *     description: Returns inventory items that are either out of stock (on_hand_qty = 0) or below their minimum stock level. Useful for reorder planning.
+ *     tags:
+ *       - Reports
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: locationId
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Filter by warehouse/location ID
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           default: 200
+ *           maximum: 1000
+ *         description: Max rows to return
+ *       - in: query
+ *         name: offset
+ *         schema:
+ *           type: integer
+ *           default: 0
+ *         description: Pagination offset
+ *     responses:
+ *       200:
+ *         description: Low-stock items returned
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                 count:
+ *                   type: integer
+ *                 limit:
+ *                   type: integer
+ *                 offset:
+ *                   type: integer
+ *       500:
+ *         description: Server error
  */
 router.get('/low-stock', authMiddleware, async (req, res) => {
 	try {
@@ -186,8 +237,64 @@ router.get('/low-stock', authMiddleware, async (req, res) => {
 });
 
 /**
- * GET /api/reports/valuation
- * Inventory valuation report: on-hand qty * cost
+ * @openapi
+ * /api/reports/valuation:
+ *   get:
+ *     summary: Inventory valuation report
+ *     description: Calculates total inventory value (on_hand_qty * unit_cost) per part/location. Returns per-row values and a grand total summary.
+ *     tags:
+ *       - Reports
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: locationId
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Filter by warehouse/location ID
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           default: 200
+ *           maximum: 1000
+ *         description: Max rows to return
+ *       - in: query
+ *         name: offset
+ *         schema:
+ *           type: integer
+ *           default: 0
+ *         description: Pagination offset
+ *     responses:
+ *       200:
+ *         description: Valuation data returned
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                 count:
+ *                   type: integer
+ *                 limit:
+ *                   type: integer
+ *                 offset:
+ *                   type: integer
+ *                 summary:
+ *                   type: object
+ *                   properties:
+ *                     totalQuantity:
+ *                       type: integer
+ *                     totalValue:
+ *                       type: number
+ *       500:
+ *         description: Server error
  */
 router.get('/valuation', authMiddleware, async (req, res) => {
 	try {
@@ -253,8 +360,70 @@ router.get('/valuation', authMiddleware, async (req, res) => {
 });
 
 /**
- * GET /api/reports/movement
- * Stock movement report: InventoryTransaction history
+ * @openapi
+ * /api/reports/movement:
+ *   get:
+ *     summary: Stock movement report
+ *     description: Returns inventory transaction history (receipts, issues, adjustments, transfers). Defaults to the last 30 days if no date range is specified.
+ *     tags:
+ *       - Reports
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: locationId
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Filter by warehouse/location ID
+ *       - in: query
+ *         name: startDate
+ *         schema:
+ *           type: string
+ *           format: date
+ *         description: Start of date range (defaults to 30 days ago)
+ *       - in: query
+ *         name: endDate
+ *         schema:
+ *           type: string
+ *           format: date
+ *         description: End of date range (defaults to today)
+ *       - in: query
+ *         name: transactionType
+ *         schema:
+ *           type: string
+ *         description: Filter by transaction type
+ *       - in: query
+ *         name: partId
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Filter by part ID
+ *     responses:
+ *       200:
+ *         description: Movement data returned
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                 count:
+ *                   type: integer
+ *                 filters:
+ *                   type: object
+ *                   properties:
+ *                     startDate:
+ *                       type: string
+ *                     endDate:
+ *                       type: string
+ *       500:
+ *         description: Server error
  */
 router.get('/movement', authMiddleware, async (req, res) => {
 	try {
@@ -312,8 +481,49 @@ router.get('/movement', authMiddleware, async (req, res) => {
 });
 
 /**
- * GET /api/reports/cycle-variance
- * Cycle count variance report
+ * @openapi
+ * /api/reports/cycle-variance:
+ *   get:
+ *     summary: Cycle count variance report
+ *     description: Returns approved cycle count lines where counted quantity differs from system on-hand quantity. Includes a summary of total lines, variance lines, and total variance quantity.
+ *     tags:
+ *       - Reports
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: locationId
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Filter by warehouse/location ID
+ *     responses:
+ *       200:
+ *         description: Variance data returned
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                 count:
+ *                   type: integer
+ *                 summary:
+ *                   type: object
+ *                   properties:
+ *                     total_lines:
+ *                       type: integer
+ *                     variance_lines:
+ *                       type: integer
+ *                     total_variance_qty:
+ *                       type: integer
+ *       500:
+ *         description: Server error
  */
 router.get('/cycle-variance', authMiddleware, async (req, res) => {
 	try {
@@ -377,7 +587,77 @@ router.get('/cycle-variance', authMiddleware, async (req, res) => {
 	}
 });
 
-// Customer reports
+/**
+ * @openapi
+ * /api/reports/shop-clients/summary:
+ *   get:
+ *     summary: Customer (shop client) summary report
+ *     description: Aggregates invoice and work order totals per shop client. Requires admin, accounting, or service_advisor role.
+ *     tags:
+ *       - Reports
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: dateFrom
+ *         schema:
+ *           type: string
+ *           format: date
+ *         description: Start date filter for invoices and work orders
+ *       - in: query
+ *         name: dateTo
+ *         schema:
+ *           type: string
+ *           format: date
+ *         description: End date filter
+ *       - in: query
+ *         name: locationId
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Filter by location
+ *       - in: query
+ *         name: customerId
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Filter by specific shop client
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           default: 200
+ *           maximum: 1000
+ *       - in: query
+ *         name: offset
+ *         schema:
+ *           type: integer
+ *           default: 0
+ *     responses:
+ *       200:
+ *         description: Customer summary returned
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                 count:
+ *                   type: integer
+ *                 limit:
+ *                   type: integer
+ *                 offset:
+ *                   type: integer
+ *       403:
+ *         description: Insufficient permissions
+ *       500:
+ *         description: Server error
+ */
 router.get('/shop-clients/summary', authMiddleware, requireRole(['admin', 'accounting', 'service_advisor']), async (req, res) => {
 	try {
 		const { dateFrom, dateTo, locationId, customerId } = req.query;
@@ -454,6 +734,73 @@ router.get('/shop-clients/summary', authMiddleware, requireRole(['admin', 'accou
 	}
 });
 
+/**
+ * @openapi
+ * /api/reports/shop-clients/activity:
+ *   get:
+ *     summary: Customer activity report
+ *     description: Ranks shop clients by combined invoice and work order activity. Requires admin, accounting, or service_advisor role.
+ *     tags:
+ *       - Reports
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: dateFrom
+ *         schema:
+ *           type: string
+ *           format: date
+ *       - in: query
+ *         name: dateTo
+ *         schema:
+ *           type: string
+ *           format: date
+ *       - in: query
+ *         name: locationId
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *       - in: query
+ *         name: customerId
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           default: 200
+ *           maximum: 1000
+ *       - in: query
+ *         name: offset
+ *         schema:
+ *           type: integer
+ *           default: 0
+ *     responses:
+ *       200:
+ *         description: Activity data returned
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                 count:
+ *                   type: integer
+ *                 limit:
+ *                   type: integer
+ *                 offset:
+ *                   type: integer
+ *       403:
+ *         description: Insufficient permissions
+ *       500:
+ *         description: Server error
+ */
 router.get('/shop-clients/activity', authMiddleware, requireRole(['admin', 'accounting', 'service_advisor']), async (req, res) => {
 	try {
 		const { dateFrom, dateTo, locationId, customerId } = req.query;
@@ -530,6 +877,69 @@ router.get('/shop-clients/activity', authMiddleware, requireRole(['admin', 'acco
 	}
 });
 
+/**
+ * @openapi
+ * /api/reports/shop-clients/aging:
+ *   get:
+ *     summary: Customer accounts receivable aging report
+ *     description: Buckets outstanding invoice balances per customer into 0-30, 31-60, 61-90, and 90+ day aging brackets. Requires admin, accounting, or service_advisor role.
+ *     tags:
+ *       - Reports
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: asOfDate
+ *         schema:
+ *           type: string
+ *           format: date
+ *         description: Reference date for aging calculation (defaults to today)
+ *       - in: query
+ *         name: locationId
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *       - in: query
+ *         name: customerId
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           default: 200
+ *           maximum: 1000
+ *       - in: query
+ *         name: offset
+ *         schema:
+ *           type: integer
+ *           default: 0
+ *     responses:
+ *       200:
+ *         description: Aging data returned
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                 asOf:
+ *                   type: string
+ *                 limit:
+ *                   type: integer
+ *                 offset:
+ *                   type: integer
+ *       403:
+ *         description: Insufficient permissions
+ *       500:
+ *         description: Server error
+ */
 router.get('/shop-clients/aging', authMiddleware, requireRole(['admin', 'accounting', 'service_advisor']), async (req, res) => {
 	try {
 		const { asOfDate, locationId, customerId } = req.query;
@@ -569,7 +979,75 @@ router.get('/shop-clients/aging', authMiddleware, requireRole(['admin', 'account
 	}
 });
 
-// Vehicle reports
+/**
+ * @openapi
+ * /api/reports/vehicles/summary:
+ *   get:
+ *     summary: Vehicle fleet summary report
+ *     description: Lists vehicles with key details (VIN, mileage, PM due, inspection/registration/insurance expiry). Filterable by location, status, and PM-due date range. Requires admin, service_advisor, or safety role.
+ *     tags:
+ *       - Reports
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: dateFrom
+ *         schema:
+ *           type: string
+ *           format: date
+ *         description: PM-due range start
+ *       - in: query
+ *         name: dateTo
+ *         schema:
+ *           type: string
+ *           format: date
+ *         description: PM-due range end
+ *       - in: query
+ *         name: locationId
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *       - in: query
+ *         name: status
+ *         schema:
+ *           type: string
+ *         description: Vehicle status filter (e.g. in-service, out-of-service)
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           default: 200
+ *           maximum: 1000
+ *       - in: query
+ *         name: offset
+ *         schema:
+ *           type: integer
+ *           default: 0
+ *     responses:
+ *       200:
+ *         description: Vehicle summary returned
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                 count:
+ *                   type: integer
+ *                 limit:
+ *                   type: integer
+ *                 offset:
+ *                   type: integer
+ *       403:
+ *         description: Insufficient permissions
+ *       500:
+ *         description: Server error
+ */
 router.get('/vehicles/summary', authMiddleware, requireRole(['admin', 'service_advisor', 'safety']), async (req, res) => {
 	try {
 		const { dateFrom, dateTo, locationId, status, companyOwned } = req.query;
@@ -615,6 +1093,59 @@ router.get('/vehicles/summary', authMiddleware, requireRole(['admin', 'service_a
 	}
 });
 
+/**
+ * @openapi
+ * /api/reports/vehicles/status:
+ *   get:
+ *     summary: Vehicle status distribution report
+ *     description: Groups vehicles by status and returns counts per status. Requires admin, service_advisor, or safety role.
+ *     tags:
+ *       - Reports
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: locationId
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           default: 200
+ *           maximum: 1000
+ *       - in: query
+ *         name: offset
+ *         schema:
+ *           type: integer
+ *           default: 0
+ *     responses:
+ *       200:
+ *         description: Status distribution returned
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       status:
+ *                         type: string
+ *                       count:
+ *                         type: integer
+ *                 count:
+ *                   type: integer
+ *       403:
+ *         description: Insufficient permissions
+ *       500:
+ *         description: Server error
+ */
 router.get('/vehicles/status', authMiddleware, requireRole(['admin', 'service_advisor', 'safety']), async (req, res) => {
 	try {
 		const { locationId } = req.query;
@@ -639,6 +1170,77 @@ router.get('/vehicles/status', authMiddleware, requireRole(['admin', 'service_ad
 	}
 });
 
+/**
+ * @openapi
+ * /api/reports/vehicles/maintenance:
+ *   get:
+ *     summary: Vehicle maintenance due report
+ *     description: Lists vehicles whose next preventive maintenance date falls within a given range (defaults to today through 30 days out). Requires admin, service_advisor, or safety role.
+ *     tags:
+ *       - Reports
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: dateFrom
+ *         schema:
+ *           type: string
+ *           format: date
+ *         description: Start of PM-due window (defaults to today)
+ *       - in: query
+ *         name: dateTo
+ *         schema:
+ *           type: string
+ *           format: date
+ *         description: End of PM-due window (defaults to today + 30 days)
+ *       - in: query
+ *         name: locationId
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           default: 200
+ *           maximum: 1000
+ *       - in: query
+ *         name: offset
+ *         schema:
+ *           type: integer
+ *           default: 0
+ *     responses:
+ *       200:
+ *         description: Maintenance due list returned
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                 count:
+ *                   type: integer
+ *                 range:
+ *                   type: object
+ *                   properties:
+ *                     from:
+ *                       type: string
+ *                     to:
+ *                       type: string
+ *                 limit:
+ *                   type: integer
+ *                 offset:
+ *                   type: integer
+ *       403:
+ *         description: Insufficient permissions
+ *       500:
+ *         description: Server error
+ */
 router.get('/vehicles/maintenance', authMiddleware, requireRole(['admin', 'service_advisor', 'safety']), async (req, res) => {
 	try {
 		const { dateFrom, dateTo, locationId } = req.query;
@@ -682,7 +1284,66 @@ router.get('/vehicles/maintenance', authMiddleware, requireRole(['admin', 'servi
 // New Reports & Analytics
 // =========================
 
-// Dashboard KPIs
+/**
+ * @openapi
+ * /api/reports/dashboard/kpis:
+ *   get:
+ *     summary: Dashboard key performance indicators
+ *     description: Returns aggregated KPIs for revenue, open work orders, vehicles out of service, inventory value, low-stock items, and average work order completion time. Requires admin, accounting, service_advisor, or technician role.
+ *     tags:
+ *       - Reports
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: dateFrom
+ *         schema:
+ *           type: string
+ *           format: date
+ *         description: Start of period (defaults to first day of current month)
+ *       - in: query
+ *         name: dateTo
+ *         schema:
+ *           type: string
+ *           format: date
+ *         description: End of period (defaults to today)
+ *       - in: query
+ *         name: locationId
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *     responses:
+ *       200:
+ *         description: KPI data returned
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     totalRevenueMtd:
+ *                       type: number
+ *                     outstandingBalance:
+ *                       type: number
+ *                     openWorkOrders:
+ *                       type: integer
+ *                     vehiclesOutOfService:
+ *                       type: integer
+ *                     inventoryValue:
+ *                       type: number
+ *                     lowStockItems:
+ *                       type: integer
+ *                     avgCompletionHours:
+ *                       type: number
+ *       403:
+ *         description: Insufficient permissions
+ *       500:
+ *         description: Server error
+ */
 router.get('/dashboard/kpis', authMiddleware, requireRole(['admin', 'accounting', 'service_advisor', 'technician']), async (req, res) => {
 	try {
 		const { dateFrom, dateTo, locationId } = req.query;
@@ -747,7 +1408,60 @@ router.get('/dashboard/kpis', authMiddleware, requireRole(['admin', 'accounting'
 	}
 });
 
-// Dashboard charts
+/**
+ * @openapi
+ * /api/reports/dashboard/charts:
+ *   get:
+ *     summary: Dashboard chart data
+ *     description: Returns time-series revenue trend (by issued_date) and work order breakdown by type for chart rendering. Requires admin, accounting, service_advisor, or technician role.
+ *     tags:
+ *       - Reports
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: dateFrom
+ *         schema:
+ *           type: string
+ *           format: date
+ *         description: Start of period (defaults to first day of current month)
+ *       - in: query
+ *         name: dateTo
+ *         schema:
+ *           type: string
+ *           format: date
+ *         description: End of period (defaults to today)
+ *       - in: query
+ *         name: locationId
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *     responses:
+ *       200:
+ *         description: Chart data returned
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     revenueTrend:
+ *                       type: array
+ *                       items:
+ *                         type: object
+ *                     workOrdersByType:
+ *                       type: array
+ *                       items:
+ *                         type: object
+ *       403:
+ *         description: Insufficient permissions
+ *       500:
+ *         description: Server error
+ */
 router.get('/dashboard/charts', authMiddleware, requireRole(['admin', 'accounting', 'service_advisor', 'technician']), async (req, res) => {
 	try {
 		const { dateFrom, dateTo, locationId } = req.query;
@@ -784,7 +1498,56 @@ router.get('/dashboard/charts', authMiddleware, requireRole(['admin', 'accountin
 	}
 });
 
-// Financial summary
+/**
+ * @openapi
+ * /api/reports/financial/summary:
+ *   get:
+ *     summary: Financial summary report
+ *     description: Aggregates invoice totals (count, invoiced, paid, outstanding, average), total payments received, and revenue broken down by location. Requires admin or accounting role.
+ *     tags:
+ *       - Reports
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: dateFrom
+ *         schema:
+ *           type: string
+ *           format: date
+ *       - in: query
+ *         name: dateTo
+ *         schema:
+ *           type: string
+ *           format: date
+ *       - in: query
+ *         name: locationId
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *     responses:
+ *       200:
+ *         description: Financial summary returned
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     summary:
+ *                       type: object
+ *                     revenueByLocation:
+ *                       type: array
+ *                       items:
+ *                         type: object
+ *       403:
+ *         description: Insufficient permissions
+ *       500:
+ *         description: Server error
+ */
 router.get('/financial/summary', authMiddleware, requireRole(['admin', 'accounting']), async (req, res) => {
 	try {
 		const { dateFrom, dateTo, locationId } = req.query;
@@ -843,7 +1606,65 @@ router.get('/financial/summary', authMiddleware, requireRole(['admin', 'accounti
 	}
 });
 
-// Work orders summary
+/**
+ * @openapi
+ * /api/reports/work-orders/summary:
+ *   get:
+ *     summary: Work orders summary report
+ *     description: Returns total, completed, and open work order counts with average completion time in hours, plus a breakdown by status. Requires admin, service_advisor, or technician role.
+ *     tags:
+ *       - Reports
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: dateFrom
+ *         schema:
+ *           type: string
+ *           format: date
+ *       - in: query
+ *         name: dateTo
+ *         schema:
+ *           type: string
+ *           format: date
+ *       - in: query
+ *         name: locationId
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *     responses:
+ *       200:
+ *         description: Work orders summary returned
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     summary:
+ *                       type: object
+ *                       properties:
+ *                         total:
+ *                           type: integer
+ *                         completed:
+ *                           type: integer
+ *                         open:
+ *                           type: integer
+ *                         avgCompletionHours:
+ *                           type: number
+ *                     byStatus:
+ *                       type: array
+ *                       items:
+ *                         type: object
+ *       403:
+ *         description: Insufficient permissions
+ *       500:
+ *         description: Server error
+ */
 router.get('/work-orders/summary', authMiddleware, requireRole(['admin', 'service_advisor', 'technician']), async (req, res) => {
 	try {
 		const { dateFrom, dateTo, locationId } = req.query;
@@ -883,7 +1704,49 @@ router.get('/work-orders/summary', authMiddleware, requireRole(['admin', 'servic
 	}
 });
 
-// Financial aging
+/**
+ * @openapi
+ * /api/reports/financial/aging:
+ *   get:
+ *     summary: Financial accounts receivable aging
+ *     description: Lists individual unpaid invoices with aging bucket (0-30, 31-60, 61-90, 90+). Requires admin or accounting role.
+ *     tags:
+ *       - Reports
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: asOfDate
+ *         schema:
+ *           type: string
+ *           format: date
+ *         description: Reference date for aging calculation (defaults to today)
+ *       - in: query
+ *         name: locationId
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *     responses:
+ *       200:
+ *         description: Aging data returned
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                 asOf:
+ *                   type: string
+ *       403:
+ *         description: Insufficient permissions
+ *       500:
+ *         description: Server error
+ */
 router.get('/financial/aging', authMiddleware, requireRole(['admin', 'accounting']), async (req, res) => {
 	try {
 		const { asOfDate, locationId } = req.query;
@@ -917,7 +1780,58 @@ router.get('/financial/aging', authMiddleware, requireRole(['admin', 'accounting
 	}
 });
 
-// Financial payments
+/**
+ * @openapi
+ * /api/reports/financial/payments:
+ *   get:
+ *     summary: Financial payments report
+ *     description: Lists individual invoice payments with method, amount, reference number, and associated customer/location. Requires admin or accounting role.
+ *     tags:
+ *       - Reports
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: dateFrom
+ *         schema:
+ *           type: string
+ *           format: date
+ *       - in: query
+ *         name: dateTo
+ *         schema:
+ *           type: string
+ *           format: date
+ *       - in: query
+ *         name: locationId
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *       - in: query
+ *         name: customerId
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *     responses:
+ *       200:
+ *         description: Payments list returned
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                 count:
+ *                   type: integer
+ *       403:
+ *         description: Insufficient permissions
+ *       500:
+ *         description: Server error
+ */
 router.get('/financial/payments', authMiddleware, requireRole(['admin', 'accounting']), async (req, res) => {
 	try {
 		const { dateFrom, dateTo, locationId, customerId } = req.query;
@@ -948,7 +1862,40 @@ router.get('/financial/payments', authMiddleware, requireRole(['admin', 'account
 	}
 });
 
-// Work order summary
+/**
+ * @openapi
+ * /api/reports/work-orders/summary-v2:
+ *   get:
+ *     summary: Work orders summary (alternate registration)
+ *     description: Duplicate route registration for work orders summary with admin and service_advisor roles. Returns total, completed, and open counts with average completion time and breakdown by status.
+ *     tags:
+ *       - Reports
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: dateFrom
+ *         schema:
+ *           type: string
+ *           format: date
+ *       - in: query
+ *         name: dateTo
+ *         schema:
+ *           type: string
+ *           format: date
+ *       - in: query
+ *         name: locationId
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *     responses:
+ *       200:
+ *         description: Work orders summary returned
+ *       403:
+ *         description: Insufficient permissions
+ *       500:
+ *         description: Server error
+ */
 router.get('/work-orders/summary', authMiddleware, requireRole(['admin', 'service_advisor']), async (req, res) => {
 	try {
 		const { dateFrom, dateTo, locationId } = req.query;
@@ -985,7 +1932,40 @@ router.get('/work-orders/summary', authMiddleware, requireRole(['admin', 'servic
 	}
 });
 
-// Dashboard KPIs - using available seeded tables
+/**
+ * @openapi
+ * /api/reports/dashboard/kpis-v2:
+ *   get:
+ *     summary: Dashboard KPIs (seeded tables fallback)
+ *     description: Alternate KPI endpoint using seeded tables. Returns work order, vehicle, and customer counts. Requires admin, accounting, service_advisor, inventory_manager, or technician role.
+ *     tags:
+ *       - Reports
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: dateFrom
+ *         schema:
+ *           type: string
+ *           format: date
+ *       - in: query
+ *         name: dateTo
+ *         schema:
+ *           type: string
+ *           format: date
+ *       - in: query
+ *         name: locationId
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *     responses:
+ *       200:
+ *         description: KPI data returned
+ *       403:
+ *         description: Insufficient permissions
+ *       500:
+ *         description: Server error
+ */
 router.get('/dashboard/kpis', authMiddleware, requireRole(['admin', 'accounting', 'service_advisor', 'inventory_manager', 'technician']), async (req, res) => {
 	try {
 		const { dateFrom, dateTo, locationId } = req.query;
@@ -1033,7 +2013,24 @@ router.get('/dashboard/kpis', authMiddleware, requireRole(['admin', 'accounting'
 	}
 });
 
-// Dashboard charts
+/**
+ * @openapi
+ * /api/reports/dashboard/charts-v2:
+ *   get:
+ *     summary: Dashboard charts (seeded tables fallback)
+ *     description: Alternate chart endpoint using seeded tables. Returns work orders grouped by status. Requires admin, accounting, service_advisor, inventory_manager, or technician role.
+ *     tags:
+ *       - Reports
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Chart data returned
+ *       403:
+ *         description: Insufficient permissions
+ *       500:
+ *         description: Server error
+ */
 router.get('/dashboard/charts', authMiddleware, requireRole(['admin', 'accounting', 'service_advisor', 'inventory_manager', 'technician']), async (req, res) => {
 	try {
 		// Get work orders by status
@@ -1055,6 +2052,42 @@ router.get('/dashboard/charts', authMiddleware, requireRole(['admin', 'accountin
 	}
 });
 
+/**
+ * @openapi
+ * /api/reports/invoices/summary:
+ *   get:
+ *     summary: Invoice summary report (stub)
+ *     description: Placeholder endpoint returning zeroed invoice summary. Requires admin or accounting role.
+ *     tags:
+ *       - Reports
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Invoice summary returned
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     invoice_count:
+ *                       type: integer
+ *                     total_revenue:
+ *                       type: number
+ *                     paid_revenue:
+ *                       type: number
+ *                     outstanding_balance:
+ *                       type: number
+ *       403:
+ *         description: Insufficient permissions
+ *       500:
+ *         description: Server error
+ */
 router.get('/invoices/summary', authMiddleware, requireRole(['admin', 'accounting']), async (req, res) => {
 	try {
 		res.json({ success: true, data: { invoice_count: 0, total_revenue: 0, paid_revenue: 0, outstanding_balance: 0 } });
@@ -1064,6 +2097,42 @@ router.get('/invoices/summary', authMiddleware, requireRole(['admin', 'accountin
 	}
 });
 
+/**
+ * @openapi
+ * /api/reports/invoices/aging:
+ *   get:
+ *     summary: Invoice aging report (stub)
+ *     description: Placeholder endpoint returning zeroed aging buckets. Requires admin or accounting role.
+ *     tags:
+ *       - Reports
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Invoice aging returned
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     0-30:
+ *                       type: number
+ *                     31-60:
+ *                       type: number
+ *                     61-90:
+ *                       type: number
+ *                     90+:
+ *                       type: number
+ *       403:
+ *         description: Insufficient permissions
+ *       500:
+ *         description: Server error
+ */
 router.get('/invoices/aging', authMiddleware, requireRole(['admin', 'accounting']), async (req, res) => {
 	try {
 		res.json({ success: true, data: { '0-30': 0, '31-60': 0, '61-90': 0, '90+': 0 } });
@@ -1083,8 +2152,10 @@ function parseV2Filters(req) {
 		endDate: req.query.endDate || now.toISOString().slice(0, 10),
 		dispatcherId: req.query.dispatcherId || null,
 		driverId: req.query.driverId || null,
+		truckId: req.query.truckId || null,
 		status: req.query.status || null,
 		period: ['day', 'week', 'month'].includes((req.query.period || '').toLowerCase()) ? req.query.period.toLowerCase() : 'week',
+		groupBy: ['load', 'truck', 'driver'].includes((req.query.groupBy || '').toLowerCase()) ? req.query.groupBy.toLowerCase() : 'load',
 		limit: Math.min(parseInt(req.query.limit || '200', 10) || 200, 1000),
 		offset: Math.max(parseInt(req.query.offset || '0', 10) || 0, 0)
 	};
@@ -1673,36 +2744,349 @@ async function buildGrossProfitPerLoad(req, filters) {
 
 async function buildProfitLoss(req, filters) {
 	const allMode = isAllOperatingEntitiesMode(req);
+
+	// Revenue by period
 	const totalRevenue = await buildTotalRevenue(req, filters);
-	const expenses = await buildExpenses(req, filters);
+	const revenueTotal = Number(totalRevenue.cards?.[0]?.value || 0);
+
+	// Direct costs from loads: driver pay + fuel + tolls
+	const directParams = [filters.startDate, filters.endDate];
+	const directClauses = ['l.completed_date BETWEEN ? AND ?'];
+	directClauses.push(...applyContextSql('l', req, directParams));
+	const directCostRows = (await db.raw(`
+		SELECT
+			COALESCE(SUM(CASE WHEN sai.amount < 0 THEN ABS(sai.amount) ELSE sai.amount END), 0)::numeric AS driver_pay,
+			COALESCE((SELECT SUM(ft.amount) FROM fuel_transactions ft
+				WHERE ft.tenant_id = l.tenant_id
+				AND ft.transaction_date BETWEEN ? AND ?), 0)::numeric AS fuel,
+			COALESCE((SELECT SUM(tt.amount) FROM toll_transactions tt
+				WHERE tt.tenant_id = l.tenant_id
+				AND tt.transaction_date BETWEEN ? AND ?), 0)::numeric AS tolls
+		FROM loads l
+		LEFT JOIN settlement_adjustment_items sai
+			ON sai.source_reference_type = 'load'
+			AND sai.source_reference_id::text = l.id::text
+		WHERE ${directClauses.join(' AND ')}
+	`, [...directParams, filters.startDate, filters.endDate, filters.startDate, filters.endDate])).rows;
+
+	const driverPayTotal = Number(directCostRows[0]?.driver_pay || 0);
+	const fuelTotal = Number(directCostRows[0]?.fuel || 0);
+	const tollsTotal = Number(directCostRows[0]?.tolls || 0);
+	const directCostTotal = driverPayTotal + fuelTotal + tollsTotal;
+	const grossMargin = revenueTotal - directCostTotal;
+
+	// Operating expenses: maintenance (work_orders) + overhead (non-load settlement adjustments)
+	const maintParams = [filters.startDate, filters.endDate];
+	const maintClauses = ['wo.completed_at BETWEEN ? AND ?'];
+	if (req.context?.tenantId) { maintParams.push(req.context.tenantId); maintClauses.push('wo.tenant_id = ?'); }
+	const maintRows = (await db.raw(`
+		SELECT COALESCE(SUM(wo.total_amount), 0)::numeric AS total
+		FROM work_orders wo
+		WHERE ${maintClauses.join(' AND ')} AND wo.status = 'COMPLETED'
+	`, maintParams)).rows;
+	const maintenanceTotal = Number(maintRows[0]?.total || 0);
+
+	const adjParams = [filters.startDate, filters.endDate];
+	const adjClauses = ['pp.period_end BETWEEN ? AND ?'];
+	if (req.context?.tenantId) { adjParams.push(req.context.tenantId); adjClauses.push('s.tenant_id = ?'); }
+	const adjRows = (await db.raw(`
+		SELECT COALESCE(SUM(CASE WHEN sai.amount < 0 THEN ABS(sai.amount) ELSE sai.amount END), 0)::numeric AS total
+		FROM settlement_adjustment_items sai
+		JOIN settlements s ON s.id = sai.settlement_id
+		JOIN payroll_periods pp ON pp.id = s.payroll_period_id
+		WHERE ${adjClauses.join(' AND ')}
+		  AND (sai.source_reference_type IS NULL OR sai.source_reference_type != 'load')
+	`, adjParams)).rows;
+	const overheadTotal = Number(adjRows[0]?.total || 0);
+	const operatingExpenses = maintenanceTotal + overheadTotal;
+	const netProfit = grossMargin - operatingExpenses;
+
+	// Build period rows from revenue data
 	const byEntity = await buildOperatingEntityFinancialSummary(req, filters);
 	const rows = allMode && byEntity.length
 		? byEntity.map((r) => ({
 			operating_entity_name: r.operating_entity_name,
 			period: null,
 			revenue: Number(r.revenue || 0),
-			cost_of_operations: Number(r.expenses || 0),
-			gross_profit: Number(r.gross_profit || 0)
+			direct_costs: Number(r.expenses || 0),
+			gross_margin: Number(r.gross_profit || 0),
+			operating_expenses: 0,
+			net_profit: Number(r.gross_profit || 0)
 		}))
 		: totalRevenue.data.map((r) => ({
 			operating_entity_name: r.operating_entity_name,
 			period: r.period,
 			revenue: Number(r.total_revenue || 0),
-			cost_of_operations: 0,
-			gross_profit: Number(r.total_revenue || 0)
+			direct_costs: 0,
+			gross_margin: Number(r.total_revenue || 0),
+			operating_expenses: 0,
+			net_profit: Number(r.total_revenue || 0)
 		}));
-	const revenueTotal = Number(totalRevenue.cards?.[0]?.value || 0);
-	const costTotal = Number(expenses.cards?.[0]?.value || 0);
+
 	const payload = {
 		success: true,
 		data: rows,
+		summary: {
+			driver_pay: driverPayTotal,
+			fuel: fuelTotal,
+			tolls: tollsTotal,
+			maintenance: maintenanceTotal,
+			overhead: overheadTotal
+		},
 		cards: [
 			{ key: 'revenue', label: 'Revenue', value: revenueTotal },
-			{ key: 'cost_of_operations', label: 'Cost of Operations', value: costTotal },
-			{ key: 'gross_profit', label: 'Gross Profit', value: revenueTotal - costTotal }
+			{ key: 'direct_costs', label: 'Direct Costs', value: directCostTotal },
+			{ key: 'gross_margin', label: 'Gross Margin', value: grossMargin },
+			{ key: 'operating_expenses', label: 'Operating Expenses', value: operatingExpenses },
+			{ key: 'net_profit', label: 'Net Profit', value: netProfit }
 		]
 	};
-	return allMode ? withOperatingEntitySummary(payload, rows, 'gross_profit') : payload;
+	return allMode ? withOperatingEntitySummary(payload, rows, 'net_profit') : payload;
+}
+
+/**
+ * Direct Load Profit — per-load: Rate - (fuel + tolls + driver pay attributed to that load).
+ * Filters: date range, driverId, truckId.
+ */
+async function buildDirectLoadProfit(req, filters) {
+	const allMode = isAllOperatingEntitiesMode(req);
+	const params = [filters.startDate, filters.endDate];
+	const clauses = ['l.completed_date BETWEEN ? AND ?'];
+	clauses.push(...applyContextSql('l', req, params));
+	if (filters.driverId) {
+		params.push(filters.driverId);
+		clauses.push('l.driver_id = ?');
+	}
+	if (filters.truckId) {
+		params.push(filters.truckId);
+		clauses.push('l.truck_id = ?');
+	}
+
+	const rows = (await db.raw(`
+		WITH load_costs AS (
+			SELECT
+				${allMode ? "COALESCE(oe.name, 'Unassigned') AS operating_entity_name," : ''}
+				l.id,
+				l.load_number,
+				l.completed_date,
+				CONCAT(d.first_name, ' ', d.last_name) AS driver_name,
+				COALESCE(v.unit_number, '') AS truck,
+				COALESCE(l.rate, 0)::numeric AS rate,
+				COALESCE((
+					SELECT SUM(CASE WHEN sai.amount < 0 THEN ABS(sai.amount) ELSE sai.amount END)
+					FROM settlement_adjustment_items sai
+					WHERE sai.source_reference_type = 'load'
+					  AND sai.source_reference_id::text = l.id::text
+				), 0)::numeric AS driver_pay,
+				COALESCE((
+					SELECT SUM(ft.amount) FROM fuel_transactions ft WHERE ft.load_id = l.id
+				), 0)::numeric AS fuel,
+				COALESCE((
+					SELECT SUM(tt.amount) FROM toll_transactions tt WHERE tt.load_id = l.id
+				), 0)::numeric AS tolls
+			FROM loads l
+			LEFT JOIN drivers d ON d.id = l.driver_id
+			LEFT JOIN vehicles v ON v.id = l.truck_id
+			${allMode ? 'LEFT JOIN operating_entities oe ON oe.id = l.operating_entity_id' : ''}
+			WHERE ${clauses.join(' AND ')}
+		)
+		SELECT
+			${allMode ? 'operating_entity_name,' : ''}
+			id, load_number, completed_date, driver_name, truck, rate, driver_pay, fuel, tolls,
+			(rate - driver_pay - fuel - tolls)::numeric AS direct_profit,
+			CASE WHEN rate > 0 THEN ROUND(((rate - driver_pay - fuel - tolls) / rate * 100)::numeric, 2) ELSE 0 END AS margin_pct
+		FROM load_costs
+		ORDER BY completed_date DESC
+		LIMIT ${filters.limit} OFFSET ${filters.offset}
+	`, params)).rows;
+
+	const totals = rows.reduce((acc, r) => {
+		acc.rate += Number(r.rate || 0);
+		acc.driver_pay += Number(r.driver_pay || 0);
+		acc.fuel += Number(r.fuel || 0);
+		acc.tolls += Number(r.tolls || 0);
+		acc.direct_profit += Number(r.direct_profit || 0);
+		return acc;
+	}, { rate: 0, driver_pay: 0, fuel: 0, tolls: 0, direct_profit: 0 });
+
+	const payload = {
+		success: true,
+		data: rows,
+		summary: { totals },
+		cards: [
+			{ key: 'rate', label: 'Total Revenue', value: totals.rate },
+			{ key: 'driver_pay', label: 'Driver Pay', value: totals.driver_pay },
+			{ key: 'fuel', label: 'Fuel', value: totals.fuel },
+			{ key: 'tolls', label: 'Tolls', value: totals.tolls },
+			{ key: 'direct_profit', label: 'Direct Profit', value: totals.direct_profit }
+		]
+	};
+	return allMode ? withOperatingEntitySummary(payload, rows, 'direct_profit') : payload;
+}
+
+/**
+ * Fully Loaded Profit — Direct Load Profit minus prorated period costs
+ * (insurance, ELD, maintenance). Supports groupBy: load | truck | driver.
+ */
+async function buildFullyLoadedProfit(req, filters) {
+	const allMode = isAllOperatingEntitiesMode(req);
+
+	// Step 1: get per-load direct profit rows
+	const directResult = await buildDirectLoadProfit(req, filters);
+	const directRows = directResult.data || [];
+	const loadCount = directRows.length || 1;
+
+	// Step 2: get period maintenance cost (work_orders completed in range)
+	const maintParams = [filters.startDate, filters.endDate];
+	const maintClauses = ['wo.completed_at BETWEEN ? AND ?'];
+	if (req.context?.tenantId) {
+		maintParams.push(req.context.tenantId);
+		maintClauses.push('wo.tenant_id = ?');
+	}
+	const maintRows = (await db.raw(`
+		SELECT COALESCE(SUM(wo.total_amount), 0)::numeric AS total
+		FROM work_orders wo
+		WHERE ${maintClauses.join(' AND ')} AND wo.status = 'COMPLETED'
+	`, maintParams)).rows;
+	const maintenanceTotal = Number(maintRows[0]?.total || 0);
+
+	// Step 3: get period non-load settlement adjustment costs (insurance, ELD, other overhead)
+	const adjParams = [filters.startDate, filters.endDate];
+	const adjClauses = ['pp.period_end BETWEEN ? AND ?'];
+	if (req.context?.tenantId) {
+		adjParams.push(req.context.tenantId);
+		adjClauses.push('s.tenant_id = ?');
+	}
+	const adjRows = (await db.raw(`
+		SELECT
+			COALESCE(SUM(CASE WHEN LOWER(COALESCE(epc.name, gec.name, '')) LIKE '%insurance%'
+				THEN CASE WHEN sai.amount < 0 THEN ABS(sai.amount) ELSE sai.amount END ELSE 0 END), 0)::numeric AS insurance_total,
+			COALESCE(SUM(CASE WHEN LOWER(COALESCE(epc.name, gec.name, '')) LIKE '%eld%'
+				THEN CASE WHEN sai.amount < 0 THEN ABS(sai.amount) ELSE sai.amount END ELSE 0 END), 0)::numeric AS eld_total,
+			COALESCE(SUM(CASE
+				WHEN sai.source_reference_type IS NULL OR sai.source_reference_type != 'load'
+				THEN CASE WHEN sai.amount < 0 THEN ABS(sai.amount) ELSE sai.amount END
+				ELSE 0 END), 0)::numeric AS other_overhead
+		FROM settlement_adjustment_items sai
+		LEFT JOIN expense_payment_categories epc ON epc.id = sai.category_id
+		LEFT JOIN global_expense_categories gec ON gec.id = sai.category_id
+		JOIN settlements s ON s.id = sai.settlement_id
+		JOIN payroll_periods pp ON pp.id = s.payroll_period_id
+		WHERE ${adjClauses.join(' AND ')}
+		  AND (sai.source_reference_type IS NULL OR sai.source_reference_type != 'load')
+	`, adjParams)).rows;
+
+	const insuranceTotal = Number(adjRows[0]?.insurance_total || 0);
+	const eldTotal = Number(adjRows[0]?.eld_total || 0);
+	const otherTotal = Number(adjRows[0]?.other_overhead || 0) - insuranceTotal - eldTotal;
+
+	// Per-load allocations
+	const insurancePerLoad = insuranceTotal / loadCount;
+	const eldPerLoad = eldTotal / loadCount;
+	const maintenancePerLoad = maintenanceTotal / loadCount;
+	const otherPerLoad = Math.max(otherTotal, 0) / loadCount;
+
+	const groupBy = filters.groupBy || 'load';
+
+	let rows;
+	if (groupBy === 'truck') {
+		const grouped = {};
+		for (const r of directRows) {
+			const key = r.truck || 'Unknown';
+			if (!grouped[key]) grouped[key] = { truck: key, rate: 0, driver_pay: 0, fuel: 0, tolls: 0, direct_profit: 0, load_count: 0 };
+			grouped[key].rate += Number(r.rate || 0);
+			grouped[key].driver_pay += Number(r.driver_pay || 0);
+			grouped[key].fuel += Number(r.fuel || 0);
+			grouped[key].tolls += Number(r.tolls || 0);
+			grouped[key].direct_profit += Number(r.direct_profit || 0);
+			grouped[key].load_count += 1;
+		}
+		rows = Object.values(grouped).map((g) => {
+			const insAlloc = insurancePerLoad * g.load_count;
+			const eldAlloc = eldPerLoad * g.load_count;
+			const maintAlloc = maintenancePerLoad * g.load_count;
+			const otherAlloc = otherPerLoad * g.load_count;
+			const fullyLoadedProfit = g.direct_profit - insAlloc - eldAlloc - maintAlloc - otherAlloc;
+			return {
+				group_label: g.truck,
+				load_count: g.load_count,
+				rate: g.rate,
+				direct_profit: g.direct_profit,
+				insurance_allocation: +insAlloc.toFixed(2),
+				eld_allocation: +eldAlloc.toFixed(2),
+				maintenance_allocation: +maintAlloc.toFixed(2),
+				other_allocation: +otherAlloc.toFixed(2),
+				fully_loaded_profit: +fullyLoadedProfit.toFixed(2),
+				fully_loaded_margin_pct: g.rate > 0 ? +(fullyLoadedProfit / g.rate * 100).toFixed(2) : 0
+			};
+		});
+	} else if (groupBy === 'driver') {
+		const grouped = {};
+		for (const r of directRows) {
+			const key = r.driver_name || 'Unknown';
+			if (!grouped[key]) grouped[key] = { driver_name: key, rate: 0, driver_pay: 0, fuel: 0, tolls: 0, direct_profit: 0, load_count: 0 };
+			grouped[key].rate += Number(r.rate || 0);
+			grouped[key].direct_profit += Number(r.direct_profit || 0);
+			grouped[key].load_count += 1;
+		}
+		rows = Object.values(grouped).map((g) => {
+			const insAlloc = insurancePerLoad * g.load_count;
+			const eldAlloc = eldPerLoad * g.load_count;
+			const maintAlloc = maintenancePerLoad * g.load_count;
+			const otherAlloc = otherPerLoad * g.load_count;
+			const fullyLoadedProfit = g.direct_profit - insAlloc - eldAlloc - maintAlloc - otherAlloc;
+			return {
+				group_label: g.driver_name,
+				load_count: g.load_count,
+				rate: g.rate,
+				direct_profit: g.direct_profit,
+				insurance_allocation: +insAlloc.toFixed(2),
+				eld_allocation: +eldAlloc.toFixed(2),
+				maintenance_allocation: +maintAlloc.toFixed(2),
+				other_allocation: +otherAlloc.toFixed(2),
+				fully_loaded_profit: +fullyLoadedProfit.toFixed(2),
+				fully_loaded_margin_pct: g.rate > 0 ? +(fullyLoadedProfit / g.rate * 100).toFixed(2) : 0
+			};
+		});
+	} else {
+		// Per-load grouping (default)
+		rows = directRows.map((r) => {
+			const fullyLoadedProfit = Number(r.direct_profit || 0) - insurancePerLoad - eldPerLoad - maintenancePerLoad - otherPerLoad;
+			return {
+				load_number: r.load_number,
+				completed_date: r.completed_date,
+				driver_name: r.driver_name,
+				truck: r.truck,
+				rate: Number(r.rate || 0),
+				direct_profit: Number(r.direct_profit || 0),
+				insurance_allocation: +insurancePerLoad.toFixed(2),
+				eld_allocation: +eldPerLoad.toFixed(2),
+				maintenance_allocation: +maintenancePerLoad.toFixed(2),
+				other_allocation: +otherPerLoad.toFixed(2),
+				fully_loaded_profit: +fullyLoadedProfit.toFixed(2),
+				fully_loaded_margin_pct: Number(r.rate || 0) > 0 ? +(fullyLoadedProfit / Number(r.rate) * 100).toFixed(2) : 0
+			};
+		});
+	}
+
+	const totalFullyLoaded = rows.reduce((sum, r) => sum + Number(r.fully_loaded_profit || 0), 0);
+	const totalRate = rows.reduce((sum, r) => sum + Number(r.rate || 0), 0);
+
+	return {
+		success: true,
+		data: rows,
+		summary: {
+			period_costs: { insurance: insuranceTotal, eld: eldTotal, maintenance: maintenanceTotal, other: Math.max(otherTotal, 0) },
+			per_load_allocations: { insurance: +insurancePerLoad.toFixed(2), eld: +eldPerLoad.toFixed(2), maintenance: +maintenancePerLoad.toFixed(2), other: +otherPerLoad.toFixed(2) }
+		},
+		cards: [
+			{ key: 'rate', label: 'Total Revenue', value: totalRate },
+			{ key: 'insurance', label: 'Insurance (period)', value: insuranceTotal },
+			{ key: 'eld', label: 'ELD (period)', value: eldTotal },
+			{ key: 'maintenance', label: 'Maintenance (period)', value: maintenanceTotal },
+			{ key: 'fully_loaded_profit', label: 'Fully Loaded Profit', value: totalFullyLoaded }
+		]
+	};
 }
 
 const v2Builders = {
@@ -1715,9 +3099,159 @@ const v2Builders = {
 	expenses: buildExpenses,
 	'gross-profit': buildGrossProfit,
 	'gross-profit-per-load': buildGrossProfitPerLoad,
-	'profit-loss': buildProfitLoss
+	'profit-loss': buildProfitLoss,
+	'direct-load-profit': buildDirectLoadProfit,
+	'fully-loaded-profit': buildFullyLoadedProfit
 };
 
+/**
+ * @openapi
+ * /api/reports/v2/{reportKey}:
+ *   get:
+ *     summary: V2 analytics reports
+ *     description: |
+ *       Dynamic analytics endpoint serving 12 report keys. Requires admin, accounting, dispatcher, dispatch, or owner_operator role.
+ *       Results are cached for 60 seconds per tenant/entity/filter combination.
+ *
+ *       Available report keys:
+ *       - **overview** — Revenue, expenses, gross profit with trend data
+ *       - **emails** — Invoice email event history
+ *       - **total-revenue** — Revenue by period from completed loads
+ *       - **rate-per-mile** — Revenue per loaded mile from settlement load items
+ *       - **revenue-by-dispatcher** — Revenue grouped by dispatcher
+ *       - **payment-summary** — Payments by method with outstanding balance
+ *       - **expenses** — Expense breakdown (settlement adjustments, fuel, tolls)
+ *       - **gross-profit** — Revenue minus expenses by period
+ *       - **gross-profit-per-load** — Per-load gross profit (rate - fuel - tolls - adjustments)
+ *       - **profit-loss** — Full P&L: revenue, direct costs, operating expenses, net profit
+ *       - **direct-load-profit** — Per-load: rate minus driver pay, fuel, and tolls
+ *       - **fully-loaded-profit** — Direct load profit minus prorated period costs (insurance, ELD, maintenance). Supports groupBy: load, truck, or driver.
+ *
+ *       Common filter parameters (all optional):
+ *       - startDate / endDate — date range (defaults to last 30 days)
+ *       - dispatcherId — filter loads by dispatcher
+ *       - driverId — filter by driver
+ *       - truckId — filter by truck (direct-load-profit, fully-loaded-profit)
+ *       - status — filter loads by status
+ *       - period — aggregation period: day, week (default), or month
+ *       - groupBy — load (default), truck, or driver (fully-loaded-profit only)
+ *       - limit / offset — pagination (max 1000)
+ *     tags:
+ *       - Reports
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: reportKey
+ *         required: true
+ *         schema:
+ *           type: string
+ *           enum:
+ *             - overview
+ *             - emails
+ *             - total-revenue
+ *             - rate-per-mile
+ *             - revenue-by-dispatcher
+ *             - payment-summary
+ *             - expenses
+ *             - gross-profit
+ *             - gross-profit-per-load
+ *             - profit-loss
+ *             - direct-load-profit
+ *             - fully-loaded-profit
+ *       - in: query
+ *         name: startDate
+ *         schema:
+ *           type: string
+ *           format: date
+ *       - in: query
+ *         name: endDate
+ *         schema:
+ *           type: string
+ *           format: date
+ *       - in: query
+ *         name: dispatcherId
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *       - in: query
+ *         name: driverId
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *       - in: query
+ *         name: truckId
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *       - in: query
+ *         name: status
+ *         schema:
+ *           type: string
+ *       - in: query
+ *         name: period
+ *         schema:
+ *           type: string
+ *           enum: [day, week, month]
+ *           default: week
+ *       - in: query
+ *         name: groupBy
+ *         schema:
+ *           type: string
+ *           enum: [load, truck, driver]
+ *           default: load
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           default: 200
+ *           maximum: 1000
+ *       - in: query
+ *         name: offset
+ *         schema:
+ *           type: integer
+ *           default: 0
+ *     responses:
+ *       200:
+ *         description: Report data returned
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                 cards:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       key:
+ *                         type: string
+ *                       label:
+ *                         type: string
+ *                       value:
+ *                         type: number
+ *                 summary:
+ *                   type: object
+ *                 meta:
+ *                   type: object
+ *                   properties:
+ *                     generatedAt:
+ *                       type: string
+ *                     reportKey:
+ *                       type: string
+ *                     filters:
+ *                       type: object
+ *       403:
+ *         description: Insufficient permissions
+ *       500:
+ *         description: Server error
+ */
 for (const [key, builder] of Object.entries(v2Builders)) {
 	router.get(`/v2/${key}`, authMiddleware, requireRole(V2_ALLOWED_ROLES), async (req, res) => {
 		try {
@@ -1749,6 +3283,130 @@ function toCsv(rows) {
 	return [headers.join(','), ...rows.map((r) => headers.map((h) => escape(r[h])).join(','))].join('\n');
 }
 
+/**
+ * @openapi
+ * /api/reports/v2/export/{reportKey}:
+ *   get:
+ *     summary: Export V2 report as CSV or branded PDF
+ *     description: |
+ *       Exports any V2 report key as a downloadable CSV (default) or **branded PDF** file
+ *       (FN-1167). The branded PDF includes: logo / wordmark, report title, filters used,
+ *       AI-generated narrative paragraph (FN-1123, fetched server-to-server from ai-service),
+ *       KPI cards, data table, and AI-detected anomaly list (FN-1134, also server-to-server).
+ *       Empty narrative or empty anomaly results omit those sections gracefully.
+ *
+ *       Accepts the same filter parameters as the corresponding /api/reports/v2/{reportKey} endpoint.
+ *       Requires admin, accounting, dispatcher, dispatch, or owner_operator role.
+ *     tags:
+ *       - Reports
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: reportKey
+ *         required: true
+ *         schema:
+ *           type: string
+ *           enum:
+ *             - overview
+ *             - emails
+ *             - total-revenue
+ *             - rate-per-mile
+ *             - revenue-by-dispatcher
+ *             - payment-summary
+ *             - expenses
+ *             - gross-profit
+ *             - gross-profit-per-load
+ *             - profit-loss
+ *             - direct-load-profit
+ *             - fully-loaded-profit
+ *       - in: query
+ *         name: format
+ *         schema:
+ *           type: string
+ *           enum: [csv, pdf]
+ *           default: csv
+ *         description: Export format
+ *       - in: query
+ *         name: narrative
+ *         schema:
+ *           type: string
+ *           enum: [auto, off]
+ *           default: auto
+ *         description: |
+ *           PDF only. `auto` (default) attempts to fetch an AI narrative + anomalies
+ *           from ai-service server-to-server; `off` skips both AI calls and renders
+ *           a branded PDF without those sections.
+ *       - in: query
+ *         name: startDate
+ *         schema:
+ *           type: string
+ *           format: date
+ *       - in: query
+ *         name: endDate
+ *         schema:
+ *           type: string
+ *           format: date
+ *       - in: query
+ *         name: dispatcherId
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *       - in: query
+ *         name: driverId
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *       - in: query
+ *         name: truckId
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *       - in: query
+ *         name: status
+ *         schema:
+ *           type: string
+ *       - in: query
+ *         name: period
+ *         schema:
+ *           type: string
+ *           enum: [day, week, month]
+ *           default: week
+ *       - in: query
+ *         name: groupBy
+ *         schema:
+ *           type: string
+ *           enum: [load, truck, driver]
+ *           default: load
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           default: 200
+ *           maximum: 1000
+ *       - in: query
+ *         name: offset
+ *         schema:
+ *           type: integer
+ *           default: 0
+ *     responses:
+ *       200:
+ *         description: File download
+ *         content:
+ *           text/csv:
+ *             schema:
+ *               type: string
+ *           application/pdf:
+ *             schema:
+ *               type: string
+ *               format: binary
+ *       404:
+ *         description: Unknown report key
+ *       403:
+ *         description: Insufficient permissions
+ *       500:
+ *         description: Server error
+ */
 router.get('/v2/export/:reportKey', authMiddleware, requireRole(V2_ALLOWED_ROLES), async (req, res) => {
 	try {
 		const reportKey = req.params.reportKey;
@@ -1760,28 +3418,38 @@ router.get('/v2/export/:reportKey', authMiddleware, requireRole(V2_ALLOWED_ROLES
 		const rows = payload?.data || [];
 
 		if (format === 'pdf') {
-			let PDFDocument;
-			try {
-				PDFDocument = require('pdfkit');
-			} catch (err) {
-				dtLogger.error('reports_v2_pdfkit_missing', { error: err.message });
-				return res.status(501).json({ error: 'PDF export is temporarily unavailable on this environment. Please use CSV export.' });
+			const includeNarrative = (req.query.narrative || 'auto').toString().toLowerCase() !== 'off';
+
+			let narrative = null;
+			let anomalies = [];
+			if (includeNarrative) {
+				const aiPayload = { ...payload, meta: { ...(payload && payload.meta), filters } };
+				const startedAt = Date.now();
+				const [n, a] = await Promise.all([
+					fetchNarrative(req, reportKey, aiPayload),
+					fetchAnomalies(req, reportKey, aiPayload)
+				]);
+				narrative = n;
+				anomalies = a || [];
+				dtLogger.info('reports_v2_pdf_ai_fetch', {
+					reportKey,
+					narrativePresent: Boolean(narrative),
+					anomalyCount: anomalies.length,
+					ms: Date.now() - startedAt
+				});
 			}
 
 			res.setHeader('Content-Type', 'application/pdf');
 			res.setHeader('Content-Disposition', `attachment; filename="${reportKey}.pdf"`);
-			const doc = new PDFDocument({ margin: 40, size: 'A4' });
-			doc.pipe(res);
-			doc.fontSize(16).text(`FleetNeuron Report: ${reportKey}`);
-			doc.moveDown(0.5);
-			doc.fontSize(10).text(`Generated: ${new Date().toISOString()}`);
-			doc.fontSize(10).text(`Date Range: ${filters.startDate} to ${filters.endDate}`);
-			doc.moveDown();
-			const preview = rows.slice(0, 40);
-			preview.forEach((row, index) => {
-				doc.fontSize(9).text(`${index + 1}. ${JSON.stringify(row)}`);
+
+			await renderBrandedPdf({
+				reportKey,
+				payload: { ...payload, data: rows },
+				filters,
+				narrative,
+				anomalies,
+				stream: res
 			});
-			doc.end();
 			return;
 		}
 
@@ -1791,7 +3459,11 @@ router.get('/v2/export/:reportKey', authMiddleware, requireRole(V2_ALLOWED_ROLES
 		res.send(csv);
 	} catch (error) {
 		dtLogger.error('reports_v2_export_failed', { error: error.message, report: req.params.reportKey });
-		res.status(500).json({ error: error.message });
+		if (!res.headersSent) {
+			res.status(500).json({ error: error.message });
+		} else {
+			try { res.end(); } catch (_e) { /* stream already torn down */ }
+		}
 	}
 });
 

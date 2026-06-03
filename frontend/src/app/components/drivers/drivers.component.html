@@ -10,11 +10,89 @@
         <span class="material-symbols-outlined">send</span>
         Send Application Link
       </button>
+      <button
+        *ngIf="canManageDrivers"
+        class="btn btn-cdl-upload"
+        type="button"
+        (click)="openCdlPicker()"
+        [disabled]="extractingCdl"
+        aria-label="Upload one or more CDL images or PDFs to pre-fill new drivers"
+      >
+        <span class="material-symbols-outlined" *ngIf="!extractingCdl">auto_awesome</span>
+        <span class="spinner spinner-inline" *ngIf="extractingCdl" aria-hidden="true"></span>
+        {{ extractingCdl ? 'Reading CDLs…' : 'Upload CDLs' }}
+      </button>
+      <input
+        #cdlFileInput
+        type="file"
+        accept="image/jpeg,image/png,application/pdf"
+        multiple
+        (change)="onCdlFileSelected($event)"
+        aria-label="CDL files (JPG, PNG, or PDF)"
+        hidden
+      />
       <button *ngIf="canManageDrivers" class="btn btn-primary" (click)="toggleAddForm()">
         <span class="material-symbols-outlined">verified_user</span>
         Add Driver
       </button>
     </div>
+  </div>
+
+  <div
+    *ngIf="cdlExtractionMessage && cdlExtractionMessage.kind === 'error' && !showAddForm"
+    class="cdl-extract-toast cdl-extract-toast--error"
+    role="status"
+  >
+    <span class="material-symbols-outlined" aria-hidden="true">error</span>
+    {{ cdlExtractionMessage.text }}
+  </div>
+
+  <!-- FN-1633 — Multi-CDL extraction queue. Visible only after at least one
+       file has been selected; each row tracks one upload. -->
+  <div
+    *ngIf="cdlBatchQueue.length > 0 && !showAddForm"
+    class="cdl-queue-card"
+    role="region"
+    aria-label="CDL extraction queue"
+  >
+    <div class="cdl-queue-header">
+      <div>
+        <span class="material-symbols-outlined" aria-hidden="true">description</span>
+        <span class="cdl-queue-title">CDL extraction queue</span>
+        <span class="cdl-queue-count">({{ cdlBatchQueue.length }})</span>
+      </div>
+      <button
+        type="button"
+        class="cdl-queue-dismiss"
+        (click)="dismissCdlQueue()"
+        aria-label="Clear the CDL extraction queue"
+      >
+        Clear
+      </button>
+    </div>
+    <ul class="cdl-queue-list">
+      <li *ngFor="let row of cdlBatchQueue" class="cdl-queue-row" [attr.data-status]="row.status">
+        <span class="cdl-queue-filename" [title]="row.filename">{{ row.filename }}</span>
+        <span
+          class="cdl-queue-pill"
+          [class.cdl-queue-pill--ready]="row.status === 'ready'"
+          [class.cdl-queue-pill--failed]="row.status === 'failed'"
+          [class.cdl-queue-pill--done]="row.status === 'done'"
+        >
+          {{ cdlQueueStatusLabel(row) }}
+        </span>
+        <span *ngIf="row.reason" class="cdl-queue-reason">{{ row.reason }}</span>
+        <button
+          *ngIf="row.status === 'ready'"
+          type="button"
+          class="cdl-queue-review"
+          [disabled]="extractingCdl"
+          (click)="reviewQueueRow(row)"
+        >
+          Review
+        </button>
+      </li>
+    </ul>
   </div>
 
   <div class="drivers-card table-card">
@@ -39,6 +117,7 @@
           <th>DQF Complete</th>
           <th>Clearinghouse</th>
           <th>Status</th>
+          <th>Risk</th>
           <th>Actions</th>
         </tr>
         <tr class="header-filters drivers-header-filters">
@@ -63,6 +142,7 @@
           <th>
             <app-ai-select [(ngModel)]="driverFilters.status" [options]="driverStatusOptions" [allowEmpty]="true" emptyLabel="All" placeholder="Status"></app-ai-select>
           </th>
+          <th></th>
           <th></th>
         </tr>
       </thead>
@@ -95,6 +175,17 @@
             <span [class]="'badge ' + getStatusBadge(driver.status)">
               {{ driver.status }}
             </span>
+          </td>
+          <td>
+            <ng-container *ngIf="driverRiskMap.get(driver.id) as badge; else noRiskBadge">
+              <span [class]="getRiskBadgeClass(badge.risk_level)"
+                    [title]="getRiskBadgeTooltip(badge)">
+                {{ badge.score | number:'1.0-0' }}
+              </span>
+            </ng-container>
+            <ng-template #noRiskBadge>
+              <span *ngIf="riskBadgesLoaded" class="risk-badge-empty" title="No risk data available">&mdash;</span>
+            </ng-template>
           </td>
           <td>
             <div class="drivers-actions">
@@ -146,11 +237,33 @@
         <button class="dqf-close-btn" type="button" (click)="toggleAddForm()" [disabled]="saving">✕</button>
       </div>
       <div class="dqf-modal-body">
+        <div
+          *ngIf="cdlExtractionMessage && cdlExtractionMessage.kind === 'success' && aiPrefilledFields.size > 0"
+          class="cdl-ai-banner cdl-ai-banner--success"
+          role="status"
+        >
+          <span class="material-symbols-outlined" aria-hidden="true">auto_awesome</span>
+          <span class="cdl-ai-banner-text">{{ cdlExtractionMessage.text }}</span>
+          <button type="button" class="cdl-ai-banner-clear" (click)="clearAiFields()">Clear AI fields</button>
+        </div>
+        <div
+          *ngIf="cdlExtractionMessage && cdlExtractionMessage.kind === 'error'"
+          class="cdl-ai-banner cdl-ai-banner--error"
+          role="status"
+        >
+          <span class="material-symbols-outlined" aria-hidden="true">error</span>
+          <span class="cdl-ai-banner-text">{{ cdlExtractionMessage.text }}</span>
+        </div>
         <div class="dqf-grid-2">
           <div>
             <h4 class="dqf-section-title">Identity & Contact</h4>
-            <div class="dqf-field">
-              <label for="firstName">First Name *</label>
+            <div class="dqf-field" [class.dqf-field--ai]="isAiPrefilled('firstName')">
+              <label for="firstName">
+                First Name *
+                <span class="ai-pill" *ngIf="isAiPrefilled('firstName')" aria-label="AI-extracted">
+                  <span class="material-symbols-outlined" aria-hidden="true">auto_awesome</span>AI
+                </span>
+              </label>
               <input
                 id="firstName"
                 type="text"
@@ -160,8 +273,13 @@
                 required
               />
             </div>
-            <div class="dqf-field">
-              <label for="lastName">Last Name *</label>
+            <div class="dqf-field" [class.dqf-field--ai]="isAiPrefilled('lastName')">
+              <label for="lastName">
+                Last Name *
+                <span class="ai-pill" *ngIf="isAiPrefilled('lastName')" aria-label="AI-extracted">
+                  <span class="material-symbols-outlined" aria-hidden="true">auto_awesome</span>AI
+                </span>
+              </label>
               <input
                 id="lastName"
                 type="text"
@@ -191,9 +309,15 @@
                 class="form-input"
                 placeholder="(555) 123-4567"
               />
+              <small class="dqf-field-hint" *ngIf="isCdlManualOnly('phone')">Manual entry required (not on CDL).</small>
             </div>
-            <div class="dqf-field">
-              <label for="streetAddress">Street Address</label>
+            <div class="dqf-field" [class.dqf-field--ai]="isAiPrefilled('streetAddress')">
+              <label for="streetAddress">
+                Street Address
+                <span class="ai-pill" *ngIf="isAiPrefilled('streetAddress')" aria-label="AI-extracted">
+                  <span class="material-symbols-outlined" aria-hidden="true">auto_awesome</span>AI
+                </span>
+              </label>
               <input
                 id="streetAddress"
                 type="text"
@@ -203,8 +327,13 @@
               />
             </div>
             <div class="dqf-field-row" style="display: flex; gap: 8px;">
-              <div class="dqf-field" style="flex: 2;">
-                <label for="city">City</label>
+              <div class="dqf-field" style="flex: 2;" [class.dqf-field--ai]="isAiPrefilled('city')">
+                <label for="city">
+                  City
+                  <span class="ai-pill" *ngIf="isAiPrefilled('city')" aria-label="AI-extracted">
+                    <span class="material-symbols-outlined" aria-hidden="true">auto_awesome</span>AI
+                  </span>
+                </label>
                 <input
                   id="city"
                   type="text"
@@ -213,20 +342,29 @@
                   placeholder="City"
                 />
               </div>
-              <div class="dqf-field" style="flex: 1;">
-                <label for="state">State</label>
-                <input
-                  id="state"
-                  type="text"
+              <div class="dqf-field" style="flex: 1;" [class.dqf-field--ai]="isAiPrefilled('state')">
+                <label for="state">
+                  State
+                  <span class="ai-pill" *ngIf="isAiPrefilled('state')" aria-label="AI-extracted">
+                    <span class="material-symbols-outlined" aria-hidden="true">auto_awesome</span>AI
+                  </span>
+                </label>
+                <app-ai-select
+                  inputId="state"
+                  [options]="stateOptions"
                   [(ngModel)]="newDriver.state"
-                  class="form-input"
-                  maxlength="2"
-                  placeholder="ST"
-                  style="text-transform: uppercase;"
-                />
+                  [allowEmpty]="true"
+                  emptyLabel="-- Select state --"
+                  placeholder="Select state"
+                ></app-ai-select>
               </div>
-              <div class="dqf-field" style="flex: 1;">
-                <label for="zipCode">Zip Code</label>
+              <div class="dqf-field" style="flex: 1;" [class.dqf-field--ai]="isAiPrefilled('zipCode')">
+                <label for="zipCode">
+                  Zip Code
+                  <span class="ai-pill" *ngIf="isAiPrefilled('zipCode')" aria-label="AI-extracted">
+                    <span class="material-symbols-outlined" aria-hidden="true">auto_awesome</span>AI
+                  </span>
+                </label>
                 <input
                   id="zipCode"
                   type="text"
@@ -238,55 +376,13 @@
                 />
               </div>
             </div>
-            <div class="dqf-field">
-              <label for="newDriverZipcode">Zip Code</label>
-              <input
-                id="newDriverZipcode"
-                type="text"
-                [(ngModel)]="newDriver.zipcode"
-                name="newDriverZipcode"
-                class="form-input"
-                placeholder="12345"
-                maxlength="5"
-                (input)="onZipCodeChange(newDriver.zipcode)"
-              />
-              <small *ngIf="zipLookupLoading" style="color:#94a3b8">Looking up zip...</small>
-              <small *ngIf="zipLookupError" style="color:#f87171">{{ zipLookupError }}</small>
-            </div>
-            <div class="dqf-field">
-              <label for="newDriverCity">City</label>
-              <input
-                id="newDriverCity"
-                type="text"
-                [(ngModel)]="newDriver.city"
-                name="newDriverCity"
-                class="form-input"
-                placeholder="City"
-              />
-            </div>
-            <div class="dqf-field">
-              <label for="newDriverState">State</label>
-              <app-ai-select
-                inputId="newDriverState"
-                [(ngModel)]="newDriver.state"
-                name="newDriverState"
-                [options]="US_STATES"
-                placeholder="Select state"
-                [allowEmpty]="true"
-              ></app-ai-select>
-            </div>
-            <div class="dqf-field">
-              <label for="newDriverStatus">Status</label>
-              <app-ai-select
-                inputId="newDriverStatus"
-                [(ngModel)]="newDriver.status"
-                name="newDriverStatus"
-                [options]="statusOptions"
-                placeholder="Select status"
-              ></app-ai-select>
-            </div>
-            <div class="dqf-field">
-              <label for="dob">Date of Birth</label>
+            <div class="dqf-field" [class.dqf-field--ai]="isAiPrefilled('dateOfBirth')">
+              <label for="dob">
+                Date of Birth
+                <span class="ai-pill" *ngIf="isAiPrefilled('dateOfBirth')" aria-label="AI-extracted">
+                  <span class="material-symbols-outlined" aria-hidden="true">auto_awesome</span>AI
+                </span>
+              </label>
               <app-ai-date-picker
                 inputId="dob"
                 [label]="''"
@@ -306,13 +402,19 @@
                 name="newDriverHireDate"
                 placeholder="MM/DD/YYYY"
               ></app-ai-date-picker>
+              <small class="dqf-field-hint" *ngIf="isCdlManualOnly('hireDate')">Manual entry required (not on CDL).</small>
             </div>
           </div>
 
           <div>
             <h4 class="dqf-section-title">License & Medical</h4>
-            <div class="dqf-field">
-              <label for="cdlNumber">CDL Number *</label>
+            <div class="dqf-field" [class.dqf-field--ai]="isAiPrefilled('cdlNumber')">
+              <label for="cdlNumber">
+                CDL Number *
+                <span class="ai-pill" *ngIf="isAiPrefilled('cdlNumber')" aria-label="AI-extracted">
+                  <span class="material-symbols-outlined" aria-hidden="true">auto_awesome</span>AI
+                </span>
+              </label>
               <input
                 id="cdlNumber"
                 type="text"
@@ -322,19 +424,29 @@
                 required
               />
             </div>
-            <div class="dqf-field">
-              <label for="cdlState">CDL State *</label>
+            <div class="dqf-field" [class.dqf-field--ai]="isAiPrefilled('cdlState')">
+              <label for="cdlState">
+                CDL State *
+                <span class="ai-pill" *ngIf="isAiPrefilled('cdlState')" aria-label="AI-extracted">
+                  <span class="material-symbols-outlined" aria-hidden="true">auto_awesome</span>AI
+                </span>
+              </label>
               <app-ai-select
                 inputId="cdlState"
+                [options]="stateOptions"
                 [(ngModel)]="newDriver.cdlState"
-                name="newDriverCdlState"
-                [options]="US_STATES"
+                [allowEmpty]="true"
+                emptyLabel="-- Select CDL state --"
                 placeholder="Select CDL state"
-                ariaLabel="CDL State"
               ></app-ai-select>
             </div>
-            <div class="dqf-field">
-              <label for="cdlClass">CDL Class *</label>
+            <div class="dqf-field" [class.dqf-field--ai]="isAiPrefilled('cdlClass')">
+              <label for="cdlClass">
+                CDL Class *
+                <span class="ai-pill" *ngIf="isAiPrefilled('cdlClass')" aria-label="AI-extracted">
+                  <span class="material-symbols-outlined" aria-hidden="true">auto_awesome</span>AI
+                </span>
+              </label>
               <app-ai-select
                 inputId="cdlClass"
                 [(ngModel)]="newDriver.cdlClass"
@@ -343,8 +455,13 @@
                 placeholder="Select CDL class"
               ></app-ai-select>
             </div>
-            <div class="dqf-field">
-              <label for="cdlExpiry">CDL Expiry</label>
+            <div class="dqf-field" [class.dqf-field--ai]="isAiPrefilled('cdlExpiry')">
+              <label for="cdlExpiry">
+                CDL Expiry
+                <span class="ai-pill" *ngIf="isAiPrefilled('cdlExpiry')" aria-label="AI-extracted">
+                  <span class="material-symbols-outlined" aria-hidden="true">auto_awesome</span>AI
+                </span>
+              </label>
               <app-ai-date-picker
                 inputId="cdlExpiry"
                 [label]="''"
@@ -364,6 +481,7 @@
                 name="newDriverMedExpiry"
                 placeholder="MM/DD/YYYY"
               ></app-ai-date-picker>
+              <small class="dqf-field-hint" *ngIf="isCdlManualOnly('medicalCertExpiry')">Manual entry required (medical cert is a separate document).</small>
             </div>
           </div>
         </div>
@@ -411,7 +529,14 @@
               </div>
               <div class="dqf-field" style="flex: 1;">
                 <label for="editState">State</label>
-                <input id="editState" type="text" [(ngModel)]="editingDriver.state" class="form-input" maxlength="2" placeholder="ST" style="text-transform: uppercase;" />
+                <app-ai-select
+                  inputId="editState"
+                  [options]="stateOptions"
+                  [(ngModel)]="editingDriver.state"
+                  [allowEmpty]="true"
+                  emptyLabel="-- Select state --"
+                  placeholder="Select state"
+                ></app-ai-select>
               </div>
               <div class="dqf-field" style="flex: 1;">
                 <label for="editZipCode">Zip Code</label>
@@ -457,7 +582,14 @@
             </div>
             <div class="dqf-field">
               <label for="editCdlState">CDL State *</label>
-              <input id="editCdlState" type="text" [(ngModel)]="editingDriver.cdlState" maxlength="2" class="form-input" />
+              <app-ai-select
+                inputId="editCdlState"
+                [options]="stateOptions"
+                [(ngModel)]="editingDriver.cdlState"
+                [allowEmpty]="true"
+                emptyLabel="-- Select CDL state --"
+                placeholder="Select CDL state"
+              ></app-ai-select>
             </div>
             <div class="dqf-field">
               <label for="editCdlClass">CDL Class *</label>
@@ -473,25 +605,6 @@
                 name="editDriverCdlExpiry"
                 placeholder="MM/DD/YYYY"
               ></app-ai-date-picker>
-            </div>
-            <div class="dqf-field">
-              <label for="editLastName">Last Name *</label>
-              <input id="editLastName" type="text" [(ngModel)]="editingDriver.lastName" class="form-input" />
-            </div>
-            <div class="dqf-field">
-              <label for="editPhone">Phone</label>
-              <input id="editPhone" type="tel" [(ngModel)]="editingDriver.phone" class="form-input" />
-            </div>
-            <div class="dqf-field">
-              <label for="editCdlState">CDL State *</label>
-              <app-ai-select
-                inputId="editCdlState"
-                [(ngModel)]="editingDriver.cdlState"
-                name="editCdlState"
-                [options]="US_STATES"
-                placeholder="Select CDL state"
-                ariaLabel="CDL State"
-              ></app-ai-select>
             </div>
             <div class="dqf-field">
               <label for="editMedExpiry">Med Cert Expiry</label>
@@ -531,11 +644,94 @@
           <h3>
             <span class="material-symbols-outlined">checklist</span>
             DQF Checklist: {{selectedDriver.firstName}} {{selectedDriver.lastName}}
+            <ng-container *ngIf="driverRiskMap.get(selectedDriver.id) as badge">
+              <span [class]="getRiskBadgeClass(badge.risk_level)"
+                    [title]="getRiskBadgeTooltip(badge)"
+                    style="margin-left:10px; vertical-align: middle;">
+                {{ badge.score | number:'1.0-0' }}
+              </span>
+            </ng-container>
           </h3>
           <p class="dqf-modal-subtitle">49 CFR 391.51 - Required Documents for Driver Qualification File</p>
         </div>
       </div>
       <div class="dqf-modal-body">
+
+        <!-- FN-504: Pre-Hire Risk Assessment Card -->
+        <div class="prehire-risk-card" *ngIf="preHireRisk?.current">
+          <div class="prehire-risk-header">
+            <span class="material-symbols-outlined">shield_person</span>
+            <h4>Pre-Hire Risk Assessment</h4>
+            <ng-container *ngIf="getHireRecommendation(preHireRisk!.current!.risk_level) as rec">
+              <span [class]="'hire-rec-badge ' + rec.cls">{{ rec.label }}</span>
+            </ng-container>
+            <button class="btn-reanalyze" type="button"
+                    (click)="recalculateRisk(selectedDriver.id)"
+                    [disabled]="preHireRiskLoading"
+                    title="Re-analyze with latest documents">
+              <span class="material-symbols-outlined" style="font-size:16px;">refresh</span>
+              {{ preHireRiskLoading ? 'Calculating...' : 'Re-analyze' }}
+            </button>
+          </div>
+          <div class="prehire-risk-body">
+            <div class="prehire-score-block">
+              <div [class]="'prehire-score-circle ' + preHireRisk!.current!.risk_level">
+                {{ preHireRisk!.current!.score | number:'1.0-0' }}
+              </div>
+              <div class="prehire-score-meta">
+                <span class="prehire-level-label">{{ preHireRisk!.current!.risk_level | titlecase }}</span>
+                <span class="prehire-trend">{{ preHireRisk!.current!.trend }}</span>
+                <span class="prehire-event-count">{{ preHireRisk!.current!.event_count }} events</span>
+              </div>
+            </div>
+            <div class="prehire-categories" *ngIf="getCategoryScoreRows(preHireRisk!.current!.category_scores).length">
+              <div class="prehire-cat-item" *ngFor="let cat of getCategoryScoreRows(preHireRisk!.current!.category_scores)">
+                <span class="prehire-cat-label">{{ cat.label }}</span>
+                <div class="prehire-cat-bar">
+                  <div class="prehire-cat-fill" [style.width.%]="cat.value"></div>
+                </div>
+                <span class="prehire-cat-val">{{ cat.value | number:'1.0-0' }}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="prehire-risk-loading" *ngIf="preHireRiskLoading && !preHireRisk?.current">
+          <span class="material-symbols-outlined" style="animation:spin 1s linear infinite; font-size:18px;">progress_activity</span>
+          Loading risk assessment...
+        </div>
+        <!-- FN-505: empty state when no risk score exists -->
+        <div class="prehire-risk-empty" *ngIf="!preHireRiskLoading && !preHireRisk?.current && !preHireRiskError">
+          <div class="prehire-risk-header">
+            <span class="material-symbols-outlined">shield_person</span>
+            <h4>Pre-Hire Risk Assessment</h4>
+          </div>
+          <div class="prehire-empty-body">
+            <p>No risk assessment available for this driver.</p>
+            <button class="btn-reanalyze" type="button"
+                    (click)="recalculateRisk(selectedDriver.id)"
+                    [disabled]="preHireRiskLoading">
+              <span class="material-symbols-outlined" style="font-size:16px;">calculate</span>
+              Run Assessment
+            </button>
+          </div>
+        </div>
+        <!-- FN-505: error state -->
+        <div class="prehire-risk-error" *ngIf="!preHireRiskLoading && preHireRiskError">
+          <div class="prehire-risk-header">
+            <span class="material-symbols-outlined">shield_person</span>
+            <h4>Pre-Hire Risk Assessment</h4>
+          </div>
+          <div class="prehire-empty-body">
+            <p class="text-danger">{{ preHireRiskError }}</p>
+            <button class="btn-reanalyze" type="button"
+                    (click)="recalculateRisk(selectedDriver.id)"
+                    [disabled]="preHireRiskLoading">
+              <span class="material-symbols-outlined" style="font-size:16px;">refresh</span>
+              Retry
+            </button>
+          </div>
+        </div>
+
         <!-- Pre-Employment Clearance Gate (FN-214) -->
         <app-pre-employment-gate
           *ngIf="selectedDriver"

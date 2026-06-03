@@ -1,0 +1,139 @@
+<div class="load-templates">
+  <div class="header">
+    <div>
+      <div class="breadcrumb">
+        <button type="button" class="breadcrumb-link" (click)="backToLoads()">
+          <span class="material-symbols-outlined">arrow_back</span>
+          Loads
+        </button>
+      </div>
+      <h1>Load Templates</h1>
+      <p class="subtitle">Save reusable load snapshots to speed up recurring trips.</p>
+    </div>
+  </div>
+
+  <div *ngIf="errorMessage" class="alert alert-error">{{ errorMessage }}</div>
+  <div *ngIf="successMessage" class="alert alert-success">{{ successMessage }}</div>
+
+  <div class="templates-card">
+    <div *ngIf="loading" class="empty-state">Loading templates…</div>
+
+    <div *ngIf="!loading && templates.length === 0" class="empty-state">
+      <p><strong>No templates yet.</strong></p>
+      <p class="muted">
+        Open a saved load and click <em>Save as Template</em> to create one.
+      </p>
+    </div>
+
+    <table class="templates-table" *ngIf="!loading && templates.length > 0">
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Description</th>
+          <th>Broker</th>
+          <th>Route</th>
+          <th>Last Used</th>
+          <th class="actions-col">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr *ngFor="let t of templates; trackBy: trackById">
+          <td class="name-cell">{{ t.name }}</td>
+          <td class="description-cell">{{ t.description || '—' }}</td>
+          <td>{{ t.broker_name || '—' }}</td>
+          <td>{{ routeLabel(t) }}</td>
+          <td>{{ formatLastUsed(t.last_used_at) }}</td>
+          <td class="actions-cell">
+            <button
+              type="button"
+              class="btn btn-primary btn-sm"
+              (click)="use(t)"
+              [disabled]="usingId === t.id"
+            >
+              <span class="material-symbols-outlined">play_arrow</span>
+              {{ usingId === t.id ? 'Opening…' : 'Use' }}
+            </button>
+            <button
+              type="button"
+              class="btn btn-secondary btn-sm"
+              (click)="openEdit(t)"
+              [disabled]="!!editing"
+            >
+              <span class="material-symbols-outlined">edit</span>
+              Edit
+            </button>
+            <button
+              type="button"
+              class="btn btn-danger btn-sm"
+              (click)="confirmDelete(t)"
+              [disabled]="deletingId === t.id"
+            >
+              <span class="material-symbols-outlined">delete</span>
+              Delete
+            </button>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Edit modal -->
+<div class="modal-backdrop" *ngIf="editing" (click)="cancelEdit()">
+  <div class="modal edit-template-modal" (click)="$event.stopPropagation()">
+    <div class="modal-header">
+      <h3>Edit template</h3>
+      <button class="close" type="button" (click)="cancelEdit()">×</button>
+    </div>
+    <div class="modal-body">
+      <label>
+        Name
+        <input
+          type="text"
+          [(ngModel)]="editing.name"
+          [ngModelOptions]="{ standalone: true }"
+          placeholder="e.g. Dallas → Chicago weekly"
+          maxlength="100"
+        />
+      </label>
+      <label>
+        Description
+        <textarea
+          rows="3"
+          [(ngModel)]="editing.description"
+          [ngModelOptions]="{ standalone: true }"
+          placeholder="Optional notes about this template"
+          maxlength="500"
+        ></textarea>
+      </label>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-primary" type="button" (click)="saveEdit()" [disabled]="savingEdit">
+        {{ savingEdit ? 'Saving…' : 'Save changes' }}
+      </button>
+      <button class="btn btn-secondary" type="button" (click)="cancelEdit()" [disabled]="savingEdit">
+        Cancel
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- Delete confirmation -->
+<div class="modal-backdrop" *ngIf="confirmDeleteId" (click)="cancelDelete()">
+  <div class="modal confirm-modal" (click)="$event.stopPropagation()">
+    <div class="modal-header">
+      <h3>Delete template?</h3>
+    </div>
+    <div class="modal-body">
+      <p>This template will be permanently removed. This cannot be undone.</p>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-danger" type="button" (click)="doDelete()" [disabled]="!!deletingId">
+        {{ deletingId ? 'Deleting…' : 'Delete' }}
+      </button>
+      <button class="btn btn-secondary" type="button" (click)="cancelDelete()" [disabled]="!!deletingId">
+        Cancel
+      </button>
+    </div>
+  </div>
+</div>

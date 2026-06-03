@@ -1,12 +1,12 @@
-import { Component, OnDestroy, OnInit, ViewChild } from '@angular/core';
-import { HttpClient } from '@angular/common/http';
+import { Component, ElementRef, OnDestroy, OnInit, ViewChild } from '@angular/core';
 import { ActivatedRoute } from '@angular/router';
 import { Subject, takeUntil } from 'rxjs';
 import { finalize } from 'rxjs/operators';
-import { ApiService } from '../../services/api.service';
+import { ApiService, CdlExtractedFields, CdlExtractionResponse } from '../../services/api.service';
 import { OnboardingModalService } from '../../services/onboarding-modal.service';
 import { OperatingEntityContextService } from '../../services/operating-entity-context.service';
 import { AccessControlService } from '../../services/access-control.service';
+import { SafetyRiskService, DriverRiskBadge, DriverRiskScore } from '../../safety/safety-risk.service';
 import {
   DrugAlcoholTest,
   DrugTestType,
@@ -18,6 +18,19 @@ import {
 } from '../../models/drug-alcohol.model';
 import { InvestigationHistoryComponent } from './investigation-history/investigation-history.component';
 import { AiSelectOption } from '../../shared/ai-select/ai-select.component';
+import { US_STATE_OPTIONS } from '../../shared/constants/us-states';
+
+// FN-1633 — One row in the multi-CDL extraction queue card.
+// `status` controls the pill label and which actions are available:
+//   ready  → server returned a usable extraction; "Review" opens the modal.
+//   failed → client-side reject (mime/size) OR server returned success=false.
+//   done   → the user has finished reviewing this row (saved or cancelled).
+export interface CdlBatchQueueRow {
+  filename: string;
+  status: 'ready' | 'failed' | 'done';
+  reason?: string;
+  response?: CdlExtractionResponse;
+}
 
 @Component({
   selector: 'app-drivers',
@@ -33,43 +46,6 @@ export class DriversComponent implements OnInit, OnDestroy {
   selectedDriver: any = null;
   uploadingFile = false;
   
-  readonly statusOptions = [
-    { value: 'active', label: 'Active' },
-    { value: 'inactive', label: 'Inactive' }
-  ];
-
-  readonly US_STATES = [
-    { value: 'AL', label: 'Alabama (AL)' }, { value: 'AK', label: 'Alaska (AK)' },
-    { value: 'AZ', label: 'Arizona (AZ)' }, { value: 'AR', label: 'Arkansas (AR)' },
-    { value: 'CA', label: 'California (CA)' }, { value: 'CO', label: 'Colorado (CO)' },
-    { value: 'CT', label: 'Connecticut (CT)' }, { value: 'DC', label: 'Washington DC (DC)' },
-    { value: 'DE', label: 'Delaware (DE)' }, { value: 'FL', label: 'Florida (FL)' },
-    { value: 'GA', label: 'Georgia (GA)' }, { value: 'HI', label: 'Hawaii (HI)' },
-    { value: 'ID', label: 'Idaho (ID)' }, { value: 'IL', label: 'Illinois (IL)' },
-    { value: 'IN', label: 'Indiana (IN)' }, { value: 'IA', label: 'Iowa (IA)' },
-    { value: 'KS', label: 'Kansas (KS)' }, { value: 'KY', label: 'Kentucky (KY)' },
-    { value: 'LA', label: 'Louisiana (LA)' }, { value: 'ME', label: 'Maine (ME)' },
-    { value: 'MD', label: 'Maryland (MD)' }, { value: 'MA', label: 'Massachusetts (MA)' },
-    { value: 'MI', label: 'Michigan (MI)' }, { value: 'MN', label: 'Minnesota (MN)' },
-    { value: 'MS', label: 'Mississippi (MS)' }, { value: 'MO', label: 'Missouri (MO)' },
-    { value: 'MT', label: 'Montana (MT)' }, { value: 'NE', label: 'Nebraska (NE)' },
-    { value: 'NV', label: 'Nevada (NV)' }, { value: 'NH', label: 'New Hampshire (NH)' },
-    { value: 'NJ', label: 'New Jersey (NJ)' }, { value: 'NM', label: 'New Mexico (NM)' },
-    { value: 'NY', label: 'New York (NY)' }, { value: 'NC', label: 'North Carolina (NC)' },
-    { value: 'ND', label: 'North Dakota (ND)' }, { value: 'OH', label: 'Ohio (OH)' },
-    { value: 'OK', label: 'Oklahoma (OK)' }, { value: 'OR', label: 'Oregon (OR)' },
-    { value: 'PA', label: 'Pennsylvania (PA)' }, { value: 'RI', label: 'Rhode Island (RI)' },
-    { value: 'SC', label: 'South Carolina (SC)' }, { value: 'SD', label: 'South Dakota (SD)' },
-    { value: 'TN', label: 'Tennessee (TN)' }, { value: 'TX', label: 'Texas (TX)' },
-    { value: 'UT', label: 'Utah (UT)' }, { value: 'VT', label: 'Vermont (VT)' },
-    { value: 'VA', label: 'Virginia (VA)' }, { value: 'WA', label: 'Washington (WA)' },
-    { value: 'WV', label: 'West Virginia (WV)' }, { value: 'WI', label: 'Wisconsin (WI)' },
-    { value: 'WY', label: 'Wyoming (WY)' }
-  ];
-
-  zipLookupLoading = false;
-  zipLookupError = '';
-
   newDriver: any = {
     firstName: '',
     lastName: '',
@@ -87,15 +63,37 @@ export class DriversComponent implements OnInit, OnDestroy {
     state: '',
     zipCode: '',
     dateOfBirth: '',
-    clearinghouseStatus: 'eligible',
-    status: 'active',
-    zipcode: '',
-    city: '',
-    state: ''
+    clearinghouseStatus: 'eligible'
   };
 
   zipLookupLoading = false;
   editZipLookupLoading = false;
+
+  // FN-1628 — CDL upload + AI extraction state.
+  // `aiPrefilledFields` tracks which inputs the modal should mark with the
+  // AI pill / accent and which `clearAiFields()` will reset. The keys mirror
+  // the camelCase wire contract from FN-1625 (see docs/stories/FN-1625.md).
+  // Concurrency: clicks are ignored while `extractingCdl` is true, so an
+  // in-flight upload is never replaced.
+  extractingCdl = false;
+  aiPrefilledFields = new Set<string>();
+  cdlExtractionMessage: { kind: 'success' | 'error'; text: string } | null = null;
+  /** Fields that the CDL never contains — kept blank with a manual-entry hint. */
+  readonly cdlManualOnlyFields: ReadonlyArray<string> = ['phone', 'hireDate', 'medicalCertExpiry'];
+  /** Allowed input MIME types and 10 MB cap, mirrors `accept=` on the file input. */
+  private readonly cdlMaxBytes = 10 * 1024 * 1024;
+  private readonly cdlAcceptedMimes = ['image/jpeg', 'image/png', 'application/pdf'];
+  @ViewChild('cdlFileInput') cdlFileInput?: ElementRef<HTMLInputElement>;
+
+  // FN-1633 — Multi-file CDL extraction queue. Rendered as a compact card under
+  // the header when non-empty. Each row corresponds to one selected file; the
+  // user steps through Reviewable rows one at a time via the existing Add New
+  // Driver modal pre-fill flow (`applyCdlExtraction`). Status pill labels:
+  // ready → "Ready", failed → "Couldn't read", done → "Done".
+  readonly cdlMaxFiles = 10;
+  cdlBatchQueue: CdlBatchQueueRow[] = [];
+  /** Row whose modal is currently open. On close (save or cancel) it's marked done. */
+  private activeQueueRow: CdlBatchQueueRow | null = null;
 
   dqfForm: any = {
     applicationComplete: false,
@@ -158,6 +156,15 @@ export class DriversComponent implements OnInit, OnDestroy {
   presetFilter: '' | 'med-certs' | 'clearinghouse' | 'dqf-low' = '';
   highlightDriverId: string | null = null;
   activeOperatingEntityName = '';
+
+  // FN-504: cross-module risk badges (driver_id → badge)
+  driverRiskMap = new Map<string, DriverRiskBadge>();
+  riskBadgesLoaded = false;
+  riskBadgesError = '';
+  // FN-504: pre-hire risk score card shown in DQF modal
+  preHireRisk: DriverRiskScore | null = null;
+  preHireRiskLoading = false;
+  preHireRiskError = '';
 
   driverSafetyLoading = false;
   driverSafetyError = '';
@@ -261,6 +268,13 @@ export class DriversComponent implements OnInit, OnDestroy {
     { value: 'C', label: 'Class C' }
   ];
 
+  /**
+   * FN-1648: US state options for Add/Edit Driver State + CDL State selects.
+   * MUST stay a stable readonly field — getter-based `[options]` bindings
+   * cause infinite change-detection loops on `<app-ai-select>` (FN-317 RCA).
+   */
+  readonly stateOptions: AiSelectOption[] = US_STATE_OPTIONS;
+
   readonly drugTestTypeOptions: AiSelectOption[] =
     this.drugTestTypes.map(tt => ({ value: tt, label: this.drugTestTypeLabels[tt] }));
 
@@ -288,7 +302,7 @@ export class DriversComponent implements OnInit, OnDestroy {
     private route: ActivatedRoute,
     private operatingEntityContext: OperatingEntityContextService,
     private access: AccessControlService,
-    private http: HttpClient
+    private safetyRisk: SafetyRiskService
   ) { }
 
   ngOnInit(): void {
@@ -464,6 +478,20 @@ export class DriversComponent implements OnInit, OnDestroy {
     this.showAddForm = !this.showAddForm;
     if (!this.showAddForm) {
       this.resetForm();
+      // FN-1628: drop the AI-pre-fill state so the next manual open is clean.
+      this.aiPrefilledFields.clear();
+      this.cdlExtractionMessage = null;
+      // FN-1633: closing the modal completes the active queue row (saved or
+      // cancelled — both leave the user back at the queue with the row Done).
+      this.completeActiveQueueRow();
+    }
+  }
+
+  /** FN-1633 — Mark the in-review row Done and clear the active pointer. */
+  private completeActiveQueueRow(): void {
+    if (this.activeQueueRow) {
+      this.activeQueueRow.status = 'done';
+      this.activeQueueRow = null;
     }
   }
 
@@ -485,32 +513,196 @@ export class DriversComponent implements OnInit, OnDestroy {
       state: '',
       zipCode: '',
       dateOfBirth: '',
-      clearinghouseStatus: 'eligible',
-      status: 'active',
-      zipcode: '',
-      city: '',
-      state: ''
+      clearinghouseStatus: 'eligible'
     };
-    this.zipLookupError = '';
   }
 
-  onZipCodeChange(zip: string): void {
-    this.zipLookupError = '';
-    if (!zip || zip.length !== 5 || !/^\d{5}$/.test(zip)) return;
-    this.zipLookupLoading = true;
-    this.http.get<any>(`https://api.zippopotam.us/us/${zip}`).subscribe({
-      next: (data) => {
-        if (data?.places?.length) {
-          this.newDriver.city = data.places[0]['place name'] || '';
-          this.newDriver.state = data.places[0]['state abbreviation'] || '';
-        }
-        this.zipLookupLoading = false;
-      },
-      error: () => {
-        this.zipLookupError = 'Zip not found — enter city/state manually';
-        this.zipLookupLoading = false;
+  // FN-1628 — CDL upload + AI extraction flow.
+  // FN-1633 — Extended for multi-file selection. The picker accepts up to 10
+  // files in one shot; rejected files (bad mime / oversize) appear inline in
+  // the queue card and accepted files go in one multipart POST.
+  openCdlPicker(): void {
+    if (this.extractingCdl) return; // concurrency guard: ignore while a call is in flight
+    this.cdlExtractionMessage = null;
+    this.cdlFileInput?.nativeElement.click();
+  }
+
+  onCdlFileSelected(event: Event): void {
+    const input = event.target as HTMLInputElement;
+    const fileList = input.files;
+    const files: File[] = fileList ? Array.from(fileList) : [];
+    // Always reset the input so picking the same file twice still fires (change).
+    if (input) input.value = '';
+    if (!files.length) return;
+    if (this.extractingCdl) return;
+
+    // Hard cap matches the server-side `upload.array('files', 10)` and avoids
+    // sending a request that would 413 anyway.
+    if (files.length > this.cdlMaxFiles) {
+      this.cdlExtractionMessage = {
+        kind: 'error',
+        text: `Please select up to ${this.cdlMaxFiles} CDL files at a time.`
+      };
+      return;
+    }
+
+    const accepted: File[] = [];
+    const rejected: CdlBatchQueueRow[] = [];
+    for (const f of files) {
+      if (!this.cdlAcceptedMimes.includes(f.type)) {
+        rejected.push({ filename: f.name, status: 'failed', reason: 'Unsupported format — JPG, PNG, or PDF only.' });
+        continue;
       }
+      if (f.size > this.cdlMaxBytes) {
+        rejected.push({ filename: f.name, status: 'failed', reason: 'File is over 10 MB.' });
+        continue;
+      }
+      accepted.push(f);
+    }
+
+    // Reset the queue per selection — the user is starting a fresh batch.
+    this.cdlBatchQueue = [...rejected];
+    this.cdlExtractionMessage = null;
+
+    if (!accepted.length) return;
+
+    this.extractCdls(accepted);
+  }
+
+  /**
+   * FN-1633 — Send the accepted files in one multipart POST and seed the queue
+   * with one row per file in upload order. Failed rows (success=false) get the
+   * existing fallback copy. The concurrency guard (`extractingCdl`) gates a
+   * second click while this call is in flight.
+   */
+  extractCdls(files: File[]): void {
+    if (!files.length || this.extractingCdl) return;
+
+    this.extractingCdl = true;
+    this.apiService.extractCdls(files)
+      .pipe(finalize(() => { this.extractingCdl = false; }))
+      .subscribe({
+        next: (resp) => this.populateQueueFromResponse(files, resp.results || []),
+        error: () => this.populateQueueFromResponse(
+          files,
+          files.map(() => ({ success: false, extracted: null, reason: 'ai_unavailable' } as CdlExtractionResponse))
+        )
+      });
+  }
+
+  private populateQueueFromResponse(files: File[], results: CdlExtractionResponse[]): void {
+    const rows: CdlBatchQueueRow[] = files.map((f, i) => {
+      const r = results[i];
+      if (r && r.success && r.extracted) {
+        return { filename: f.name, status: 'ready', response: r };
+      }
+      return {
+        filename: f.name,
+        status: 'failed',
+        reason: "Couldn't read CDL — please enter manually.",
+        response: r
+      };
     });
+    // Append after any client-rejected rows recorded in onCdlFileSelected so the
+    // upload-order positions for the API rows are preserved relative to each
+    // other.
+    this.cdlBatchQueue = [...this.cdlBatchQueue, ...rows];
+  }
+
+  /**
+   * FN-1633 — Open the Add New Driver modal pre-filled from this row's
+   * extraction. The row is stashed as `activeQueueRow` so that whether the user
+   * saves (`addDriver`) or cancels (`toggleAddForm`) the modal, we mark the
+   * row Done and return them to the queue.
+   */
+  reviewQueueRow(row: CdlBatchQueueRow): void {
+    if (row.status !== 'ready' || !row.response) return;
+    this.activeQueueRow = row;
+    this.applyCdlExtraction(row.response);
+  }
+
+  /** Pill label shown for each queue row. */
+  cdlQueueStatusLabel(row: CdlBatchQueueRow): string {
+    switch (row.status) {
+      case 'ready': return 'Ready';
+      case 'failed': return "Couldn't read";
+      case 'done': return 'Done';
+    }
+  }
+
+  /** Clear the queue card and reset any AI state — invoked from the queue UI. */
+  dismissCdlQueue(): void {
+    this.cdlBatchQueue = [];
+    this.activeQueueRow = null;
+    this.cdlExtractionMessage = null;
+  }
+
+  applyCdlExtraction(resp: CdlExtractionResponse): void {
+    // Always start from a clean slate so prior AI state doesn't bleed in.
+    this.resetForm();
+    this.aiPrefilledFields.clear();
+    this.showAddForm = true;
+
+    if (!resp || !resp.success || !resp.extracted) {
+      this.cdlExtractionMessage = {
+        kind: 'error',
+        text: "Couldn't read CDL — please enter manually."
+      };
+      return;
+    }
+
+    const fields = resp.extractedFields && resp.extractedFields.length
+      ? resp.extractedFields
+      : Object.keys(resp.extracted).filter((k) => (resp.extracted as any)[k] != null && (resp.extracted as any)[k] !== '');
+
+    for (const key of fields) {
+      // Defensive: never let a CDL response touch the manual-only fields, even
+      // if the backend slips up. Keeps the contract one-way.
+      if (this.cdlManualOnlyFields.includes(key)) continue;
+      const value = (resp.extracted as any)[key];
+      if (value === null || value === undefined || value === '') continue;
+      this.newDriver[key] = value;
+      this.aiPrefilledFields.add(key);
+    }
+
+    if (this.aiPrefilledFields.size > 0) {
+      this.cdlExtractionMessage = {
+        kind: 'success',
+        text: 'AI extracted these fields from your CDL upload. Please review before saving.'
+      };
+    } else {
+      this.cdlExtractionMessage = {
+        kind: 'error',
+        text: "Couldn't read CDL — please enter manually."
+      };
+    }
+  }
+
+  clearAiFields(): void {
+    // V1: reset all CDL-extractable fields to their initial empty values, even
+    // ones the user has since edited. Documented in docs/stories/FN-1625.md.
+    const cdlFields: Array<keyof CdlExtractedFields> = [
+      'firstName', 'middleName', 'lastName', 'dateOfBirth',
+      'streetAddress', 'city', 'state', 'zipCode',
+      'cdlNumber', 'cdlState', 'cdlClass', 'cdlExpiry'
+    ];
+    for (const f of cdlFields) {
+      if (f === 'cdlClass') {
+        this.newDriver.cdlClass = 'A'; // restore the default chosen for the dropdown
+      } else if (f in this.newDriver) {
+        this.newDriver[f] = '';
+      }
+    }
+    this.aiPrefilledFields.clear();
+    this.cdlExtractionMessage = null;
+  }
+
+  isAiPrefilled(field: string): boolean {
+    return this.aiPrefilledFields.has(field);
+  }
+
+  isCdlManualOnly(field: string): boolean {
+    return this.cdlManualOnlyFields.includes(field);
   }
 
   addDriver(): void {
@@ -528,6 +720,9 @@ export class DriversComponent implements OnInit, OnDestroy {
         this.showAddForm = false;
         this.resetForm();
         this.saving = false;
+        // FN-1633: a successful save closes the modal — mark the queue row Done
+        // so the user returns to the queue card with the right pill state.
+        this.completeActiveQueueRow();
         alert('Driver added successfully!');
       },
       error: (error) => {
@@ -547,10 +742,30 @@ export class DriversComponent implements OnInit, OnDestroy {
       next: (data) => {
         this.drivers = data;
         this.loading = false;
+        this.loadRiskBadges();
       },
       error: (error) => {
         console.error('Error loading drivers:', error);
         this.loading = false;
+      }
+    });
+  }
+
+  // FN-504: load risk badges for all drivers in one fleet-summary call
+  private loadRiskBadges(): void {
+    this.riskBadgesLoaded = false;
+    this.riskBadgesError = '';
+    this.safetyRisk.getFleetSummary().subscribe({
+      next: (summary) => {
+        this.driverRiskMap.clear();
+        for (const badge of (summary.all_scores || [])) {
+          this.driverRiskMap.set(badge.driver_id, badge);
+        }
+        this.riskBadgesLoaded = true;
+      },
+      error: () => {
+        this.riskBadgesLoaded = true;
+        this.riskBadgesError = 'Unable to load risk data';
       }
     });
   }
@@ -736,6 +951,69 @@ export class DriversComponent implements OnInit, OnDestroy {
     this.loadDrugAlcoholTests(driver.id);
     this.loadPrehireDocuments(driver.id);
     this.loadMvrData(driver.id);
+    this.loadPreHireRisk(driver.id);
+  }
+
+  // FN-504: load risk score for the pre-hire assessment card
+  loadPreHireRisk(driverId: string): void {
+    this.preHireRisk = null;
+    this.preHireRiskLoading = true;
+    this.preHireRiskError = '';
+    this.safetyRisk.getDriverScore(driverId).subscribe({
+      next: (data) => {
+        this.preHireRisk = data;
+        this.preHireRiskLoading = false;
+      },
+      error: () => {
+        this.preHireRiskLoading = false;
+        this.preHireRiskError = 'Unable to load risk assessment';
+      }
+    });
+  }
+
+  recalculateRisk(driverId: string): void {
+    this.preHireRiskLoading = true;
+    this.safetyRisk.recalculate(driverId).subscribe({
+      next: () => this.loadPreHireRisk(driverId),
+      error: () => { this.preHireRiskLoading = false; }
+    });
+  }
+
+  // FN-504: helper to derive hire recommendation from risk level
+  getHireRecommendation(level: string | null): { label: string; cls: string } {
+    if (level === 'low') return { label: 'Recommended', cls: 'hire-rec' };
+    if (level === 'medium') return { label: 'Conditional', cls: 'hire-cond' };
+    if (level === 'high') return { label: 'Conditional — Review Required', cls: 'hire-cond' };
+    if (level === 'critical') return { label: 'Not Recommended', cls: 'hire-deny' };
+    return { label: 'Pending Assessment', cls: 'hire-pending' };
+  }
+
+  getRiskBadgeClass(level: string | null | undefined): string {
+    if (level === 'low') return 'risk-badge risk-low';
+    if (level === 'medium') return 'risk-badge risk-medium';
+    if (level === 'high') return 'risk-badge risk-high';
+    if (level === 'critical') return 'risk-badge risk-critical';
+    return '';
+  }
+
+  getRiskBadgeTooltip(badge: DriverRiskBadge | undefined): string {
+    if (!badge) return '';
+    const level = badge.risk_level ? badge.risk_level.charAt(0).toUpperCase() + badge.risk_level.slice(1) : '';
+    return `Risk Level: ${level}`;
+  }
+
+  // FN-504: typed helper to avoid string-indexing CategoryScores in template (TS7053)
+  getCategoryScoreRows(scores: import('../../safety/safety-risk.service').CategoryScores | null | undefined): { label: string; value: number }[] {
+    if (!scores) return [];
+    const cats: { key: keyof import('../../safety/safety-risk.service').CategoryScores; label: string }[] = [
+      { key: 'mvr', label: 'MVR' },
+      { key: 'psp', label: 'PSP' },
+      { key: 'fmcsa', label: 'FMCSA' },
+      { key: 'incidents', label: 'Incidents' }
+    ];
+    return cats
+      .filter(c => scores[c.key] != null)
+      .map(c => ({ label: c.label, value: scores[c.key] as number }));
   }
 
   /** Load pre-hire documents for a driver (FN-237) */

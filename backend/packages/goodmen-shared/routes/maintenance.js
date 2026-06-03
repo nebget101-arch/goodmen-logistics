@@ -7,6 +7,58 @@ const auth = require('./auth-middleware');
 // Protect all maintenance routes: admin, fleet
 router.use(auth(['admin', 'fleet']));
 
+/**
+ * @openapi
+ * /api/maintenance:
+ *   get:
+ *     summary: List all maintenance records
+ *     description: >-
+ *       Returns all maintenance records joined with vehicle data, ordered by
+ *       date performed descending.
+ *     tags:
+ *       - Maintenance
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: List of maintenance records
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 type: object
+ *                 properties:
+ *                   id:
+ *                     type: string
+ *                     format: uuid
+ *                   vehicleId:
+ *                     type: string
+ *                     format: uuid
+ *                   type:
+ *                     type: string
+ *                   description:
+ *                     type: string
+ *                   datePerformed:
+ *                     type: string
+ *                     format: date
+ *                   mileage:
+ *                     type: integer
+ *                   mechanicName:
+ *                     type: string
+ *                   cost:
+ *                     type: number
+ *                   status:
+ *                     type: string
+ *                   priority:
+ *                     type: string
+ *                   vehicleUnit:
+ *                     type: string
+ *                   vin:
+ *                     type: string
+ *       500:
+ *         description: Server error
+ */
 // GET all maintenance records
 router.get('/', async (req, res) => {
   const startTime = Date.now();
@@ -48,6 +100,36 @@ router.get('/', async (req, res) => {
   }
 });
 
+/**
+ * @openapi
+ * /api/maintenance/vehicle/{vehicleId}:
+ *   get:
+ *     summary: Get maintenance records by vehicle
+ *     description: Returns all maintenance records for the specified vehicle, ordered by date descending.
+ *     tags:
+ *       - Maintenance
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: vehicleId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Vehicle ID
+ *     responses:
+ *       200:
+ *         description: Maintenance records for the vehicle
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 type: object
+ *       500:
+ *         description: Server error
+ */
 // GET maintenance records by vehicle ID
 router.get('/vehicle/:vehicleId', async (req, res) => {
   try {
@@ -62,6 +144,28 @@ router.get('/vehicle/:vehicleId', async (req, res) => {
   }
 });
 
+/**
+ * @openapi
+ * /api/maintenance/status/pending:
+ *   get:
+ *     summary: Get pending maintenance records
+ *     description: Returns all maintenance records with status pending, joined with vehicle data.
+ *     tags:
+ *       - Maintenance
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Pending maintenance records
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 type: object
+ *       500:
+ *         description: Server error
+ */
 // GET pending maintenance
 router.get('/status/pending', async (req, res) => {
   try {
@@ -93,6 +197,64 @@ router.get('/status/pending', async (req, res) => {
   }
 });
 
+/**
+ * @openapi
+ * /api/maintenance:
+ *   post:
+ *     summary: Create a maintenance record
+ *     description: Creates a new maintenance record for a vehicle.
+ *     tags:
+ *       - Maintenance
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               vehicleId:
+ *                 type: string
+ *                 format: uuid
+ *               type:
+ *                 type: string
+ *               description:
+ *                 type: string
+ *               datePerformed:
+ *                 type: string
+ *                 format: date
+ *               mileage:
+ *                 type: integer
+ *               mechanicName:
+ *                 type: string
+ *               cost:
+ *                 type: number
+ *               status:
+ *                 type: string
+ *                 default: pending
+ *               partsUsed:
+ *                 type: array
+ *                 items:
+ *                   type: string
+ *               nextServiceDue:
+ *                 type: string
+ *                 format: date
+ *               priority:
+ *                 type: string
+ *               customerId:
+ *                 type: string
+ *                 format: uuid
+ *     responses:
+ *       201:
+ *         description: Maintenance record created
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *       500:
+ *         description: Server error
+ */
 // POST create new maintenance record
 router.post('/', async (req, res) => {
   try {
@@ -146,6 +308,67 @@ router.post('/', async (req, res) => {
   }
 });
 
+/**
+ * @openapi
+ * /api/maintenance/{id}:
+ *   put:
+ *     summary: Update a maintenance record
+ *     description: >-
+ *       Updates an existing maintenance record. Field names are converted from
+ *       camelCase to snake_case automatically.
+ *     tags:
+ *       - Maintenance
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Maintenance record ID
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               vehicleId:
+ *                 type: string
+ *                 format: uuid
+ *               type:
+ *                 type: string
+ *               description:
+ *                 type: string
+ *               datePerformed:
+ *                 type: string
+ *                 format: date
+ *               mileage:
+ *                 type: integer
+ *               mechanicName:
+ *                 type: string
+ *               cost:
+ *                 type: number
+ *               status:
+ *                 type: string
+ *               priority:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Maintenance record updated
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *       400:
+ *         description: No fields to update
+ *       404:
+ *         description: Maintenance record not found
+ *       500:
+ *         description: Server error
+ */
 // PUT update maintenance record
 router.put('/:id', async (req, res) => {
   try {

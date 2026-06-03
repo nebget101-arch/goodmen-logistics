@@ -9,12 +9,36 @@ const {
   recalculateSettlementTotals
 } = require('./settlement-calculation');
 const {
+  buildUniqueSettlementNumber,
+  insertSettlementWithRetry,
+  sanitizeSettlementNumberToken
+} = require('./settlement-numbering');
+const {
+  ELIGIBLE_SETTLEMENT_LOAD_STATUSES
+} = require('./settlement-load-status');
+const {
+  resolveEligibleLoadDate
+} = require('./settlement-load-dates');
+const {
+  getExpenseResponsibilityFieldForSourceType,
+  normalizeRecurringDeductionPayeeIds,
+  resolveSpecificExpenseResponsibility,
+  resolveRecurringDeductionBackfillStartDate,
+  resolveVariableExpenseSplit,
+  shouldApplyRecurringDeductionForSettlement,
+  shouldIncludeRecurringDeductionRule,
+  resolveRecurringDeductionApplyTo
+} = require('./settlement-recurring-deductions');
+const {
   applyLeaseDeductionForSettlement
 } = require('./lease-financing-service');
+const {
+  mergeCompensationProfileWithFallback
+} = require('./driver-compensation-profile-sync');
 
-const DELIVERED_STATUSES = ['DELIVERED'];
 const SETTLEMENT_NUMBER_PREFIX = 'STL';
 let payeesColumnSetCache = null;
+let settlementsColumnSetCache = null;
 
 function applyTenantFilter(qb, context, column = 'tenant_id') {
   if (context?.tenantId) {
@@ -30,6 +54,34 @@ function applyEntityFilter(qb, context, column = 'operating_entity_id') {
 
 function normalizeStopType(value) {
   return (value || '').toString().trim().toUpperCase();
+}
+
+function toFiniteNumber(value) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function estimateDrivingMilesFromCoordinates(fromCoords, toCoords) {
+  if (!fromCoords || !toCoords) return 0;
+
+  const fromLat = toFiniteNumber(fromCoords.latitude);
+  const fromLon = toFiniteNumber(fromCoords.longitude);
+  const toLat = toFiniteNumber(toCoords.latitude);
+  const toLon = toFiniteNumber(toCoords.longitude);
+  if ([fromLat, fromLon, toLat, toLon].some((value) => value === null)) return 0;
+
+  const toRadians = (degrees) => (degrees * Math.PI) / 180;
+  const latDelta = toRadians(toLat - fromLat);
+  const lonDelta = toRadians(toLon - fromLon);
+  const startLat = toRadians(fromLat);
+  const endLat = toRadians(toLat);
+  const a = Math.sin(latDelta / 2) ** 2
+    + Math.cos(startLat) * Math.cos(endLat) * Math.sin(lonDelta / 2) ** 2;
+  const greatCircleMiles = 3958.7613 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+
+  // Inflate straight-line distance slightly so settlement draft mileage stays useful
+  // without blocking on third-party routing APIs during draft generation.
+  return Math.round(greatCircleMiles * 1.18);
 }
 
 function toDateOnly(value) {
@@ -61,6 +113,15 @@ async function getPayeesColumnSet(knex) {
   return payeesColumnSetCache;
 }
 
+async function getSettlementsColumnSet(knex) {
+  if (settlementsColumnSetCache) return settlementsColumnSetCache;
+  const rows = await knex('information_schema.columns')
+    .select('column_name')
+    .where({ table_schema: 'public', table_name: 'settlements' });
+  settlementsColumnSetCache = new Set(rows.map((row) => row.column_name));
+  return settlementsColumnSetCache;
+}
+
 async function getAdditionalPayeeRate(knex, payeeId) {
   if (!payeeId) return null;
   const columns = await getPayeesColumnSet(knex);
@@ -82,8 +143,24 @@ async function getActiveCompensationProfile(knex, driverId, asOfDate) {
     .where(function () {
       this.whereNull('effective_end_date').orWhereRaw('effective_end_date >= ?', [d]);
     })
-    .orderBy('effective_start_date', 'desc')
+    .orderBy([
+      { column: 'effective_start_date', order: 'desc' },
+      { column: 'created_at', order: 'desc' }
+    ])
     .first();
+  return row || null;
+}
+
+async function getLatestCompensationProfile(knex, driverId) {
+  const row = await knex('driver_compensation_profiles')
+    .where({ driver_id: driverId })
+    .orderByRaw(`CASE WHEN status = 'active' THEN 0 ELSE 1 END`)
+    .orderBy([
+      { column: 'effective_start_date', order: 'desc' },
+      { column: 'created_at', order: 'desc' }
+    ])
+    .first();
+
   return row || null;
 }
 
@@ -128,6 +205,10 @@ function buildCompensationProfileInsert(driverRow, effectiveStartDate) {
     cents_per_mile: centsPerMile,
     flat_weekly_amount: flatWeeklyAmount,
     flat_per_load_amount: flatPerLoadAmount,
+    equipment_owner_percentage:
+      driverRow.equipment_owner_percentage
+      ?? driverRow.equipmentOwnerPercentage
+      ?? null,
     expense_sharing_enabled: false,
     effective_start_date: toDateOnly(driverRow.hire_date) || toDateOnly(effectiveStartDate) || toDateOnly(new Date()),
     effective_end_date: null,
@@ -140,9 +221,20 @@ async function ensureActiveCompensationProfile(knex, driverRow, asOfDate) {
   if (!driverRow?.id) return null;
 
   let profile = await getActiveCompensationProfile(knex, driverRow.id, asOfDate);
-  if (profile) return profile;
+  const latestKnownProfile = await getLatestCompensationProfile(knex, driverRow.id);
 
-  const insertPayload = buildCompensationProfileInsert(driverRow, asOfDate);
+  if (profile) {
+    return mergeCompensationProfileWithFallback(profile, latestKnownProfile, driverRow);
+  }
+
+  const insertPayload = buildCompensationProfileInsert({
+    ...driverRow,
+    equipment_owner_percentage:
+      driverRow?.equipment_owner_percentage
+      ?? driverRow?.equipmentOwnerPercentage
+      ?? latestKnownProfile?.equipment_owner_percentage
+      ?? null
+  }, asOfDate);
   if (!insertPayload) return null;
 
   const [created] = await knex('driver_compensation_profiles')
@@ -156,7 +248,7 @@ async function ensureActiveCompensationProfile(knex, driverRow, asOfDate) {
       updated_at: knex.fn.now()
     });
 
-  return created;
+  return mergeCompensationProfileWithFallback(created, latestKnownProfile, driverRow);
 }
 
 async function getActivePayeeAssignment(knex, driverId, asOfDate) {
@@ -167,7 +259,26 @@ async function getActivePayeeAssignment(knex, driverId, asOfDate) {
     .where(function () {
       this.whereNull('effective_end_date').orWhereRaw('effective_end_date >= ?', [d]);
     })
-    .orderBy('effective_start_date', 'desc')
+    .orderBy([
+      { column: 'effective_start_date', order: 'desc' },
+      { column: 'created_at', order: 'desc' }
+    ])
+    .first();
+  return row || null;
+}
+
+async function getActiveExpenseResponsibilityProfile(knex, driverId, asOfDate) {
+  const d = toDateOnly(asOfDate) || toDateOnly(new Date());
+  const row = await knex('expense_responsibility_profiles')
+    .where({ driver_id: driverId })
+    .whereRaw('effective_start_date <= ?', [d])
+    .where(function () {
+      this.whereNull('effective_end_date').orWhereRaw('effective_end_date >= ?', [d]);
+    })
+    .orderBy([
+      { column: 'effective_start_date', order: 'desc' },
+      { column: 'created_at', order: 'desc' }
+    ])
     .first();
   return row || null;
 }
@@ -179,7 +290,8 @@ function buildPaySnapshot(profile, driverRow) {
       percentage_rate: profile.percentage_rate,
       cents_per_mile: profile.cents_per_mile,
       flat_weekly_amount: profile.flat_weekly_amount,
-      flat_per_load_amount: profile.flat_per_load_amount
+      flat_per_load_amount: profile.flat_per_load_amount,
+      equipment_owner_percentage: profile.equipment_owner_percentage ?? null
     };
   }
 
@@ -190,7 +302,8 @@ function buildPaySnapshot(profile, driverRow) {
       percentage_rate: driverRow?.pay_percentage ?? 0,
       cents_per_mile: null,
       flat_weekly_amount: null,
-      flat_per_load_amount: null
+      flat_per_load_amount: null,
+      equipment_owner_percentage: null
     };
   }
   if (payBasis === 'flatpay' || payBasis === 'flat_weekly') {
@@ -199,7 +312,8 @@ function buildPaySnapshot(profile, driverRow) {
       percentage_rate: null,
       cents_per_mile: null,
       flat_weekly_amount: driverRow?.pay_rate ?? 0,
-      flat_per_load_amount: null
+      flat_per_load_amount: null,
+      equipment_owner_percentage: null
     };
   }
   if (payBasis === 'flat_per_load') {
@@ -208,7 +322,8 @@ function buildPaySnapshot(profile, driverRow) {
       percentage_rate: null,
       cents_per_mile: null,
       flat_weekly_amount: null,
-      flat_per_load_amount: driverRow?.pay_rate ?? 0
+      flat_per_load_amount: driverRow?.pay_rate ?? 0,
+      equipment_owner_percentage: null
     };
   }
 
@@ -217,7 +332,8 @@ function buildPaySnapshot(profile, driverRow) {
     percentage_rate: null,
     cents_per_mile: driverRow?.pay_rate ?? 0,
     flat_weekly_amount: null,
-    flat_per_load_amount: null
+    flat_per_load_amount: null,
+    equipment_owner_percentage: null
   };
 }
 
@@ -234,6 +350,69 @@ async function getLoadedMilesForLoad(client, loadId) {
   return getDrivingDistanceMiles(firstZip, lastZip);
 }
 
+async function getStopsForLoads(knex, loadIds) {
+  if (!Array.isArray(loadIds) || !loadIds.length) return new Map();
+
+  const rows = await knex('load_stops')
+    .select('load_id', 'stop_type', 'stop_date', 'zip', 'sequence')
+    .whereIn('load_id', loadIds)
+    .orderBy([
+      { column: 'load_id', order: 'asc' },
+      { column: 'sequence', order: 'asc' },
+      { column: 'created_at', order: 'asc' }
+    ]);
+
+  const byLoadId = new Map();
+  for (const row of rows) {
+    const key = String(row.load_id);
+    const existing = byLoadId.get(key) || [];
+    existing.push(row);
+    byLoadId.set(key, existing);
+  }
+  return byLoadId;
+}
+
+async function getZipCoordinateMap(knex, zips) {
+  const uniqueZips = Array.from(new Set(
+    (Array.isArray(zips) ? zips : [])
+      .map((zip) => (zip || '').toString().trim())
+      .filter(Boolean)
+  ));
+
+  if (!uniqueZips.length) return new Map();
+  let rows = [];
+  try {
+    rows = await knex('zip_codes')
+      .select('zip', 'latitude', 'longitude')
+      .whereIn('zip', uniqueZips);
+  } catch (err) {
+    return new Map();
+  }
+
+  const coordinateMap = new Map();
+  for (const row of rows) {
+    coordinateMap.set(String(row.zip).trim(), row);
+  }
+  return coordinateMap;
+}
+
+function getDraftLoadDatesAndZips(load, stops) {
+  const stopList = Array.isArray(stops) ? stops : [];
+  const pickups = stopList.filter((stop) => normalizeStopType(stop.stop_type) === 'PICKUP');
+  const deliveries = stopList.filter((stop) => normalizeStopType(stop.stop_type) === 'DELIVERY');
+  const firstPickup = pickups[0] || null;
+  const lastDelivery = deliveries.length ? deliveries[deliveries.length - 1] : null;
+
+  return {
+    pickupDate: firstPickup?.stop_date || load.pickup_date_direct || null,
+    deliveryDate: lastDelivery?.stop_date || load.delivery_date_direct || null,
+    completedDate: load.completed_date_direct || null,
+    createdAt: load.created_at_direct || null,
+    pickupZip: firstPickup?.zip?.trim() || null,
+    deliveryZip: lastDelivery?.zip?.trim() || null
+  };
+}
+
 /** Load IDs already in a non-void settlement for the given driver (any period). */
 async function getAlreadySettledLoadIds(knex, driverId) {
   const rows = await knex('settlement_load_items as sli')
@@ -246,12 +425,11 @@ async function getAlreadySettledLoadIds(knex, driverId) {
 }
 
 /**
- * Eligible loads: driver_id match, status delivered, pickup/delivery date in range, not already settled.
+ * Eligible loads: driver_id match, terminal status, pickup/delivery date in range, not already settled.
  * dateBasis: 'pickup' | 'delivery'
  */
 async function getEligibleLoads(knex, client, driverId, periodStart, periodEnd, dateBasis = 'pickup', context = null) {
   const settledIds = await getAlreadySettledLoadIds(knex, driverId);
-  const dateCol = dateBasis === 'delivery' ? 'delivery_date' : 'pickup_date';
 
   const loads = await knex('loads as l')
     .select(
@@ -259,19 +437,14 @@ async function getEligibleLoads(knex, client, driverId, periodStart, periodEnd, 
       'l.load_number',
       'l.rate',
       'l.driver_id',
+      'l.truck_id',
       'l.pickup_date as pickup_date_direct',
       'l.delivery_date as delivery_date_direct',
-      knex.raw(`(
-        SELECT MIN(s.stop_date) FROM load_stops s
-        WHERE s.load_id = l.id AND UPPER(TRIM(s.stop_type)) = 'PICKUP'
-      ) as pickup_date`),
-      knex.raw(`(
-        SELECT MAX(s.stop_date) FROM load_stops s
-        WHERE s.load_id = l.id AND UPPER(TRIM(s.stop_type)) = 'DELIVERY'
-      ) as delivery_date`)
+      'l.completed_date as completed_date_direct',
+      'l.created_at as created_at_direct'
     )
     .where('l.driver_id', driverId)
-    .whereIn('l.status', DELIVERED_STATUSES)
+    .whereIn('l.status', ELIGIBLE_SETTLEMENT_LOAD_STATUSES)
     .whereNotNull('l.rate')
     .modify((q) => {
       applyTenantFilter(q, context, 'l.tenant_id');
@@ -284,14 +457,32 @@ async function getEligibleLoads(knex, client, driverId, periodStart, periodEnd, 
   if (!periodStartStr || !periodEndStr) {
     throw new Error('Invalid period_start or period_end');
   }
+
+  const loadIds = loads.map((row) => row.id);
+  const stopsByLoadId = await getStopsForLoads(knex, loadIds);
+  const loadMetadata = new Map();
+  const relevantZips = new Set();
+
+  for (const row of loads) {
+    const metadata = getDraftLoadDatesAndZips(row, stopsByLoadId.get(String(row.id)) || []);
+    loadMetadata.set(String(row.id), metadata);
+    if (metadata.pickupZip) relevantZips.add(metadata.pickupZip);
+    if (metadata.deliveryZip) relevantZips.add(metadata.deliveryZip);
+  }
+
+  const zipCoordinateMap = await getZipCoordinateMap(knex, Array.from(relevantZips));
   const filtered = [];
   for (const row of loads) {
-    const pickupDate = row.pickup_date || row.pickup_date_direct || null;
-    const deliveryDate = row.delivery_date || row.delivery_date_direct || null;
-    const dateVal = dateBasis === 'delivery' ? deliveryDate : pickupDate;
+    const metadata = loadMetadata.get(String(row.id)) || {};
+    const pickupDate = metadata.pickupDate || null;
+    const deliveryDate = metadata.deliveryDate || null;
+    const dateVal = resolveEligibleLoadDate(dateBasis, metadata);
     const d = toDateOnly(dateVal);
     if (d && d >= periodStartStr && d <= periodEndStr) {
-      const loadedMiles = await getLoadedMilesForLoad(client, row.id);
+      const loadedMiles = estimateDrivingMilesFromCoordinates(
+        zipCoordinateMap.get(metadata.pickupZip || ''),
+        zipCoordinateMap.get(metadata.deliveryZip || '')
+      );
       filtered.push({ ...row, pickup_date: pickupDate, delivery_date: deliveryDate, loaded_miles: loadedMiles });
     }
   }
@@ -337,7 +528,7 @@ async function backfillSettlementLoadDates(knex, settlementId) {
 }
 
 /** Recurring deductions applicable for driver in date range. */
-async function getRecurringDeductionsForPeriod(knex, driverId, periodStart, periodEnd, payeeIds = []) {
+async function getRecurringDeductionsForPeriod(knex, driverId, periodStart, periodEnd, payeeIds = [], options = {}) {
   const startStr = toDateOnly(periodStart);
   const endStr = toDateOnly(periodEnd);
   if (!startStr || !endStr) {
@@ -346,9 +537,8 @@ async function getRecurringDeductionsForPeriod(knex, driverId, periodStart, peri
   const normalizedPayeeIds = (Array.isArray(payeeIds) ? payeeIds : [])
     .map((value) => String(value || '').trim())
     .filter(Boolean);
-  return knex('recurring_deduction_rules')
+  const rows = await knex('recurring_deduction_rules')
     .where('enabled', true)
-    .whereRaw('start_date <= ?', [endStr])
     .where(function () {
       this.whereNull('end_date').orWhereRaw('end_date >= ?', [startStr]);
     })
@@ -364,39 +554,288 @@ async function getRecurringDeductionsForPeriod(knex, driverId, periodStart, peri
         });
       }
     });
+
+  return rows.filter((rule) => shouldIncludeRecurringDeductionRule(rule, startStr, endStr, options));
 }
 
-async function generateSettlementNumber(knex) {
-  const row = await knex('settlements')
-    .orderBy('created_at', 'desc')
-    .first();
-  const seq = row ? parseInt((row.settlement_number || '').replace(/\D/g, ''), 10) + 1 : 1;
-  return `${SETTLEMENT_NUMBER_PREFIX}-${Date.now().toString(36).toUpperCase()}-${seq}`;
-}
-
-function sanitizeSettlementToken(value, fallback = 'UNKNOWN') {
-  const raw = (value || '').toString().trim();
-  if (!raw) return fallback;
-  return raw
-    .replace(/[^a-zA-Z0-9]+/g, '_')
-    .replace(/^_+|_+$/g, '')
-    .toUpperCase() || fallback;
-}
-
-async function generateSettlementNumberWithContext(knex, driver, period) {
-  const row = await knex('settlements')
-    .orderBy('created_at', 'desc')
-    .first();
-  const seq = row ? parseInt((row.settlement_number || '').replace(/\D/g, ''), 10) + 1 : 1;
-
+async function generateSettlementNumberWithContext(_knex, driver, period) {
   const driverName = [driver?.first_name, driver?.last_name].filter(Boolean).join('_') || 'DRIVER';
   const periodStart = toDateOnly(period?.period_start) || 'START';
   const periodEnd = toDateOnly(period?.period_end) || 'END';
+  return buildUniqueSettlementNumber(SETTLEMENT_NUMBER_PREFIX, [
+    sanitizeSettlementNumberToken(driverName, 'DRIVER'),
+    sanitizeSettlementNumberToken(`${periodStart}_TO_${periodEnd}`, 'NO_PERIOD')
+  ]);
+}
 
-  const driverToken = sanitizeSettlementToken(driverName, 'DRIVER');
-  const periodToken = sanitizeSettlementToken(`${periodStart}_TO_${periodEnd}`, 'NO_PERIOD');
+async function generateSettlementNumberWithType(_knex, partyName, period, typeToken) {
+  const displayName = String(partyName || '').trim() || 'PAYEE';
+  const periodStart = toDateOnly(period?.period_start) || 'START';
+  const periodEnd = toDateOnly(period?.period_end) || 'END';
+  return buildUniqueSettlementNumber(SETTLEMENT_NUMBER_PREFIX, [
+    sanitizeSettlementNumberToken(displayName, 'PAYEE'),
+    sanitizeSettlementNumberToken(`${periodStart}_TO_${periodEnd}`, 'NO_PERIOD'),
+    sanitizeSettlementNumberToken(typeToken || 'SETTLEMENT', 'SETTLEMENT')
+  ]);
+}
 
-  return `${SETTLEMENT_NUMBER_PREFIX}-${driverToken}-${periodToken}-${seq}`;
+async function updateSettlementTotalsFromRows(knex, settlementId, profileSnapshot) {
+  const settlement = await knex('settlements').where({ id: settlementId }).first();
+  const loadItems = await knex('settlement_load_items').where({ settlement_id: settlementId });
+  const adjustmentItems = await knex('settlement_adjustment_items').where({ settlement_id: settlementId });
+  const totals = recalculateSettlementTotals(settlement, loadItems, adjustmentItems, profileSnapshot);
+  await knex('settlements').where({ id: settlementId }).update({
+    ...totals,
+    updated_at: knex.fn.now()
+  });
+  return knex('settlements').where({ id: settlementId }).first();
+}
+
+async function syncPairedSettlementIds(knex, firstSettlementId, secondSettlementId) {
+  const settlementColumns = await getSettlementsColumnSet(knex);
+  if (!settlementColumns.has('paired_settlement_id')) return;
+
+  await knex('settlements')
+    .where({ id: firstSettlementId })
+    .update({ paired_settlement_id: secondSettlementId, updated_at: knex.fn.now() });
+  await knex('settlements')
+    .where({ id: secondSettlementId })
+    .update({ paired_settlement_id: firstSettlementId, updated_at: knex.fn.now() });
+}
+
+async function resolveVariableExpenseSettlementTargets(knex, settlementId) {
+  const settlement = await knex('settlements').where({ id: settlementId }).first();
+  if (!settlement) throw new Error('Settlement not found');
+
+  const pairedSettlement = settlement.paired_settlement_id
+    ? await knex('settlements').where({ id: settlement.paired_settlement_id }).first()
+    : null;
+
+  if (!pairedSettlement) {
+    return {
+      selectedSettlement: settlement,
+      driverSettlement: settlement,
+      ownerSettlement: null,
+      hasPair: false
+    };
+  }
+
+  const driverSettlement = settlement.settlement_type === 'equipment_owner'
+    ? pairedSettlement
+    : settlement;
+  const ownerSettlement = settlement.settlement_type === 'equipment_owner'
+    ? settlement
+    : pairedSettlement;
+
+  return {
+    selectedSettlement: settlement,
+    driverSettlement,
+    ownerSettlement,
+    hasPair: driverSettlement?.settlement_type === 'driver' && ownerSettlement?.settlement_type === 'equipment_owner'
+  };
+}
+
+async function insertVariableExpenseAdjustment(knex, data) {
+  const [adjustment] = await knex('settlement_adjustment_items')
+    .insert(data)
+    .returning('*');
+  return adjustment;
+}
+
+async function applyVariableExpenseToSettlement(knex, settlementId, options = {}) {
+  const {
+    expenseType,
+    amount,
+    description,
+    occurrenceDate = null,
+    userId = null,
+    sourceType,
+    sourceReferenceId = null,
+    sourceReferenceType = null
+  } = options;
+
+  const targets = await resolveVariableExpenseSettlementTargets(knex, settlementId);
+  const asOf = toDateOnly(occurrenceDate)
+    || toDateOnly(targets.selectedSettlement?.date)
+    || toDateOnly(new Date());
+  const expenseProfile = await getActiveExpenseResponsibilityProfile(
+    knex,
+    targets.selectedSettlement.driver_id,
+    asOf
+  );
+  const split = resolveVariableExpenseSplit(expenseType, expenseProfile, amount);
+
+  if (split.responsibility === 'company') {
+    return {
+      split,
+      primarySettlementId: targets.driverSettlement.id,
+      primaryAdjustment: null,
+      mirroredAdjustment: null
+    };
+  }
+
+  const basePayload = {
+    item_type: 'deduction',
+    source_type: sourceType,
+    description,
+    occurrence_date: occurrenceDate,
+    status: 'applied',
+    created_by: userId,
+    source_reference_id: sourceReferenceId,
+    source_reference_type: sourceReferenceType
+  };
+
+  if (!targets.hasPair) {
+    const amountForSingleSettlement = split.responsibility === 'owner'
+      ? split.ownerAmount
+      : split.driverAmount;
+    if (!amountForSingleSettlement) {
+      return {
+        split,
+        primarySettlementId: targets.driverSettlement.id,
+        primaryAdjustment: null,
+        mirroredAdjustment: null
+      };
+    }
+
+    const primaryAdjustment = await insertVariableExpenseAdjustment(knex, {
+      ...basePayload,
+      settlement_id: targets.selectedSettlement.id,
+      amount: amountForSingleSettlement,
+      charge_party: split.chargeParty,
+      apply_to: 'primary_payee'
+    });
+
+    return {
+      split,
+      primarySettlementId: targets.selectedSettlement.id,
+      primaryAdjustment,
+      mirroredAdjustment: null
+    };
+  }
+
+  let primaryAdjustment = null;
+  let mirroredAdjustment = null;
+
+  if (split.driverAmount > 0) {
+    primaryAdjustment = await insertVariableExpenseAdjustment(knex, {
+      ...basePayload,
+      settlement_id: targets.driverSettlement.id,
+      amount: split.driverAmount,
+      charge_party: split.chargeParty,
+      apply_to: 'primary_payee'
+    });
+  }
+
+  if (split.ownerAmount > 0) {
+    mirroredAdjustment = await insertVariableExpenseAdjustment(knex, {
+      ...basePayload,
+      settlement_id: targets.ownerSettlement.id,
+      amount: split.ownerAmount,
+      charge_party: split.responsibility === 'shared' ? 'shared' : 'equipment_owner',
+      apply_to: 'primary_payee'
+    });
+  }
+
+  return {
+    split,
+    primarySettlementId: targets.driverSettlement.id,
+    primaryAdjustment,
+    mirroredAdjustment
+  };
+}
+
+/**
+ * FN-578: Consume unlinked fuel transactions for a settlement.
+ * Queries fuel_transactions where driver_id matches and settlement_link_status = 'none',
+ * checks expense_responsibility_profiles for fuel_responsibility setting,
+ * creates settlement_adjustment_items and links fuel transactions.
+ *
+ * Note: fuel_transactions does not have a settlement_adjustment_item_id column
+ * (unlike toll_transactions), so only settlement_id and settlement_link_status are updated.
+ *
+ * @param {object} knex - Knex instance
+ * @param {string} settlementId - Settlement UUID
+ * @param {string} driverId - Driver UUID
+ * @param {string} periodStart - Period start date (YYYY-MM-DD)
+ * @param {string} periodEnd - Period end date (YYYY-MM-DD)
+ * @param {string|null} userId - User performing the action
+ * @param {string|null} tenantId - Tenant UUID
+ */
+async function consumeFuelForSettlement(knex, settlementId, driverId, periodStart, periodEnd, userId, tenantId) {
+  // 1. Get unlinked fuel transactions for the driver in the period
+  let fuelQuery = knex('fuel_transactions')
+    .where({
+      driver_id: driverId,
+      settlement_link_status: 'none'
+    })
+    .where('transaction_date', '>=', periodStart)
+    .where('transaction_date', '<=', periodEnd);
+
+  if (tenantId) {
+    fuelQuery = fuelQuery.where('tenant_id', tenantId);
+  }
+
+  const fuels = await fuelQuery.orderBy('transaction_date', 'asc');
+  if (!fuels.length) return [];
+
+  // 2. Get the driver's expense responsibility profile
+  const asOf = toDateOnly(periodEnd) || toDateOnly(new Date());
+  const expenseProfile = await knex('expense_responsibility_profiles')
+    .where({ driver_id: driverId })
+    .whereRaw('effective_start_date <= ?', [asOf])
+    .where(function () {
+      this.whereNull('effective_end_date').orWhereRaw('effective_end_date >= ?', [asOf]);
+    })
+    // FN-569: deterministic sort — most-recently created wins on same date
+    .orderBy([
+      { column: 'effective_start_date', order: 'desc' },
+      { column: 'created_at', order: 'desc' }
+    ])
+    .first();
+
+  const defaultSplit = resolveVariableExpenseSplit('fuel', expenseProfile, 1);
+  if (defaultSplit.responsibility === 'company') return [];
+
+  // 6. Create adjustment items and link fuel transactions
+  const createdAdjustments = [];
+  for (const fuel of fuels) {
+    const fuelAmount = Number(fuel.amount) || 0;
+    if (fuelAmount === 0) continue;
+
+    const description = [
+      'Fuel',
+      fuel.vendor_name || fuel.provider_name || '',
+      fuel.location_name ? `(${fuel.location_name})` : '',
+      fuel.transaction_date ? `${toDateOnly(fuel.transaction_date)}` : ''
+    ].filter(Boolean).join(' — ');
+
+    const result = await applyVariableExpenseToSettlement(knex, settlementId, {
+      expenseType: 'fuel',
+      amount: fuelAmount,
+      description,
+      occurrenceDate: fuel.transaction_date,
+      userId,
+      sourceType: 'imported_fuel',
+      sourceReferenceId: fuel.id,
+      sourceReferenceType: 'fuel_transaction'
+    });
+
+    // Link the fuel transaction to this settlement
+    // Note: fuel_transactions has no settlement_adjustment_item_id column
+    await knex('fuel_transactions')
+      .where({ id: fuel.id })
+      .update({
+        settlement_id: result.primarySettlementId,
+        settlement_link_status: 'linked',
+        updated_at: knex.fn.now()
+      });
+
+    if (result.primaryAdjustment) createdAdjustments.push(result.primaryAdjustment);
+    if (result.mirroredAdjustment) createdAdjustments.push(result.mirroredAdjustment);
+  }
+
+  return createdAdjustments;
 }
 
 /**
@@ -441,24 +880,8 @@ async function consumeTollsForSettlement(knex, settlementId, driverId, periodSta
     .orderBy('effective_start_date', 'desc')
     .first();
 
-  const tollResponsibility = expenseProfile?.toll_responsibility || 'company';
-
-  // 3. If company pays, skip — no deduction from driver
-  if (tollResponsibility === 'company') return [];
-
-  // 4. Determine split percentage for shared responsibility
-  let driverSharePct = 1.0; // 100% for 'driver' responsibility
-  if (tollResponsibility === 'shared') {
-    const customRules = expenseProfile?.custom_rules || {};
-    // custom_rules may contain toll_split_percentage (0-100)
-    const splitPct = Number(customRules.toll_split_percentage);
-    driverSharePct = (!Number.isNaN(splitPct) && splitPct >= 0 && splitPct <= 100)
-      ? splitPct / 100
-      : 0.5; // Default 50/50 if not configured
-  }
-
-  // 5. Determine charge_party
-  const chargeParty = tollResponsibility === 'shared' ? 'shared' : 'driver';
+  const defaultSplit = resolveVariableExpenseSplit('toll', expenseProfile, 1);
+  if (defaultSplit.responsibility === 'company') return [];
 
   // 6. Create adjustment items and link toll transactions
   const createdAdjustments = [];
@@ -466,43 +889,35 @@ async function consumeTollsForSettlement(knex, settlementId, driverId, periodSta
     const tollAmount = Number(toll.amount) || 0;
     if (tollAmount === 0) continue;
 
-    const deductionAmount = Math.round(tollAmount * driverSharePct * 100) / 100;
-    if (deductionAmount === 0) continue;
-
     const description = [
       'Toll',
       toll.plaza_name || toll.provider_name || '',
       toll.transaction_date ? `(${toDateOnly(toll.transaction_date)})` : ''
     ].filter(Boolean).join(' — ');
 
-    const [adj] = await knex('settlement_adjustment_items')
-      .insert({
-        settlement_id: settlementId,
-        item_type: 'deduction',
-        source_type: 'imported_toll',
-        description,
-        amount: deductionAmount,
-        charge_party: chargeParty,
-        apply_to: 'primary_payee',
-        source_reference_id: toll.id,
-        source_reference_type: 'toll_transaction',
-        occurrence_date: toll.transaction_date,
-        status: 'applied',
-        created_by: userId
-      })
-      .returning('*');
+    const result = await applyVariableExpenseToSettlement(knex, settlementId, {
+      expenseType: 'toll',
+      amount: tollAmount,
+      description,
+      occurrenceDate: toll.transaction_date,
+      userId,
+      sourceType: 'imported_toll',
+      sourceReferenceId: toll.id,
+      sourceReferenceType: 'toll_transaction'
+    });
 
     // Link the toll transaction to this settlement
     await knex('toll_transactions')
       .where({ id: toll.id })
       .update({
-        settlement_id: settlementId,
-        settlement_adjustment_item_id: adj.id,
+        settlement_id: result.primarySettlementId,
+        settlement_adjustment_item_id: result.primaryAdjustment?.id || null,
         settlement_link_status: 'linked',
         updated_at: knex.fn.now()
       });
 
-    createdAdjustments.push(adj);
+    if (result.primaryAdjustment) createdAdjustments.push(result.primaryAdjustment);
+    if (result.mirroredAdjustment) createdAdjustments.push(result.mirroredAdjustment);
   }
 
   return createdAdjustments;
@@ -514,6 +929,17 @@ async function consumeTollsForSettlement(knex, settlementId, driverId, periodSta
  */
 async function createDraftSettlement(payrollPeriodId, driverId, dateBasis, userId, knex, context = null) {
   const client = await getClient();
+  const startedAt = process.hrtime.bigint();
+  const logTiming = (stage, extra = {}) => {
+    const elapsedMs = Number(process.hrtime.bigint() - startedAt) / 1e6;
+    console.log('[Settlement Create][Timing]', {
+      payrollPeriodId,
+      driverId,
+      stage,
+      elapsedMs: Number(elapsedMs.toFixed(1)),
+      ...extra
+    });
+  };
   try {
     const tenantId = context?.tenantId || null;
     const operatingEntityId = context?.operatingEntityId || null;
@@ -534,7 +960,7 @@ async function createDraftSettlement(payrollPeriodId, driverId, dateBasis, userI
     const driver = await knex('drivers')
       .where({ id: driverId })
       .modify((qb) => applyTenantFilter(qb, context, 'drivers.tenant_id'))
-      .select('id', 'first_name', 'last_name', 'pay_basis', 'pay_rate', 'pay_percentage', 'driver_type', 'hire_date')
+      .select('id', 'first_name', 'last_name', 'pay_basis', 'pay_rate', 'pay_percentage', 'driver_type', 'hire_date', 'truck_id')
       .first();
     if (!driver) throw new Error('Driver not found');
 
@@ -588,16 +1014,210 @@ async function createDraftSettlement(payrollPeriodId, driverId, dateBasis, userI
       dateBasis,
       context
     );
+    logTiming('eligible-loads-resolved', { eligibleLoadCount: eligibleLoads.length });
 
     const profileSnapshot = {
       ...buildPaySnapshot(profile, driver),
       additional_payee_rate: additionalPayeeRate
     };
 
-    const settlementNumber = await generateSettlementNumberWithContext(knex, driver, period);
-    const settlementDate = period.period_end;
+    const settlementColumns = await getSettlementsColumnSet(knex);
+    const hasPairedSettlementId = settlementColumns.has('paired_settlement_id');
+    const isOwnerOperator = (driver.driver_type || '').toString().toLowerCase() === 'owner_operator';
+    const truckId = driver.truck_id || null;
+    const truck = truckId
+      ? await knex('vehicles')
+        .where({ id: truckId })
+        .modify((qb) => applyTenantFilter(qb, context, 'vehicles.tenant_id'))
+        .first()
+      : null;
+    const equipmentOwnerId = truck?.equipment_owner_id || null;
+    const ownerPayeeId = additionalPayeeId || equipmentOwnerId || null;
+    const shouldCreatePairedSettlements = Boolean(
+      hasPairedSettlementId
+      && !isOwnerOperator
+      && truckId
+      && equipmentOwnerId
+      && ownerPayeeId
+    );
 
-    const [settlement] = await knex('settlements').insert({
+    if (shouldCreatePairedSettlements) {
+      const ownerPayee = await knex('payees').where({ id: ownerPayeeId }).first();
+      const driverSettlementBasePayload = {
+        tenant_id: tenantId,
+        operating_entity_id: operatingEntityId,
+        payroll_period_id: payrollPeriodId,
+        driver_id: driverId,
+        compensation_profile_id: profile?.id ?? null,
+        primary_payee_id: primaryPayeeId,
+        additional_payee_id: null,
+        settlement_type: 'driver',
+        equipment_owner_id: equipmentOwnerId,
+        truck_id: truckId,
+        settlement_status: 'preparing',
+        date: period.period_end,
+        subtotal_gross: 0,
+        subtotal_driver_pay: 0,
+        subtotal_additional_payee: 0,
+        total_deductions: 0,
+        total_advances: 0,
+        net_pay_driver: 0,
+        net_pay_additional_payee: 0,
+        created_by: userId
+      };
+      const eoSettlementBasePayload = {
+        tenant_id: tenantId,
+        operating_entity_id: operatingEntityId,
+        payroll_period_id: payrollPeriodId,
+        driver_id: driverId,
+        compensation_profile_id: profile?.id ?? null,
+        primary_payee_id: ownerPayeeId,
+        additional_payee_id: null,
+        settlement_type: 'equipment_owner',
+        equipment_owner_id: equipmentOwnerId,
+        truck_id: truckId,
+        settlement_status: 'preparing',
+        date: period.period_end,
+        subtotal_gross: 0,
+        subtotal_driver_pay: 0,
+        subtotal_additional_payee: 0,
+        total_deductions: 0,
+        total_advances: 0,
+        net_pay_driver: 0,
+        net_pay_additional_payee: 0,
+        created_by: userId
+      };
+
+      const driverSettlement = await insertSettlementWithRetry(knex, async () => ({
+        ...driverSettlementBasePayload,
+        settlement_number: await generateSettlementNumberWithType(
+          knex,
+          [driver.first_name, driver.last_name].filter(Boolean).join(' '),
+          period,
+          'DRV'
+        )
+      }));
+      const eoSettlement = await insertSettlementWithRetry(knex, async () => ({
+        ...eoSettlementBasePayload,
+        settlement_number: await generateSettlementNumberWithType(
+          knex,
+          ownerPayee?.name || truck?.equipment_owner_name || 'Equipment Owner',
+          period,
+          'EO'
+        )
+      }));
+      await syncPairedSettlementIds(knex, driverSettlement.id, eoSettlement.id);
+
+      for (const load of eligibleLoads) {
+        const gross = Number(load.rate) || 0;
+        const pairedPay = computeLoadPay({
+          payModel: profileSnapshot.pay_model,
+          centsPerMile: profileSnapshot.cents_per_mile,
+          percentageRate: profileSnapshot.percentage_rate,
+          flatPerLoadAmount: profileSnapshot.flat_per_load_amount,
+          gross,
+          loadedMiles: load.loaded_miles || 0,
+          hasAdditionalPayee: true,
+          additionalPayeeRate: profileSnapshot.additional_payee_rate,
+          equipmentOwnerPercentage: profileSnapshot.equipment_owner_percentage
+        });
+        const driverSnapshot = { ...profileSnapshot, settlement_type: 'driver' };
+        const eoSnapshot = { ...profileSnapshot, settlement_type: 'equipment_owner' };
+
+        await knex('settlement_load_items').insert({
+          settlement_id: driverSettlement.id,
+          load_id: load.id,
+          pickup_date: load.pickup_date,
+          delivery_date: load.delivery_date,
+          loaded_miles: load.loaded_miles ?? null,
+          pay_basis_snapshot: driverSnapshot,
+          gross_amount: gross,
+          driver_pay_amount: pairedPay.driverPay,
+          additional_payee_amount: 0,
+          included_by: userId
+        });
+        await knex('settlement_load_items').insert({
+          settlement_id: eoSettlement.id,
+          load_id: load.id,
+          pickup_date: load.pickup_date,
+          delivery_date: load.delivery_date,
+          loaded_miles: load.loaded_miles ?? null,
+          pay_basis_snapshot: eoSnapshot,
+          gross_amount: gross,
+          driver_pay_amount: 0,
+          additional_payee_amount: pairedPay.additionalPayeePay,
+          included_by: userId
+        });
+      }
+
+      const expenseProfile = await getActiveExpenseResponsibilityProfile(knex, driverId, period.period_end);
+      const recurring = await getRecurringDeductionsForPeriod(
+        knex,
+        driverId,
+        period.period_start,
+        period.period_end,
+        normalizeRecurringDeductionPayeeIds([primaryPayeeId, ownerPayeeId], payeeAssignment)
+      );
+      logTiming('recurring-deductions-resolved', { recurringCount: recurring.length, pairedMode: true });
+
+      for (const rule of recurring) {
+        const applyTo = resolveRecurringDeductionApplyTo(rule, {
+          primaryPayeeId,
+          additionalPayeeId: ownerPayeeId
+        });
+        if (!applyTo) continue;
+        if (!shouldApplyRecurringDeductionForSettlement(rule, applyTo, {
+          expenseProfile,
+          hasLoadItems: eligibleLoads.length > 0
+        })) {
+          continue;
+        }
+
+        const targetSettlementId = applyTo === 'additional_payee' ? eoSettlement.id : driverSettlement.id;
+        await knex('settlement_adjustment_items').insert({
+          settlement_id: targetSettlementId,
+          item_type: 'deduction',
+          source_type: 'scheduled_rule',
+          description: rule.description || rule.source_type || 'Recurring deduction',
+          amount: Number(rule.amount) || 0,
+          charge_party: applyTo === 'additional_payee' ? 'equipment_owner' : 'driver',
+          apply_to: 'primary_payee',
+          source_reference_id: rule.id,
+          source_reference_type: 'recurring_deduction_rule',
+          status: 'applied',
+          created_by: userId
+        });
+      }
+
+      await consumeFuelForSettlement(
+        knex,
+        driverSettlement.id,
+        driverId,
+        period.period_start,
+        period.period_end,
+        userId,
+        tenantId
+      );
+      logTiming('fuel-consumed', { pairedMode: true, targetSettlement: 'driver' });
+      await consumeTollsForSettlement(
+        knex,
+        driverSettlement.id,
+        driverId,
+        period.period_start,
+        period.period_end,
+        userId,
+        tenantId
+      );
+      logTiming('tolls-consumed', { pairedMode: true, targetSettlement: 'driver' });
+
+      const finalDriverSettlement = await updateSettlementTotalsFromRows(knex, driverSettlement.id, { ...profileSnapshot, settlement_type: 'driver' });
+      await updateSettlementTotalsFromRows(knex, eoSettlement.id, { ...profileSnapshot, settlement_type: 'equipment_owner' });
+      logTiming('settlement-recalculated', { pairedMode: true });
+      return finalDriverSettlement;
+    }
+
+    const settlementDate = period.period_end;
+    const settlementBasePayload = {
       tenant_id: tenantId,
       operating_entity_id: operatingEntityId,
       payroll_period_id: payrollPeriodId,
@@ -605,7 +1225,6 @@ async function createDraftSettlement(payrollPeriodId, driverId, dateBasis, userI
       compensation_profile_id: profile?.id ?? null,
       primary_payee_id: primaryPayeeId,
       additional_payee_id: additionalPayeeId,
-      settlement_number: settlementNumber,
       settlement_status: 'preparing',
       date: settlementDate,
       subtotal_gross: 0,
@@ -616,7 +1235,12 @@ async function createDraftSettlement(payrollPeriodId, driverId, dateBasis, userI
       net_pay_driver: 0,
       net_pay_additional_payee: 0,
       created_by: userId
-    }).returning('*');
+    };
+
+    const settlement = await insertSettlementWithRetry(knex, async () => ({
+      ...settlementBasePayload,
+      settlement_number: await generateSettlementNumberWithContext(knex, driver, period)
+    }));
 
     for (const load of eligibleLoads) {
       const gross = Number(load.rate) || 0;
@@ -628,7 +1252,8 @@ async function createDraftSettlement(payrollPeriodId, driverId, dateBasis, userI
         gross,
         loadedMiles: load.loaded_miles || 0,
         hasAdditionalPayee: !!additionalPayeeId,
-        additionalPayeeRate: profileSnapshot.additional_payee_rate
+        additionalPayeeRate: profileSnapshot.additional_payee_rate,
+        equipmentOwnerPercentage: profileSnapshot.equipment_owner_percentage
       });
       await knex('settlement_load_items').insert({
         settlement_id: settlement.id,
@@ -644,27 +1269,42 @@ async function createDraftSettlement(payrollPeriodId, driverId, dateBasis, userI
       });
     }
 
+    const expenseProfile = await getActiveExpenseResponsibilityProfile(knex, driverId, period.period_end);
     const recurring = await getRecurringDeductionsForPeriod(
       knex,
       driverId,
       period.period_start,
       period.period_end,
-      [primaryPayeeId, additionalPayeeId].filter(Boolean)
+      normalizeRecurringDeductionPayeeIds(
+        [primaryPayeeId, additionalPayeeId],
+        payeeAssignment
+      )
     );
+    logTiming('recurring-deductions-resolved', { recurringCount: recurring.length });
     for (const rule of recurring) {
-      // Determine which payee the deduction applies to
-      let applyTo = 'primary_payee'; // default
-
-      if (rule.payee_id) {
-        // If payee_id is specified, check if it matches primary or additional payee
-        if (rule.payee_id === primaryPayeeId) {
-          applyTo = 'primary_payee';
-        } else if (rule.payee_id === additionalPayeeId) {
-          applyTo = 'additional_payee';
-        } else {
-          // Payee doesn't match this settlement, skip this rule
-          continue;
-        }
+      const applyTo = resolveRecurringDeductionApplyTo(rule, {
+        primaryPayeeId,
+        additionalPayeeId
+      });
+      if (!applyTo) {
+        continue;
+      }
+      if (!shouldApplyRecurringDeductionForSettlement(rule, applyTo, {
+        expenseProfile,
+        hasLoadItems: eligibleLoads.length > 0
+      })) {
+        continue;
+      }
+      const inferredExpenseResponsibility = resolveSpecificExpenseResponsibility(rule, expenseProfile);
+      const responsibilityField = getExpenseResponsibilityFieldForSourceType(rule.source_type);
+      if (inferredExpenseResponsibility && !rule.expense_responsibility && responsibilityField) {
+        await knex('recurring_deduction_rules')
+          .where({ id: rule.id })
+          .update({
+            expense_responsibility: inferredExpenseResponsibility,
+            updated_at: knex.fn.now()
+          });
+        rule.expense_responsibility = inferredExpenseResponsibility;
       }
 
       await knex('settlement_adjustment_items').insert({
@@ -682,6 +1322,18 @@ async function createDraftSettlement(payrollPeriodId, driverId, dateBasis, userI
       });
     }
 
+    // FN-578: Auto-consume unlinked fuel transactions for the period
+    await consumeFuelForSettlement(
+      knex,
+      settlement.id,
+      driverId,
+      period.period_start,
+      period.period_end,
+      userId,
+      tenantId
+    );
+    logTiming('fuel-consumed');
+
     // Auto-consume unlinked toll transactions for the period
     await consumeTollsForSettlement(
       knex,
@@ -692,45 +1344,55 @@ async function createDraftSettlement(payrollPeriodId, driverId, dateBasis, userI
       userId,
       tenantId
     );
+    logTiming('tolls-consumed');
 
     await recalcAndUpdateSettlement(knex, settlement.id);
+    logTiming('settlement-recalculated');
     return knex('settlements').where({ id: settlement.id }).first();
   } finally {
     client.release();
   }
 }
 
-async function recalcAndUpdateSettlement(knex, settlementId) {
+async function recalcAndUpdateSettlement(knex, settlementId, options = {}) {
   const settlement = await knex('settlements').where({ id: settlementId }).first();
   if (!settlement) throw new Error('Settlement not found');
   if (settlement.settlement_status === 'void') return settlement;
 
-  const asOf = settlement.date || new Date().toISOString().slice(0, 10);
+  const asOf = toDateOnly(new Date());
+  const isEquipmentOwnerSettlement = settlement.settlement_type === 'equipment_owner';
+  const isPairedDriverSettlement = settlement.settlement_type === 'driver' && !!settlement.paired_settlement_id;
   
   // Resolve compensation profile
-  let effectiveCompensationProfileId = settlement.compensation_profile_id;
-  if (!effectiveCompensationProfileId) {
-    let profile = await getActiveCompensationProfile(knex, settlement.driver_id, asOf);
-    if (!profile) {
-      // Fallback to latest profile
-      profile = await knex('driver_compensation_profiles')
-        .where({ driver_id: settlement.driver_id, status: 'active' })
-        .orderBy('effective_start_date', 'desc')
-        .first();
-    }
-    effectiveCompensationProfileId = profile?.id || null;
+  let activeCompensationProfile = await getActiveCompensationProfile(knex, settlement.driver_id, asOf);
+  if (!activeCompensationProfile) {
+    activeCompensationProfile = await knex('driver_compensation_profiles')
+      .where({ driver_id: settlement.driver_id, status: 'active' })
+      .orderBy([
+        { column: 'effective_start_date', order: 'desc' },
+        { column: 'created_at', order: 'desc' }
+      ])
+      .first();
   }
+  const effectiveCompensationProfileId = activeCompensationProfile?.id || settlement.compensation_profile_id || null;
 
   // Resolve payee assignment
   let payeeAssignment = await getActivePayeeAssignment(knex, settlement.driver_id, asOf);
   if (!payeeAssignment) {
     payeeAssignment = await knex('driver_payee_assignments')
       .where({ driver_id: settlement.driver_id })
-      .orderBy('effective_start_date', 'desc')
+      .orderBy([
+        { column: 'effective_start_date', order: 'desc' },
+        { column: 'created_at', order: 'desc' }
+      ])
       .first();
   }
-  const effectivePrimaryPayeeId = settlement.primary_payee_id || payeeAssignment?.primary_payee_id || null;
-  const effectiveAdditionalPayeeId = settlement.additional_payee_id || payeeAssignment?.additional_payee_id || null;
+  const effectivePrimaryPayeeId = isEquipmentOwnerSettlement
+    ? (settlement.primary_payee_id || payeeAssignment?.additional_payee_id || null)
+    : (settlement.primary_payee_id || payeeAssignment?.primary_payee_id || null);
+  const effectiveAdditionalPayeeId = isEquipmentOwnerSettlement
+    ? null
+    : (isPairedDriverSettlement ? null : (settlement.additional_payee_id || payeeAssignment?.additional_payee_id || null));
 
   // Update settlement if snapshot values changed
   if (
@@ -768,6 +1430,7 @@ async function recalcAndUpdateSettlement(knex, settlementId) {
     : null;
 
   if (period) {
+    const expenseProfile = await getActiveExpenseResponsibilityProfile(knex, settlement.driver_id, asOf);
     const excludedScheduledRows = await knex('settlement_adjustment_items')
       .where({ settlement_id: settlementId, source_type: 'scheduled_rule_removed' })
       .select('source_reference_id', 'apply_to');
@@ -782,23 +1445,60 @@ async function recalcAndUpdateSettlement(knex, settlementId) {
       settlement.driver_id,
       period.period_start,
       period.period_end,
-      [effectivePrimaryPayeeId, effectiveAdditionalPayeeId].filter(Boolean)
+      normalizeRecurringDeductionPayeeIds(
+        [effectivePrimaryPayeeId, effectiveAdditionalPayeeId],
+        payeeAssignment
+      ),
+      {
+        historicalBackfillStartDate: options?.historicalRecurringRuleStartDateStart || null,
+        historicalBackfillEndDate: options?.historicalRecurringRuleStartDateEnd || null
+      }
     );
 
     for (const rule of recurring) {
-      // Determine which payee the deduction applies to
-      let applyTo = 'primary_payee'; // default
+      const backfilledRuleStartDate = resolveRecurringDeductionBackfillStartDate(rule, period.period_end, {
+        historicalBackfillStartDate: options?.historicalRecurringRuleStartDateStart || null,
+        historicalBackfillEndDate: options?.historicalRecurringRuleStartDateEnd || null
+      });
+      if (backfilledRuleStartDate) {
+        await knex('recurring_deduction_rules')
+          .where({ id: rule.id })
+          .update({
+            start_date: backfilledRuleStartDate,
+            updated_at: knex.fn.now()
+          });
+        rule.start_date = backfilledRuleStartDate;
+      }
 
-      if (rule.payee_id) {
-        // If payee_id is specified, check if it matches primary or additional payee
-        if (rule.payee_id === effectivePrimaryPayeeId) {
-          applyTo = 'primary_payee';
-        } else if (rule.payee_id === effectiveAdditionalPayeeId) {
-          applyTo = 'additional_payee';
-        } else {
-          // Payee doesn't match this settlement, skip this rule
-          continue;
-        }
+      const applyTo = resolveRecurringDeductionApplyTo(rule, {
+        primaryPayeeId: effectivePrimaryPayeeId,
+        additionalPayeeId: effectiveAdditionalPayeeId
+      });
+      if (!applyTo) {
+        continue;
+      }
+      if (isEquipmentOwnerSettlement && applyTo !== 'additional_payee') {
+        continue;
+      }
+      if (isPairedDriverSettlement && applyTo === 'additional_payee') {
+        continue;
+      }
+      if (!shouldApplyRecurringDeductionForSettlement(rule, applyTo, {
+        expenseProfile,
+        hasLoadItems: loadItems.length > 0
+      })) {
+        continue;
+      }
+      const inferredExpenseResponsibility = resolveSpecificExpenseResponsibility(rule, expenseProfile);
+      const responsibilityField = getExpenseResponsibilityFieldForSourceType(rule.source_type);
+      if (inferredExpenseResponsibility && !rule.expense_responsibility && responsibilityField) {
+        await knex('recurring_deduction_rules')
+          .where({ id: rule.id })
+          .update({
+            expense_responsibility: inferredExpenseResponsibility,
+            updated_at: knex.fn.now()
+          });
+        rule.expense_responsibility = inferredExpenseResponsibility;
       }
 
       const exclusionKey = `${rule.id}|${applyTo}`;
@@ -812,8 +1512,8 @@ async function recalcAndUpdateSettlement(knex, settlementId) {
         source_type: 'scheduled_rule',
         description: rule.description || rule.source_type || 'Recurring deduction',
         amount: Number(rule.amount) || 0,
-        charge_party: 'driver',
-        apply_to: applyTo,
+        charge_party: isEquipmentOwnerSettlement ? 'equipment_owner' : 'driver',
+        apply_to: isEquipmentOwnerSettlement ? 'primary_payee' : applyTo,
         source_reference_id: rule.id,
         source_reference_type: 'recurring_deduction_rule',
         status: 'applied',
@@ -829,9 +1529,10 @@ async function recalcAndUpdateSettlement(knex, settlementId) {
 
   const loadItems = await knex('settlement_load_items').where({ settlement_id: settlementId });
   const adjustmentItems = await knex('settlement_adjustment_items').where({ settlement_id: settlementId });
-  const profile = settlement.compensation_profile_id
-    ? await knex('driver_compensation_profiles').where({ id: settlement.compensation_profile_id }).first()
-    : null;
+  const profile = activeCompensationProfile
+    || (effectiveCompensationProfileId
+      ? await knex('driver_compensation_profiles').where({ id: effectiveCompensationProfileId }).first()
+      : null);
   const driver = await knex('drivers')
     .where({ id: settlement.driver_id })
     .select('pay_basis', 'pay_rate', 'pay_percentage')
@@ -845,7 +1546,9 @@ async function recalcAndUpdateSettlement(knex, settlementId) {
     additional_payee_rate: additionalPayeeRate
   };
 
-  const hasAdditionalPayee = !!effectiveAdditionalPayeeId || (Number(additionalPayeeRate) || 0) > 0;
+  const hasAdditionalPayee = isEquipmentOwnerSettlement
+    ? true
+    : (!!effectiveAdditionalPayeeId || (Number(additionalPayeeRate) || 0) > 0);
 
   console.log('[Settlement Recalc] payee context', {
     settlementId,
@@ -871,44 +1574,62 @@ async function recalcAndUpdateSettlement(knex, settlementId) {
   for (const item of loadItems) {
     const itemSnapshot = normalizeSnapshot(item.pay_basis_snapshot);
     const payModel = itemSnapshot.pay_model || profileSnapshot.pay_model || 'per_mile';
+    const refreshedSnapshot = {
+      pay_model: payModel,
+      percentage_rate: itemSnapshot.percentage_rate ?? profileSnapshot.percentage_rate ?? null,
+      cents_per_mile: itemSnapshot.cents_per_mile ?? profileSnapshot.cents_per_mile ?? null,
+      flat_weekly_amount: itemSnapshot.flat_weekly_amount ?? profileSnapshot.flat_weekly_amount ?? null,
+      flat_per_load_amount: itemSnapshot.flat_per_load_amount ?? profileSnapshot.flat_per_load_amount ?? null,
+      additional_payee_rate: itemSnapshot.additional_payee_rate ?? profileSnapshot.additional_payee_rate ?? null,
+      equipment_owner_percentage: itemSnapshot.equipment_owner_percentage ?? profileSnapshot.equipment_owner_percentage ?? null,
+      settlement_type: itemSnapshot.settlement_type || settlement.settlement_type || 'driver'
+    };
     const { driverPay, additionalPayeePay } = computeLoadPay({
-      payModel,
-      centsPerMile: itemSnapshot.cents_per_mile ?? profileSnapshot.cents_per_mile,
-      percentageRate: itemSnapshot.percentage_rate ?? profileSnapshot.percentage_rate,
-      flatPerLoadAmount: itemSnapshot.flat_per_load_amount ?? profileSnapshot.flat_per_load_amount,
+      payModel: refreshedSnapshot.pay_model,
+      centsPerMile: refreshedSnapshot.cents_per_mile,
+      percentageRate: refreshedSnapshot.percentage_rate,
+      flatPerLoadAmount: refreshedSnapshot.flat_per_load_amount,
       gross: Number(item.gross_amount) || 0,
       loadedMiles: Number(item.loaded_miles) || 0,
       hasAdditionalPayee,
-      additionalPayeeRate: itemSnapshot.additional_payee_rate ?? profileSnapshot.additional_payee_rate
+      additionalPayeeRate: refreshedSnapshot.additional_payee_rate,
+      equipmentOwnerPercentage: refreshedSnapshot.equipment_owner_percentage
     });
+    const targetDriverPay = isEquipmentOwnerSettlement ? 0 : driverPay;
+    const targetAdditionalPayee = isEquipmentOwnerSettlement
+      ? additionalPayeePay
+      : (isPairedDriverSettlement ? 0 : additionalPayeePay);
 
     console.log('[Settlement Recalc] load pay', {
       settlementId,
       loadId: item.load_id,
       gross: Number(item.gross_amount) || 0,
       rateUsed: itemSnapshot.additional_payee_rate ?? profileSnapshot.additional_payee_rate,
-      driverPay,
-      additionalPayeePay,
+      driverPay: targetDriverPay,
+      additionalPayeePay: targetAdditionalPayee,
       previousAdditionalPayeeAmount: Number(item.additional_payee_amount || 0)
     });
 
     if (
-      Number(item.driver_pay_amount) !== Number(driverPay) ||
-      Number(item.additional_payee_amount || 0) !== Number(additionalPayeePay)
+      Number(item.driver_pay_amount) !== Number(targetDriverPay) ||
+      Number(item.additional_payee_amount || 0) !== Number(targetAdditionalPayee) ||
+      JSON.stringify(itemSnapshot || {}) !== JSON.stringify(refreshedSnapshot)
     ) {
       await knex('settlement_load_items')
         .where({ id: item.id })
         .update({
-          driver_pay_amount: driverPay,
-          additional_payee_amount: additionalPayeePay,
+          pay_basis_snapshot: refreshedSnapshot,
+          driver_pay_amount: targetDriverPay,
+          additional_payee_amount: targetAdditionalPayee,
           updated_at: knex.fn.now()
         });
     }
 
     recalculatedLoadItems.push({
       ...item,
-      driver_pay_amount: driverPay,
-      additional_payee_amount: additionalPayeePay
+      pay_basis_snapshot: refreshedSnapshot,
+      driver_pay_amount: targetDriverPay,
+      additional_payee_amount: targetAdditionalPayee
     });
   }
 
@@ -954,7 +1675,8 @@ async function addLoadToSettlement(knex, settlementId, loadId, userId) {
       gross,
       loadedMiles,
       hasAdditionalPayee: !!settlement.additional_payee_id,
-      additionalPayeeRate: snapshot.additional_payee_rate
+      additionalPayeeRate: snapshot.additional_payee_rate,
+      equipmentOwnerPercentage: snapshot.equipment_owner_percentage
     });
     const stops = await client.query(
       'SELECT stop_type, stop_date FROM load_stops WHERE load_id = $1 ORDER BY sequence',
@@ -1056,10 +1778,49 @@ async function removeAdjustment(knex, settlementId, adjustmentId) {
         updated_at: knex.fn.now()
       });
   } else {
+    if (
+      ['imported_fuel', 'imported_toll'].includes(adjustment.source_type)
+      && settlement.paired_settlement_id
+      && adjustment.source_reference_id
+    ) {
+      await knex('settlement_adjustment_items')
+        .where({ settlement_id: settlement.paired_settlement_id })
+        .andWhere({
+          source_type: adjustment.source_type,
+          source_reference_id: adjustment.source_reference_id,
+          source_reference_type: adjustment.source_reference_type
+        })
+        .del();
+
+      if (adjustment.source_reference_type === 'fuel_transaction') {
+        await knex('fuel_transactions')
+          .where({ id: adjustment.source_reference_id })
+          .update({
+            settlement_id: null,
+            settlement_link_status: 'none',
+            updated_at: knex.fn.now()
+          });
+      }
+
+      if (adjustment.source_reference_type === 'toll_transaction') {
+        await knex('toll_transactions')
+          .where({ id: adjustment.source_reference_id })
+          .update({
+            settlement_id: null,
+            settlement_adjustment_item_id: null,
+            settlement_link_status: 'none',
+            updated_at: knex.fn.now()
+          });
+      }
+    }
+
     await knex('settlement_adjustment_items').where({ id: adjustmentId, settlement_id: settlementId }).del();
   }
 
   await recalcAndUpdateSettlement(knex, settlementId);
+  if (settlement.paired_settlement_id) {
+    await recalcAndUpdateSettlement(knex, settlement.paired_settlement_id);
+  }
 }
 
 async function restoreScheduledAdjustment(knex, settlementId, adjustmentId) {
@@ -1111,10 +1872,31 @@ async function voidSettlement(knex, settlementId) {
   const settlement = await knex('settlements').where({ id: settlementId }).first();
   if (!settlement) throw new Error('Settlement not found');
   await knex('settlements').where({ id: settlementId }).update({ settlement_status: 'void' });
+
+  // FN-578: Reset linked fuel and toll transactions so they can be re-used in a new settlement
+  await knex('fuel_transactions')
+    .where({ settlement_id: settlementId, settlement_link_status: 'linked' })
+    .update({
+      settlement_id: null,
+      settlement_link_status: 'none',
+      updated_at: knex.fn.now()
+    });
+
+  await knex('toll_transactions')
+    .where({ settlement_id: settlementId, settlement_link_status: 'linked' })
+    .update({
+      settlement_id: null,
+      settlement_adjustment_item_id: null,
+      settlement_link_status: 'none',
+      updated_at: knex.fn.now()
+    });
+
   return knex('settlements').where({ id: settlementId }).first();
 }
 
 async function listSettlements(knex, filters = {}, context = null) {
+  const settlementColumns = await getSettlementsColumnSet(knex);
+  const hasPairedSettlementId = settlementColumns.has('paired_settlement_id');
   let q = knex('settlements as s')
     .select(
       's.*',
@@ -1122,7 +1904,13 @@ async function listSettlements(knex, filters = {}, context = null) {
       'pp.period_end',
       'pp.status as period_status',
       knex.raw("concat_ws(' ', d.first_name, d.last_name) as driver_name"),
-      knex.raw("concat_ws(' ', d.first_name, d.last_name) as payable_to_name"),
+      knex.raw(`
+        CASE
+          WHEN COALESCE(s.settlement_type, 'driver') = 'equipment_owner'
+            THEN COALESCE(primary_payee.name, additional_payee.name, concat_ws(' ', d.first_name, d.last_name))
+          ELSE COALESCE(primary_payee.name, concat_ws(' ', d.first_name, d.last_name))
+        END as payable_to_name
+      `),
       'primary_payee.name as primary_payee_name',
       'additional_payee.name as additional_payee_name'
     )
@@ -1139,6 +1927,12 @@ async function listSettlements(knex, filters = {}, context = null) {
   if (filters.driver_id) q = q.where('s.driver_id', filters.driver_id);
   if (filters.payroll_period_id) q = q.where('s.payroll_period_id', filters.payroll_period_id);
   if (filters.settlement_status) q = q.where('s.settlement_status', filters.settlement_status);
+  if (filters.settlement_type) q = q.where('s.settlement_type', filters.settlement_type);
+  if (filters.truck_id) q = q.where('s.truck_id', filters.truck_id);
+  if (filters.equipment_owner_id) q = q.where('s.equipment_owner_id', filters.equipment_owner_id);
+  if (filters.paired_settlement_id && hasPairedSettlementId) {
+    q = q.where('s.paired_settlement_id', filters.paired_settlement_id);
+  }
   if (filters.settlement_number) q = q.where('s.settlement_number', 'ilike', `%${filters.settlement_number}%`);
 
   q = q.orderBy('s.created_at', 'desc');
@@ -1157,7 +1951,9 @@ module.exports = {
   getAlreadySettledLoadIds,
   createDraftSettlement,
   recalcAndUpdateSettlement,
+  consumeFuelForSettlement,
   consumeTollsForSettlement,
+  applyVariableExpenseToSettlement,
   addLoadToSettlement,
   removeLoadFromSettlement,
   addAdjustment,

@@ -152,11 +152,21 @@ export class SettlementWizardComponent implements OnInit, OnDestroy {
     }
   }
 
+  get dateRangeInvalid(): boolean {
+    return !!this.newPeriodStart && !!this.newPeriodEnd && this.newPeriodEnd < this.newPeriodStart;
+  }
+
+  get canCreatePeriod(): boolean {
+    return (
+      !!this.newPeriodStart &&
+      !!this.newPeriodEnd &&
+      this.newPeriodEnd >= this.newPeriodStart &&
+      !this.creatingPeriod
+    );
+  }
+
   createNewPeriod(): void {
-    if (!this.newPeriodStart || !this.newPeriodEnd) {
-      this.error = 'Enter period start and end dates';
-      return;
-    }
+    if (!this.canCreatePeriod) return;
     this.error = '';
     this.creatingPeriod = true;
     this.apiService.createPayrollPeriod({
@@ -170,6 +180,8 @@ export class SettlementWizardComponent implements OnInit, OnDestroy {
         this.payrollPeriodId = row.id;
         this.periodStart = row.period_start;
         this.periodEnd = row.period_end;
+        this.newPeriodStart = '';
+        this.newPeriodEnd = '';
         this.creatingPeriod = false;
       },
       error: (err) => {
@@ -224,17 +236,26 @@ export class SettlementWizardComponent implements OnInit, OnDestroy {
   createDraft(): void {
     this.error = '';
     this.saving = true;
-    this.apiService.createSettlementDraft({
+    this.apiService.generateDualSettlements({
       payroll_period_id: this.payrollPeriodId,
       driver_id: this.driverId,
       date_basis: this.dateBasis
     }).subscribe({
-      next: (settlement: any) => {
+      next: (result: any) => {
         this.saving = false;
-        this.router.navigate(['/settlements', settlement.id], { queryParams: { created: 'draft' } });
+        const sid =
+          result?.driverSettlement?.id
+          ?? result?.driverSettlement?.settlement_id
+          ?? result?.id
+          ?? result?.settlement_id;
+        if (!sid) {
+          this.error = 'Settlement generation finished but the server response did not include a driver settlement id. Open Settlements and use View on the new row.';
+          return;
+        }
+        this.router.navigate(['/settlements', sid], { queryParams: { created: 'draft' } });
       },
       error: (err) => {
-        this.error = err?.error?.error || err?.message || 'Failed to create settlement';
+        this.error = err?.error?.error || err?.message || 'Failed to generate settlement';
         this.saving = false;
       }
     });

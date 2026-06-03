@@ -1,0 +1,246 @@
+<!--
+  FN-808 — Load Detail Side Drawer
+  Slide-out panel anchored to the right; sibling table width adjusts via
+  parent grid layout (the drawer does NOT render a backdrop that blocks
+  the list — clicks on the list navigate between loads).
+-->
+<aside
+  #drawerPanel
+  class="load-drawer"
+  role="dialog"
+  aria-modal="false"
+  [attr.aria-label]="'Load ' + (loadDetail?.load_number || '') + ' detail'"
+  [style.width.px]="width"
+>
+  <!-- Left edge drag handle for resize (600–800 px) -->
+  <div
+    class="load-drawer__resize-handle"
+    role="separator"
+    aria-orientation="vertical"
+    aria-label="Resize drawer"
+    (mousedown)="onResizeHandleMouseDown($event)"
+    title="Drag to resize (600–800 px)"
+  ></div>
+
+  <!-- ── Header ───────────────────────────────────────────────────────────── -->
+  <header class="load-drawer__header">
+    <div class="load-drawer__header-left">
+      <button
+        type="button"
+        class="load-drawer__nav-btn"
+        (click)="onPrev()"
+        [disabled]="!hasPrev"
+        title="Previous load"
+        aria-label="Previous load"
+      >
+        <span class="material-symbols-outlined">chevron_left</span>
+      </button>
+      <button
+        type="button"
+        class="load-drawer__nav-btn"
+        (click)="onNext()"
+        [disabled]="!hasNext"
+        title="Next load"
+        aria-label="Next load"
+      >
+        <span class="material-symbols-outlined">chevron_right</span>
+      </button>
+      <div class="load-drawer__title">
+        <span class="load-drawer__load-number">
+          {{ loadDetail?.load_number || '—' }}
+        </span>
+        <!-- FN-818: header AI marker + confidence chip when the load originated from an AI source. -->
+        <app-ai-sparkle
+          *ngIf="isAiExtractedSource()"
+          class="load-drawer__ai-sparkle"
+          size="md"
+          [confidence]="drawerOverallConfidence"
+          [tooltip]="drawerSparkleTooltip"
+        ></app-ai-sparkle>
+        <app-confidence-badge
+          *ngIf="drawerOverallConfidence != null"
+          class="load-drawer__confidence-badge"
+          [confidence]="drawerOverallConfidence"
+          [tooltip]="drawerSparkleTooltip"
+        ></app-confidence-badge>
+        <app-status-pill
+          *ngIf="loadStatusForPill"
+          [status]="loadStatusForPill"
+        ></app-status-pill>
+      </div>
+    </div>
+
+    <div class="load-drawer__header-right">
+      <button
+        type="button"
+        class="load-drawer__icon-btn"
+        (click)="expand.emit()"
+        title="Expand to full modal"
+        aria-label="Expand to full modal"
+      >
+        <span class="material-symbols-outlined">open_in_full</span>
+      </button>
+      <button
+        type="button"
+        class="load-drawer__icon-btn"
+        (click)="requestClose()"
+        title="Close (Esc)"
+        aria-label="Close drawer"
+      >
+        <span class="material-symbols-outlined">close</span>
+      </button>
+    </div>
+  </header>
+
+  <!-- ── Tabs ─────────────────────────────────────────────────────────────── -->
+  <nav class="load-drawer__tabs" role="tablist" aria-label="Load sections">
+    <button
+      *ngFor="let tab of tabs"
+      type="button"
+      role="tab"
+      class="load-drawer__tab"
+      [class.is-active]="activeTab === tab.id"
+      [attr.aria-selected]="activeTab === tab.id"
+      (click)="selectTab(tab.id)"
+    >
+      <span class="material-symbols-outlined">{{ tab.icon }}</span>
+      <span>{{ tab.label }}</span>
+    </button>
+  </nav>
+
+  <!-- ── Loading / Error banner ──────────────────────────────────────────── -->
+  <div class="load-drawer__banner" *ngIf="loading">Loading load…</div>
+  <div class="load-drawer__banner load-drawer__banner--error" *ngIf="errorMessage">
+    {{ errorMessage }}
+  </div>
+
+  <!-- ── Body: tab panels ─────────────────────────────────────────────────── -->
+  <div class="load-drawer__body" [class.is-loading]="loading">
+    <app-step-basics
+      *ngIf="activeTab === 'basics' && !loading"
+      [data]="basics"
+      [aiMetadata]="loadDetail?.ai_metadata ?? null"
+      [focusLowConfidence]="focusLowConfidence"
+      mode="edit"
+      (dataChange)="onBasicsChange($event)"
+    ></app-step-basics>
+
+    <app-step-stops
+      *ngIf="activeTab === 'stops' && !loading"
+      [totalMiles]="totalMiles"
+      [emptyMiles]="emptyMiles"
+      [loadedMiles]="loadedMiles"
+      [rate]="basics.rate"
+      [stops]="stops"
+      (stopsChange)="onStopsChange($event)"
+    ></app-step-stops>
+
+    <ng-container *ngIf="activeTab === 'driver' && !loading">
+      <!-- FN-1439: AI-suggested driver CTA. Only useful when no driver is
+           currently assigned; manual dropdown below remains the fallback. -->
+      <div class="load-drawer__suggest-driver" *ngIf="!driverId">
+        <div class="load-drawer__suggest-driver-copy">
+          <span class="material-symbols-outlined">auto_awesome</span>
+          <div>
+            <strong>Need a driver fast?</strong>
+            <p>Let AI rank the best fits by HOS, distance, equipment, and history.</p>
+          </div>
+        </div>
+        <button
+          type="button"
+          class="btn btn-primary"
+          (click)="openRecommendDriverModal()"
+          data-testid="suggest-driver-cta"
+        >
+          <span class="material-symbols-outlined">auto_awesome</span>
+          Suggest driver
+        </button>
+      </div>
+
+      <app-wizard-step-driver
+        [driverId]="driverId"
+        [truckId]="truckId"
+        [trailerId]="trailerId"
+        (driverIdChange)="onDriverChange($event)"
+        (truckIdChange)="onTruckChange($event)"
+        (trailerIdChange)="onTrailerChange($event)"
+      ></app-wizard-step-driver>
+    </ng-container>
+
+    <app-step-attachments
+      *ngIf="activeTab === 'attachments' && !loading"
+      [attachments]="attachments"
+      [saved]="savedAttachments"
+      (attachmentsChange)="onAttachmentsChange($event)"
+      (deleteSaved)="onDeleteSavedAttachment($event)"
+    ></app-step-attachments>
+  </div>
+
+  <!-- ── Footer ───────────────────────────────────────────────────────────── -->
+  <!-- FN-1063: in `view` mode the primary action is "Edit" (flips to edit
+       mode); in `edit` mode the primary action is "Save". -->
+  <!-- FN-1356: appFabSafeArea reserves bottom space so the global Ask Neuron FAB clears the drawer footer while the drawer is open. -->
+  <footer class="load-drawer__footer" appFabSafeArea="64">
+    <button
+      type="button"
+      class="btn btn-ghost"
+      (click)="requestClose()"
+      [disabled]="saving"
+    >
+      {{ mode === 'edit' ? 'Cancel' : 'Close' }}
+    </button>
+    <button
+      *ngIf="mode === 'view'"
+      type="button"
+      class="btn btn-primary"
+      (click)="enterEditMode()"
+      [disabled]="loading || !loadDetail"
+    >
+      <span class="material-symbols-outlined">edit</span>
+      Edit
+    </button>
+    <button
+      *ngIf="mode === 'edit'"
+      type="button"
+      class="btn btn-primary"
+      (click)="onSaveClick()"
+      [disabled]="saving || loading || !loadDetail"
+    >
+      <span *ngIf="!saving" class="material-symbols-outlined">save</span>
+      <span *ngIf="saving" class="material-symbols-outlined spin">progress_activity</span>
+      {{ saving ? 'Saving…' : 'Save' }}
+    </button>
+  </footer>
+
+  <!-- ── FN-1439: Suggest-driver modal ────────────────────────────────────── -->
+  <app-recommend-driver-modal
+    [open]="showRecommendDriverModal"
+    [loadId]="loadId"
+    [loadDetail]="loadDetail"
+    (close)="closeRecommendDriverModal()"
+    (assigned)="onRecommendDriverAssigned($event)"
+    (manualAssign)="onRecommendDriverManualFallback()"
+  ></app-recommend-driver-modal>
+
+  <!-- ── Unsaved-changes dialog ───────────────────────────────────────────── -->
+  <div
+    class="load-drawer__unsaved-overlay"
+    *ngIf="showUnsavedWarning"
+    role="alertdialog"
+    aria-modal="true"
+  >
+    <div class="load-drawer__unsaved-dialog">
+      <span class="material-symbols-outlined load-drawer__unsaved-icon">warning</span>
+      <h3>Unsaved changes</h3>
+      <p>You have unsaved changes. Close without saving?</p>
+      <div class="load-drawer__unsaved-actions">
+        <button type="button" class="btn btn-secondary" (click)="dismissUnsavedWarning()">
+          Keep editing
+        </button>
+        <button type="button" class="btn btn-danger" (click)="confirmDiscard()">
+          Discard changes
+        </button>
+      </div>
+    </div>
+  </div>
+</aside>

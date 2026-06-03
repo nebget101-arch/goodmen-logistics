@@ -2,6 +2,16 @@ import { Component, OnDestroy, OnInit } from '@angular/core';
 import { Subject, takeUntil } from 'rxjs';
 import { ApiService } from '../../services/api.service';
 import { OperatingEntityContextService } from '../../services/operating-entity-context.service';
+import { KpiStatus } from '../../shared/kpi-card/kpi-card.component';
+
+/** View-model for one KPI tile in the loads/billing clusters (FN-1640). */
+export interface DashboardKpiCard {
+  label: string;
+  value: number;
+  subline: string;
+  status: KpiStatus;
+  routerLink: string;
+}
 
 @Component({
   selector: 'app-dashboard',
@@ -10,17 +20,22 @@ import { OperatingEntityContextService } from '../../services/operating-entity-c
 })
 export class DashboardComponent implements OnInit, OnDestroy {
   stats: any = {};
-  alerts: any[] = [];
   loading = true;
   isDegraded = false;
   degradedGroups: string[] = [];
   activeOperatingEntityName = '';
 
+  /** FN-1640 — KPI cards rendered via <app-kpi-card>. Rebuilt on each load
+      so the OnPush primitives see stable input references. */
+  loadsCards: DashboardKpiCard[] = [];
+  billingCards: DashboardKpiCard[] = [];
+
+  /** Skeleton placeholder counts per cluster (mirror the real card counts). */
+  readonly loadsSkeletonCount = 4;
+  readonly billingSkeletonCount = 5;
+
   private destroy$ = new Subject<void>();
   private lastOperatingEntityId: string | null | undefined = undefined;
-
-  alertFilterType: 'all' | 'critical' | 'warning' = 'all';
-  alertFilterCategory: 'all' | 'driver' | 'vehicle' | 'maintenance' | 'compliance' = 'all';
 
   constructor(
     private apiService: ApiService,
@@ -59,11 +74,13 @@ export class DashboardComponent implements OnInit, OnDestroy {
   }
 
   loadDashboard(): void {
+    this.loading = true;
     this.apiService.getDashboardStats().subscribe({
       next: (data) => {
-        this.stats = data;
+        this.stats = data || {};
         this.isDegraded = !!data?.degraded;
         this.degradedGroups = Array.isArray(data?.degradedGroups) ? data.degradedGroups : [];
+        this.buildKpiCards();
         this.loading = false;
       },
       error: (error) => {
@@ -71,50 +88,35 @@ export class DashboardComponent implements OnInit, OnDestroy {
         this.loading = false;
       }
     });
-
-    this.apiService.getAlerts().subscribe({
-      next: (data) => {
-        this.alerts = data || [];
-      },
-      error: (error) => {
-        console.error('Error loading alerts:', error);
-      }
-    });
   }
 
-  get filteredAlerts(): any[] {
-    return (this.alerts || []).filter(a => {
-      if (this.alertFilterType !== 'all' && a.type !== this.alertFilterType) return false;
-      if (this.alertFilterCategory !== 'all' && a.category !== this.alertFilterCategory) return false;
-      return true;
-    });
+  /** FN-1640 — Retry handler for the degraded-data banner. */
+  retry(): void {
+    this.loadDashboard();
   }
 
-  getAlertClass(type: string): string {
-    if (type === 'critical' || type === 'danger' || type === 'error') return 'alert-critical';
-    if (type === 'warning') return 'alert-warning';
-    return 'alert-info';
-  }
-
-  getAlertLink(alert: any): string | null {
-    if (alert.driverId) return '/drivers/dqf';
-    if (alert.vehicleId) return '/vehicles';
-    return null;
-  }
-
-  getAlertQueryParams(alert: any): any {
-    if (alert.driverId) {
-      const params: any = { highlight: alert.driverId };
-      if (alert.category === 'compliance' && alert.message?.toLowerCase().includes('clearinghouse')) params.filter = 'clearinghouse';
-      else if (alert.category === 'compliance' && alert.message?.toLowerCase().includes('dqf')) params.filter = 'dqf-low';
-      else if (alert.message?.toLowerCase().includes('medical') || alert.message?.toLowerCase().includes('cdl')) params.filter = 'med-certs';
-      return params;
-    }
-    if (alert.vehicleId) {
-      if (alert.category === 'maintenance') return { filter: 'maintenance-due' };
-      if (alert.category === 'vehicle') return { filter: 'oos' };
-      return { vehicleId: alert.vehicleId };
-    }
-    return {};
+  /**
+   * Build the loads + billing KPI card view-models from `stats`.
+   * Status mapping preserves the legacy template's emphasis:
+   * Delivered/Paid → good, Funded → warning, everything else → info.
+   * Backend does not emit `previousPeriodValue`, so no trend chip is set
+   * (delta is intentionally omitted rather than fabricated — see FN-1637
+   * Open Items).
+   */
+  private buildKpiCards(): void {
+    const s = this.stats || {};
+    this.loadsCards = [
+      { label: 'Dispatched', value: s.loadsDispatched ?? 0, subline: 'Assigned, ready to move', status: 'info', routerLink: '/loads' },
+      { label: 'In Transit', value: s.loadsInTransit ?? 0, subline: 'Currently on the road', status: 'info', routerLink: '/loads' },
+      { label: 'Delivered', value: s.loadsDelivered ?? 0, subline: 'Completed', status: 'good', routerLink: '/loads' },
+      { label: 'Canceled', value: s.loadsCanceled ?? 0, subline: 'Cancelled loads', status: 'info', routerLink: '/loads' }
+    ];
+    this.billingCards = [
+      { label: 'Pending', value: s.billingPending ?? 0, subline: 'Awaiting billing', status: 'info', routerLink: '/loads' },
+      { label: 'Canceled', value: s.billingCanceled ?? 0, subline: 'Billing canceled', status: 'info', routerLink: '/loads' },
+      { label: 'Invoiced', value: s.billingInvoiced ?? 0, subline: 'BOL received / Sent to factoring', status: 'info', routerLink: '/loads' },
+      { label: 'Funded', value: s.billingFunded ?? 0, subline: 'Advance funded', status: 'warning', routerLink: '/loads' },
+      { label: 'Paid', value: s.billingPaid ?? 0, subline: 'Payment received', status: 'good', routerLink: '/loads' }
+    ];
   }
 }

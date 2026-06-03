@@ -1,0 +1,305 @@
+<!-- ─── Internal Work Order Badge ───────────────────────────────────────────── -->
+<div *ngIf="isInternalWorkOrder" class="internal-wo-banner">
+  <span class="material-symbols-outlined">build</span>
+  Internal Work Order — No Invoice Generated
+</div>
+
+<!-- ─── Auto-generated Invoice Card ─────────────────────────────────────────── -->
+<div *ngIf="!isInternalWorkOrder && invoiceInfo" class="section invoice-card">
+  <div class="invoice-card-header">
+    <div class="invoice-card-title">
+      <span class="material-symbols-outlined">receipt</span>
+      <span>Invoice <strong>{{ invoiceInfo.invoice_number || '#—' }}</strong></span>
+      <span [ngClass]="invoiceStatusClass">{{ invoiceStatusLabel }}</span>
+    </div>
+    <div class="invoice-card-actions">
+      <!-- Regenerate: only while still DRAFT -->
+      <button
+        type="button"
+        class="btn-inv btn-inv-outline"
+        *ngIf="canGenerateInvoice() && (invoiceInfo?.status || '').toUpperCase() === 'DRAFT'"
+        (click)="onGenerateInvoice()"
+        title="Regenerate invoice from current line items"
+      >
+        <span class="material-symbols-outlined">refresh</span>
+        Regenerate
+      </button>
+
+      <!-- Send Invoice: DRAFT → SENT -->
+      <button
+        type="button"
+        class="btn-inv btn-inv-primary"
+        *ngIf="canSendInvoice()"
+        (click)="onSendInvoice()"
+        title="Send invoice to customer (transitions DRAFT → Sent)"
+      >
+        <span class="material-symbols-outlined">send</span>
+        Send Invoice
+      </button>
+    </div>
+  </div>
+
+  <!-- Credit breakdown when credit was applied -->
+  <div *ngIf="hasCreditApplied" class="credit-breakdown">
+    <div class="credit-breakdown-row">
+      <span class="credit-breakdown-label">Subtotal</span>
+      <span>${{ (invoiceInfo.subtotal_amount || invoiceInfo.total_amount || 0) | number:'1.2-2' }}</span>
+    </div>
+    <div class="credit-breakdown-row credit-applied-row">
+      <span class="credit-breakdown-label">
+        <span class="material-symbols-outlined">discount</span>
+        Credit Applied
+      </span>
+      <span class="credit-applied-value">− ${{ (invoiceInfo.credit_applied || 0) | number:'1.2-2' }}</span>
+    </div>
+    <div class="credit-breakdown-row balance-due-row">
+      <span class="credit-breakdown-label"><strong>Balance Due</strong></span>
+      <strong>${{ balanceDue | number:'1.2-2' }}</strong>
+    </div>
+  </div>
+
+  <!-- Invoice line items -->
+  <div class="invoice-lines-wrap" *ngIf="invoiceInfo.line_items?.length">
+    <table class="invoice-lines-table">
+      <thead>
+        <tr>
+          <th>Description</th>
+          <th class="text-right">Qty</th>
+          <th class="text-right">Unit</th>
+          <th class="text-right">Total</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr *ngFor="let item of invoiceInfo.line_items">
+          <td>{{ item.description || item.name }}</td>
+          <td class="text-right">{{ item.quantity || 1 }}</td>
+          <td class="text-right">${{ (item.unit_price || 0) | number:'1.2-2' }}</td>
+          <td class="text-right">${{ (item.line_total || item.amount || 0) | number:'1.2-2' }}</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Totals footer -->
+  <div class="invoice-totals">
+    <div class="inv-total-row" *ngIf="invoiceInfo.tax_amount > 0">
+      <span>Tax</span>
+      <span>${{ (invoiceInfo.tax_amount || 0) | number:'1.2-2' }}</span>
+    </div>
+    <div class="inv-total-row inv-grand-total">
+      <strong>Total</strong>
+      <strong>${{ (invoiceInfo.total_amount || 0) | number:'1.2-2' }}</strong>
+    </div>
+    <div class="inv-total-row inv-balance" *ngIf="hasCreditApplied">
+      <span>Balance Due</span>
+      <span class="balance-due-highlight">${{ balanceDue | number:'1.2-2' }}</span>
+    </div>
+  </div>
+</div>
+
+<!-- ─── Generate Invoice (no invoice yet, COMPLETED, billable) ──────────────── -->
+<div *ngIf="!isInternalWorkOrder && !invoiceInfo && canGenerateInvoice()" class="section invoice-prompt">
+  <span class="material-symbols-outlined">receipt_long</span>
+  <p>Work order is complete. Generate a draft invoice to review before sending.</p>
+  <button type="button" class="btn-inv btn-inv-primary" (click)="onGenerateInvoice()">
+    <span class="material-symbols-outlined">add</span>
+    Generate Invoice
+  </button>
+</div>
+
+<!-- ─── Customer Credit Section ─────────────────────────────────────────────── -->
+<div *ngIf="customerCreditLimit > 0" class="section credit-section">
+  <h3>Customer Credit</h3>
+  <div class="row">
+    <div class="col">
+      <strong class="credit-label">Credit Limit: ${{ customerCreditLimit | number:'1.2-2' }}</strong>
+      <span *ngIf="creditCheckLoading" class="text-muted" style="margin-left: 8px;">Loading credit info...</span>
+      <span *ngIf="availableCredit > 0" class="text-success" style="margin-left: 12px;">
+        Available: ${{ availableCredit | number:'1.2-2' }}
+      </span>
+      <span *ngIf="availableCredit <= 0" class="text-danger" style="margin-left: 12px;">
+        No available credit (used: ${{ (customerCreditLimit - availableCredit) | number:'1.2-2' }})
+      </span>
+    </div>
+    <div class="col" style="display: flex; align-items: center; justify-content: flex-end;">
+      <label class="credit-toggle">
+        <input
+          type="checkbox"
+          [ngModel]="useCustomerCredit"
+          (ngModelChange)="onCreditToggle($event)"
+          [disabled]="availableCredit <= 0"
+          name="useCustomerCredit"
+        >
+        <span>Use Credit</span>
+        <span *ngIf="availableCredit <= 0" class="text-danger" style="font-size: 0.9em;">(Insufficient)</span>
+      </label>
+    </div>
+  </div>
+  <div *ngIf="creditCheckError" class="alert alert-danger" style="margin-top: 8px; padding: 8px 12px;">
+    {{ creditCheckError }}
+  </div>
+</div>
+
+<!-- ─── Financials Section ───────────────────────────────────────────────────── -->
+<div class="section">
+  <h3>Financials</h3>
+  <div class="row">
+    <div class="col">
+      <label for="workOrderEstimatedCost">Estimated Cost</label>
+      <input id="workOrderEstimatedCost" type="number" class="form-control" [(ngModel)]="workOrder.estimatedCost" name="estimatedCost">
+    </div>
+    <div class="col">
+      <label for="workOrderActualCost">Actual Cost</label>
+      <input id="workOrderActualCost" type="number" class="form-control" [(ngModel)]="workOrder.actualCost" name="actualCost">
+    </div>
+    <div class="col">
+      <label for="workOrderTax" class="tax-label">
+        <span>Tax</span>
+        <button
+          type="button"
+          class="tax-info-btn"
+          (click)="toggleTaxTooltip()"
+          [attr.aria-expanded]="showTaxTooltip"
+          aria-label="Show tax rule details"
+          title="Show tax rule details"
+        >
+          <span class="material-symbols-outlined">info</span>
+        </button>
+        <button
+          *ngIf="!isTaxOverride"
+          type="button"
+          class="tax-override-btn"
+          (click)="enableTaxOverride()"
+          title="Override the state-based tax rate"
+        >
+          Override
+        </button>
+        <button
+          *ngIf="isTaxOverride"
+          type="button"
+          class="tax-override-btn tax-revert-btn"
+          (click)="revertTaxOverride()"
+          title="Revert to state default rate"
+        >
+          Revert
+        </button>
+      </label>
+      <input id="workOrderTax" type="number" class="form-control" [(ngModel)]="workOrder.tax" name="tax" readonly>
+      <div *ngIf="showTaxTooltip" class="tax-tooltip" role="tooltip">
+        <div class="tax-tooltip-title">{{ taxTooltipTitle }}</div>
+        <div class="tax-tooltip-body">{{ taxTooltipDetail }}</div>
+      </div>
+      <div *ngIf="isTaxOverride" class="tax-override-row">
+        <label for="workOrderTaxRatePercent" class="tax-override-label">Tax Rate %</label>
+        <input
+          id="workOrderTaxRatePercent"
+          type="number"
+          step="0.01"
+          min="0"
+          class="form-control tax-override-input"
+          [ngModel]="workOrder.taxRatePercent"
+          (ngModelChange)="onTaxRatePercentChange($event)"
+          name="taxRatePercent"
+        >
+      </div>
+    </div>
+    <div class="col">
+      <label for="workOrderTotalCost">Total Cost</label>
+      <input id="workOrderTotalCost" type="number" class="form-control" [(ngModel)]="workOrder.totalCost" name="totalCost" readonly>
+    </div>
+  </div>
+  <div class="row">
+    <div class="col">
+      <label for="workOrderCostType">Internal Cost vs Billable</label>
+      <select id="workOrderCostType" class="form-control" [(ngModel)]="workOrder.costType" name="costType">
+        <option value="Internal">Internal</option>
+        <option value="Billable">Billable</option>
+      </select>
+    </div>
+    <div class="col">
+      <label for="workOrderInvoiceNumber">Invoice Number</label>
+      <input id="workOrderInvoiceNumber" type="text" class="form-control" [(ngModel)]="workOrder.invoiceNumber" name="invoiceNumber">
+    </div>
+    <div class="col">
+      <label for="workOrderBillingStatus">Billing Status</label>
+      <select id="workOrderBillingStatus" class="form-control" [(ngModel)]="workOrder.billingStatus" name="billingStatus">
+        <option value="Pending">Pending</option>
+        <option value="Billed">Billed</option>
+        <option value="Paid">Paid</option>
+      </select>
+    </div>
+  </div>
+</div>
+
+<!-- ─── Status / Workflow Tracking ──────────────────────────────────────────── -->
+<div class="section">
+  <h3>Status / Workflow Tracking</h3>
+  <div class="row">
+    <div class="col">
+      <label for="workOrderApprovalRequired">Approval Required</label>
+      <select id="workOrderApprovalRequired" class="form-control" [(ngModel)]="workOrder.approvalRequired" name="approvalRequired">
+        <option value="No">No</option>
+        <option value="Yes">Yes</option>
+      </select>
+    </div>
+    <div class="col">
+      <label for="workOrderApprovedBy">Approved By</label>
+      <input id="workOrderApprovedBy" type="text" class="form-control" [(ngModel)]="workOrder.approvedBy" name="approvedBy">
+    </div>
+    <div class="col">
+      <app-ai-date-picker inputId="workOrderApprovalDate" label="Approval Date" [(ngModel)]="workOrder.approvalDate" name="approvalDate" placeholder="MM/DD/YYYY"></app-ai-date-picker>
+    </div>
+    <div class="col">
+      <label for="workOrderQaInspectionPassed">QA Inspection Passed</label>
+      <select id="workOrderQaInspectionPassed" class="form-control" [(ngModel)]="workOrder.qaInspectionPassed" name="qaInspectionPassed">
+        <option value="No">No</option>
+        <option value="Yes">Yes</option>
+      </select>
+    </div>
+  </div>
+  <div class="row">
+    <div class="col">
+      <label for="workOrderCompletedBy">Completed By</label>
+      <input id="workOrderCompletedBy" type="text" class="form-control" [(ngModel)]="workOrder.completedBy" name="completedBy">
+    </div>
+    <div class="col">
+      <label for="workOrderClosedBy">Closed By</label>
+      <input id="workOrderClosedBy" type="text" class="form-control" [(ngModel)]="workOrder.closedBy" name="closedBy">
+    </div>
+  </div>
+</div>
+
+<!-- ─── Compliance / Fleet Maintenance ──────────────────────────────────────── -->
+<div class="section">
+  <h3>Compliance / Fleet Maintenance</h3>
+  <div class="row">
+    <div class="col">
+      <label for="workOrderPmScheduleId">PM Schedule ID</label>
+      <input id="workOrderPmScheduleId" type="text" class="form-control" [(ngModel)]="workOrder.pmScheduleId" name="pmScheduleId">
+    </div>
+    <div class="col">
+      <label for="workOrderInspectionType">Inspection Type</label>
+      <input id="workOrderInspectionType" type="text" class="form-control" [(ngModel)]="workOrder.inspectionType" name="inspectionType">
+    </div>
+    <div class="col">
+      <label for="workOrderDotInspectionRequired">DOT Inspection Required</label>
+      <select id="workOrderDotInspectionRequired" class="form-control" [(ngModel)]="workOrder.dotInspectionRequired" name="dotInspectionRequired">
+        <option value="No">No</option>
+        <option value="Yes">Yes</option>
+      </select>
+    </div>
+    <div class="col">
+      <label for="workOrderComplianceStatus">Compliance Status</label>
+      <input id="workOrderComplianceStatus" type="text" class="form-control" [(ngModel)]="workOrder.complianceStatus" name="complianceStatus">
+    </div>
+  </div>
+  <div class="row">
+    <div class="col">
+      <app-ai-date-picker inputId="workOrderNextServiceDueDate" label="Next Service Due Date" [(ngModel)]="workOrder.nextServiceDueDate" name="nextServiceDueDate" placeholder="MM/DD/YYYY"></app-ai-date-picker>
+    </div>
+    <div class="col">
+      <label for="workOrderNextServiceOdometer">Next Service Odometer</label>
+      <input id="workOrderNextServiceOdometer" type="number" class="form-control" [(ngModel)]="workOrder.nextServiceOdometer" name="nextServiceOdometer">
+    </div>
+  </div>
+</div>

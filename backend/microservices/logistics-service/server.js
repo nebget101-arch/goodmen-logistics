@@ -1,3 +1,4 @@
+require('./tracing');
 require('dotenv').config();
 
 const express = require('express');
@@ -28,42 +29,26 @@ app.use(bodyParser.urlencoded({ extended: true }));
 const uploadsPath = path.join(__dirname, '..', '..', 'goodmen-logistics', 'backend', 'uploads');
 app.use('/uploads', express.static(uploadsPath));
 
-const swaggerOptions = {
-  definition: {
-    openapi: '3.0.0',
-    info: {
-      title: 'Logistics Service API',
-      version: '1.0.0',
-      description: 'API documentation for the Logistics microservice.'
-    },
-    components: {
-      securitySchemes: {
-        bearerAuth: {
-          type: 'http',
-          scheme: 'bearer',
-          bearerFormat: 'JWT'
-        }
-      }
-    },
-    security: [
-      {
-        bearerAuth: []
-      }
-    ]
-  },
+const { buildSwaggerOptions } = require('@goodmen/shared/config/swagger');
+const swaggerOptions = buildSwaggerOptions({
+  title: 'Logistics Service API',
+  description: 'API documentation for the Logistics microservice.',
   apis: [
     path.join(__dirname, '../../packages/goodmen-shared/routes/*.js'),
     __filename
   ]
-};
+});
 
 const swaggerSpec = swaggerJsdoc(swaggerOptions);
 
 const loadsRouter = require(path.join(sharedRoot, 'routes', 'loads'));
+const loadTemplatesRouter = require(path.join(sharedRoot, 'routes', 'load-templates'));
 const fuelRouter = require(path.join(sharedRoot, 'routes', 'fuel'));
 const tollsRouter = require(path.join(sharedRoot, 'routes', 'tolls'));
 const brokersRouter = require(path.join(sharedRoot, 'routes', 'brokers'));
 const locationsRouter = require(path.join(sharedRoot, 'routes', 'locations'));
+const locationBinsRouter = require(path.join(sharedRoot, 'routes', 'location-bins'));
+const userLocationsRouter = require(path.join(sharedRoot, 'routes', 'user-locations'));
 const geoRouter = require(path.join(sharedRoot, 'routes', 'geo'));
 const invoicesRouter = require(path.join(sharedRoot, 'routes', 'invoices'));
 const creditRouter = require(path.join(sharedRoot, 'routes', 'credit'));
@@ -73,6 +58,8 @@ const leaseFinancingRouter = require(path.join(sharedRoot, 'routes', 'lease-fina
 const iftaRouter = require(path.join(sharedRoot, 'routes', 'ifta'));
 const expensePaymentCategoriesRouter = require(path.join(sharedRoot, 'routes', 'expense-payment-categories'));
 const referenceRouter = require(path.join(sharedRoot, 'routes', 'reference'));
+const idleTruckMonitorRouter = require(path.join(sharedRoot, 'routes', 'idle-truck-monitor'));
+const notificationsRouter = require(path.join(sharedRoot, 'routes', 'notifications'));
 const authMiddleware = require(path.join(sharedRoot, 'middleware', 'auth-middleware'));
 const tenantContextMiddleware = require(path.join(sharedRoot, 'middleware', 'tenant-context-middleware'));
 const requirePlanAccess = require(path.join(sharedRoot, 'middleware', 'plan-access-middleware'));
@@ -97,13 +84,17 @@ const requireLeaseFinancingPlan = requirePlanAccess((req) => {
 });
 const requireIftaPlan = requirePlanAccess('/compliance/ifta');
 
+app.get('/api-docs-json', (_req, res) => res.json(swaggerSpec));
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 
 app.use('/api/fuel', authMiddleware, tenantContextMiddleware, fuelRouter);
 app.use('/api/tolls', authMiddleware, tenantContextMiddleware, tollsRouter);
 app.use('/api/loads', authMiddleware, tenantContextMiddleware, loadsRouter);
+app.use('/api/load-templates', authMiddleware, tenantContextMiddleware, loadTemplatesRouter);
 app.use('/api/brokers', authMiddleware, tenantContextMiddleware, brokersRouter);
 app.use('/api/locations', authMiddleware, tenantContextMiddleware, locationsRouter);
+app.use('/api/locations/:locationId/bins', authMiddleware, tenantContextMiddleware, locationBinsRouter);
+app.use('/api', authMiddleware, tenantContextMiddleware, userLocationsRouter);
 app.use('/api/geo', authMiddleware, tenantContextMiddleware, geoRouter);
 app.use('/api/invoices', authMiddleware, tenantContextMiddleware, requireInvoicesPlan, invoicesRouter);
 app.use('/api/credit', authMiddleware, tenantContextMiddleware, creditRouter);
@@ -114,6 +105,8 @@ app.use('/api', authMiddleware, tenantContextMiddleware, requireIftaPlan, iftaRo
 app.use('/api/expense-payment-categories', authMiddleware, tenantContextMiddleware, expensePaymentCategoriesRouter);
 app.use('/api/expense-categories', authMiddleware, tenantContextMiddleware, expensePaymentCategoriesRouter);
 app.use('/api/reference', authMiddleware, tenantContextMiddleware, referenceRouter);
+app.use('/api/idle-truck-monitor', authMiddleware, tenantContextMiddleware, idleTruckMonitorRouter);
+app.use('/api/notifications', authMiddleware, tenantContextMiddleware, notificationsRouter);
 
 /**
  * @openapi

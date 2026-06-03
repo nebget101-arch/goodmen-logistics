@@ -1,0 +1,317 @@
+<div class="fmcsa-imports-admin ai-admin-shell">
+  <header class="ai-header">
+    <div>
+      <p class="ai-kicker">FleetNeuron Admin</p>
+      <h1>
+        <span class="material-symbols-outlined title-icon">cloud_download</span>
+        FMCSA Reference Data Imports
+      </h1>
+      <p class="subtitle">
+        Trigger or replay any of the five FMCSA reference importers and watch the run ledger live. Restricted to FleetNeuron-internal operators.
+      </p>
+    </div>
+
+    <div class="header-actions">
+      <button
+        type="button"
+        class="btn btn-secondary"
+        [disabled]="submitting || uploadInFlight"
+        (click)="openUpload()"
+      >
+        <span class="material-symbols-outlined">upload_file</span>
+        Upload bulk file
+      </button>
+      <button type="button" class="btn btn-secondary" [disabled]="loadingHistory || refreshingHistory" (click)="refresh()">
+        <span class="material-symbols-outlined">refresh</span>
+        {{ refreshingHistory ? 'Refreshing…' : 'Refresh' }}
+      </button>
+    </div>
+  </header>
+
+  <div *ngIf="message" class="alert alert-success">
+    <span class="material-symbols-outlined">check_circle</span>
+    <span>{{ message }}</span>
+  </div>
+
+  <div *ngIf="error" class="alert alert-danger">
+    <span class="material-symbols-outlined">error</span>
+    <span>{{ error }}</span>
+  </div>
+
+  <!-- Trigger panel -->
+  <section class="panel ai-panel trigger-panel">
+    <div class="panel-header">
+      <h2>
+        <span class="material-symbols-outlined">play_circle</span>
+        Run Selected Imports
+      </h2>
+      <span class="panel-hint">
+        {{ dryRun ? 'Dry runs parse files without writing to the FMCSA tables.' : 'Live runs write into the FMCSA reference tables.' }}
+      </span>
+    </div>
+
+    <ul class="file-list">
+      <li *ngFor="let opt of fileOptions" class="file-row">
+        <label class="file-checkbox">
+          <input
+            type="checkbox"
+            [checked]="selected[opt.key]"
+            [disabled]="submitting"
+            (change)="toggle(opt.key)"
+          />
+          <span class="file-label">
+            <span class="file-label__name">{{ opt.label }}</span>
+            <span class="file-label__hint">{{ opt.hint }}</span>
+          </span>
+        </label>
+        <button
+          type="button"
+          class="row-upload-btn"
+          [disabled]="submitting || uploadInFlight"
+          (click)="openUpload(opt.key)"
+          [attr.aria-label]="'Upload bulk file for ' + opt.label"
+        >
+          <span class="material-symbols-outlined">upload</span>
+          Upload
+        </button>
+      </li>
+    </ul>
+
+    <div class="trigger-actions">
+      <label class="dry-run-toggle">
+        <input type="checkbox" [(ngModel)]="dryRun" [disabled]="submitting" />
+        <span>Dry run (parse only, no writes)</span>
+      </label>
+
+      <div class="trigger-actions__buttons">
+        <button
+          type="button"
+          class="btn btn-link"
+          [disabled]="submitting || !hasSelection()"
+          (click)="toggleAll(false)"
+        >
+          Clear
+        </button>
+        <button
+          type="button"
+          class="btn btn-secondary"
+          [disabled]="submitting"
+          (click)="toggleAll(true)"
+        >
+          Select all
+        </button>
+        <button
+          type="button"
+          class="btn btn-primary"
+          [disabled]="!hasSelection() || submitting"
+          (click)="openConfirm()"
+        >
+          <span class="material-symbols-outlined">play_arrow</span>
+          Run Selected Imports
+        </button>
+      </div>
+    </div>
+  </section>
+
+  <!-- History table -->
+  <section class="panel ai-panel history-panel">
+    <div class="panel-header">
+      <h2>
+        <span class="material-symbols-outlined">history</span>
+        Import History
+      </h2>
+      <span class="panel-hint" *ngIf="hasActiveRun()">
+        <span class="live-indicator"></span>
+        Live — refreshing every 5s while runs are in progress
+      </span>
+    </div>
+
+    <div *ngIf="loadingHistory && !historyLoaded" class="loading ai-loading">Loading import history…</div>
+
+    <div *ngIf="historyLoaded && runs.length === 0" class="empty-state">
+      <span class="material-symbols-outlined empty-state__icon">inbox</span>
+      <p>No FMCSA imports have been run yet.</p>
+      <p class="empty-state__hint">Pick one or more files above and click <strong>Run Selected Imports</strong>.</p>
+    </div>
+
+    <div *ngIf="historyLoaded && runs.length > 0" class="history-table-wrap">
+      <table class="history-table">
+        <thead>
+          <tr>
+            <th>File</th>
+            <th>Triggered by</th>
+            <th>Started</th>
+            <th>Finished</th>
+            <th>Status</th>
+            <th>Rows (ins / upd / skp)</th>
+            <th>Error</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngFor="let run of runs" [class.dry-run-row]="run.dry_run">
+            <td>
+              <div class="file-cell">
+                <span class="file-cell__name">{{ fileLabel(run.file) }}</span>
+                <span *ngIf="run.dry_run" class="dry-run-tag">DRY RUN</span>
+              </div>
+            </td>
+            <td>{{ triggerLabel(run.triggered_by) }}</td>
+            <td>{{ formatDate(run.started_at) }}</td>
+            <td>{{ formatDate(run.finished_at) }}</td>
+            <td>
+              <span [class]="statusClass(run.status)">
+                <span class="status-dot"></span>
+                {{ statusLabel(run.status) }}
+              </span>
+            </td>
+            <td class="rows-cell">{{ formatRowDelta(run) }}</td>
+            <td class="error-cell" [title]="run.error_message || ''">
+              {{ run.error_message || '—' }}
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- Confirmation modal -->
+  <div *ngIf="confirmOpen" class="modal-backdrop" (click)="closeConfirm()">
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="fmcsaConfirmTitle" (click)="$event.stopPropagation()">
+      <header class="modal__header">
+        <h3 id="fmcsaConfirmTitle">
+          <span class="material-symbols-outlined">cloud_download</span>
+          Confirm FMCSA import
+        </h3>
+        <button type="button" class="modal__close" (click)="closeConfirm()" aria-label="Close" [disabled]="submitting">
+          <span class="material-symbols-outlined">close</span>
+        </button>
+      </header>
+
+      <div class="modal__body">
+        <p>You are about to queue the following {{ dryRun ? 'dry-run' : 'live' }} imports:</p>
+        <ul class="confirm-list">
+          <li *ngFor="let file of selectedFiles()">{{ fileLabel(file) }}</li>
+        </ul>
+        <p *ngIf="!dryRun" class="confirm-warn">
+          <span class="material-symbols-outlined">warning</span>
+          Live runs write into the FMCSA reference tables and may take several minutes.
+        </p>
+        <p *ngIf="dryRun" class="confirm-info">
+          <span class="material-symbols-outlined">science</span>
+          Dry runs parse the source files but do not persist any rows.
+        </p>
+      </div>
+
+      <footer class="modal__footer">
+        <button type="button" class="btn btn-secondary" (click)="closeConfirm()" [disabled]="submitting">
+          Cancel
+        </button>
+        <button type="button" class="btn btn-primary" (click)="submit()" [disabled]="submitting">
+          <span class="material-symbols-outlined" *ngIf="!submitting">play_arrow</span>
+          {{ submitting ? 'Queuing…' : (dryRun ? 'Queue dry run' : 'Queue imports') }}
+        </button>
+      </footer>
+    </div>
+  </div>
+
+  <!-- Upload bulk file modal (FN-1458) -->
+  <div *ngIf="uploadOpen" class="modal-backdrop" (click)="closeUpload()">
+    <div
+      class="modal upload-modal"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="fmcsaUploadTitle"
+      (click)="$event.stopPropagation()"
+    >
+      <header class="modal__header">
+        <h3 id="fmcsaUploadTitle">
+          <span class="material-symbols-outlined">upload_file</span>
+          Upload FMCSA bulk file
+        </h3>
+        <button
+          type="button"
+          class="modal__close"
+          (click)="closeUpload()"
+          aria-label="Close"
+          [disabled]="uploadInFlight"
+        >
+          <span class="material-symbols-outlined">close</span>
+        </button>
+      </header>
+
+      <div class="modal__body">
+        <p class="upload-hint">
+          Pick a CSV or CSV.GZ that you downloaded from FMCSA. Max 1 GB per file. The file is streamed to the server, queued, and parsed by the matching importer.
+        </p>
+
+        <label class="upload-field">
+          <span class="upload-field__label">File</span>
+          <input
+            #uploadFileInput
+            type="file"
+            accept=".csv,.csv.gz,.gz,text/csv,application/gzip"
+            [disabled]="uploadInFlight"
+            (change)="onUploadFileSelected($event)"
+          />
+          <span *ngIf="uploadFile" class="upload-field__meta">
+            {{ uploadFile.name }} · {{ formatBytes(uploadFile.size) }}
+          </span>
+        </label>
+
+        <label class="upload-field">
+          <span class="upload-field__label">File type</span>
+          <select [(ngModel)]="uploadFileType" [disabled]="uploadInFlight">
+            <option value="" disabled>Select a file type…</option>
+            <option *ngFor="let opt of fileOptions" [value]="opt.key">{{ opt.label }} — {{ opt.hint }}</option>
+          </select>
+        </label>
+
+        <label class="dry-run-toggle">
+          <input type="checkbox" [(ngModel)]="uploadDryRun" [disabled]="uploadInFlight" />
+          <span>Dry run (parse only, no writes)</span>
+        </label>
+
+        <div class="upload-progress" *ngIf="uploadInFlight">
+          <div
+            class="upload-progress__bar"
+            role="progressbar"
+            aria-label="FMCSA upload progress"
+            [attr.aria-valuenow]="uploadProgress"
+            aria-valuemin="0"
+            aria-valuemax="100"
+          >
+            <div class="upload-progress__fill" [style.width.%]="uploadProgress"></div>
+          </div>
+          <div class="upload-progress__label" aria-live="polite">
+            Uploading… {{ uploadProgress }}%
+          </div>
+        </div>
+
+        <div *ngIf="uploadError" class="alert alert-danger upload-error" role="alert">
+          <span class="material-symbols-outlined">error</span>
+          <span>{{ uploadError }}</span>
+        </div>
+      </div>
+
+      <footer class="modal__footer">
+        <button
+          type="button"
+          class="btn btn-secondary"
+          (click)="closeUpload()"
+          [disabled]="uploadInFlight"
+        >
+          Cancel
+        </button>
+        <button
+          type="button"
+          class="btn btn-primary"
+          (click)="submitUpload()"
+          [disabled]="uploadSubmitDisabled()"
+        >
+          <span class="material-symbols-outlined" *ngIf="!uploadInFlight">cloud_upload</span>
+          {{ uploadInFlight ? 'Uploading…' : (uploadDryRun ? 'Upload (dry run)' : 'Upload & queue') }}
+        </button>
+      </footer>
+    </div>
+  </div>
+</div>

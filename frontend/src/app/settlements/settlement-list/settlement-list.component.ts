@@ -19,6 +19,10 @@ export interface SettlementRow {
   netDriver: number;
   netAdditionalPayee: number;
   updatedAt: string;
+  settlementType: 'driver' | 'equipment_owner' | '';
+  equipmentOwnerName: string;
+  carriedBalance: number;
+  pairedSettlementId: string;
 }
 
 @Component({
@@ -40,11 +44,18 @@ export class SettlementListComponent implements OnInit, OnDestroy {
     weekStart: string;
     driverId: string;
     status: string;
+    settlementType: string;
   } = {
     weekStart: '',
     driverId: '',
-    status: ''
+    status: '',
+    settlementType: ''
   };
+
+  readonly settlementTypeOptions = [
+    { value: 'driver', label: 'Driver' },
+    { value: 'equipment_owner', label: 'Equipment Owner' }
+  ];
 
   /** Backend uses: preparing | ready_for_review | approved | paid | void */
   statusSelectOptions = [
@@ -111,6 +122,7 @@ export class SettlementListComponent implements OnInit, OnDestroy {
     const params: any = { limit: 100 };
     if (this.filters.driverId) params.driver_id = this.filters.driverId;
     if (this.filters.status) params.settlement_status = this.filters.status;
+    if (this.filters.settlementType) params.settlement_type = this.filters.settlementType;
     this.apiService.listSettlements(params).subscribe({
       next: (rows: any) => {
         const list = Array.isArray(rows) ? rows : rows?.data ?? rows?.rows ?? [];
@@ -146,9 +158,11 @@ export class SettlementListComponent implements OnInit, OnDestroy {
   private mapSettlementRow(s: any): SettlementRow {
     const driver = this.drivers.find((d) => d.id === s.driver_id);
     const driverName = driver ? this.getDriverDisplayName(driver) : (s.driver_id || '—');
+    const id = s?.id != null ? String(s.id) : '';
     return {
-      id: this.toSafeString(s.id),
-      settlementNumber: this.toSafeString(s.settlement_number) || this.toSafeString(s.id),
+      // Preserve UUIDs exactly; scientific-notation cleanup is only for numeric display values.
+      id,
+      settlementNumber: this.toSafeString(s.settlement_number) || id,
       periodStart: this.toDateOnly(s.period_start),
       periodEnd: this.toDateOnly(s.period_end),
       driverId: s.driver_id || '',
@@ -160,7 +174,11 @@ export class SettlementListComponent implements OnInit, OnDestroy {
       deductions: Number(s.total_deductions) || 0,
       netDriver: Number(s.net_pay_driver) || 0,
       netAdditionalPayee: Number(s.net_pay_additional_payee) || 0,
-      updatedAt: this.toDateOnly(s.updated_at || s.created_at)
+      updatedAt: this.toDateOnly(s.updated_at || s.created_at),
+      settlementType: (s.settlement_type || '') as 'driver' | 'equipment_owner' | '',
+      equipmentOwnerName: s.equipment_owner_name || '',
+      carriedBalance: Number(s.carried_balance) || 0,
+      pairedSettlementId: s.paired_settlement_id || ''
     };
   }
 
@@ -184,7 +202,7 @@ export class SettlementListComponent implements OnInit, OnDestroy {
   }
 
   clearFilters(): void {
-    this.filters = { weekStart: '', driverId: '', status: '' };
+    this.filters = { weekStart: '', driverId: '', status: '', settlementType: '' };
     this.loadSettlements();
   }
 
@@ -218,6 +236,39 @@ export class SettlementListComponent implements OnInit, OnDestroy {
       void: 'Void'
     };
     return m[status] ?? (status || '—');
+  }
+
+  openBalanceTransferQueue(): void {
+    this.router.navigate(['/settlements/balance-transfers']);
+  }
+
+  getTypeClass(type: string): string {
+    if (type === 'equipment_owner') return 'badge-eo';
+    if (type === 'driver') return 'badge-driver-type';
+    return 'badge-muted';
+  }
+
+  getTypeLabel(type: string): string {
+    if (type === 'equipment_owner') return 'Equipment Owner';
+    if (type === 'driver') return 'Driver';
+    return 'Legacy';
+  }
+
+  getPayeeSummary(row: SettlementRow): string {
+    if (row.settlementType === 'equipment_owner') {
+      return row.payableTo || row.equipmentOwnerName || 'Equipment owner';
+    }
+    return row.payableTo || row.driverName || 'Driver';
+  }
+
+  getNetPayValue(row: SettlementRow): number {
+    return row.settlementType === 'equipment_owner'
+      ? row.netAdditionalPayee
+      : row.netDriver;
+  }
+
+  getNetPayLabel(row: SettlementRow): string {
+    return row.settlementType === 'equipment_owner' ? 'EO net' : 'Driver net';
   }
 
   getDriverDisplayName(d: { id: string; firstName?: string; lastName?: string; name?: string }): string {

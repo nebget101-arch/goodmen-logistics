@@ -185,6 +185,64 @@ async function requireScopedClaim(req, res, claimId, columns = ['sc.*']) {
 
 // ─── OVERVIEW ─────────────────────────────────────────────────────────────────
 
+/**
+ * @openapi
+ * /api/safety/overview:
+ *   get:
+ *     summary: Get safety module overview dashboard
+ *     description: Returns aggregate safety KPIs including open incidents, open claims, total estimated loss, total paid, overdue follow-ups, and breakdowns by operating entity. Per 49 CFR Part 385 — Safety Fitness Procedures.
+ *     tags:
+ *       - Safety
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Safety overview KPIs
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 openIncidents:
+ *                   type: integer
+ *                 openClaims:
+ *                   type: integer
+ *                 totalEstimatedLoss:
+ *                   type: number
+ *                 totalPaid:
+ *                   type: number
+ *                 overdueFollowUps:
+ *                   type: integer
+ *                 openIncidentsByOperatingEntity:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       operating_entity_id:
+ *                         type: string
+ *                       operating_entity_name:
+ *                         type: string
+ *                       count:
+ *                         type: integer
+ *                 openClaimsByOperatingEntity:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       operating_entity_id:
+ *                         type: string
+ *                       operating_entity_name:
+ *                         type: string
+ *                       count:
+ *                         type: integer
+ *                 degraded:
+ *                   type: boolean
+ *                   description: Present and true when the response is a fallback due to a server error
+ *       401:
+ *         description: Unauthorized — invalid or missing JWT
+ *       500:
+ *         description: Server error
+ */
 router.get('/overview', canViewIncidents, async (req, res) => {
   try {
     const tid = requireTenant(req, res); if (!tid) return;
@@ -262,6 +320,121 @@ router.get('/overview', canViewIncidents, async (req, res) => {
 
 // ─── INCIDENTS LIST ────────────────────────────────────────────────────────────
 
+/**
+ * @openapi
+ * /api/safety/incidents:
+ *   get:
+ *     summary: List safety incidents
+ *     description: Returns a paginated list of safety incidents with optional filters. Per 49 CFR Part 390.15 — Accident Register.
+ *     tags:
+ *       - Safety
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: page
+ *         schema:
+ *           type: integer
+ *           default: 1
+ *         description: Page number
+ *       - in: query
+ *         name: pageSize
+ *         schema:
+ *           type: integer
+ *           default: 25
+ *         description: Number of records per page
+ *       - in: query
+ *         name: status
+ *         schema:
+ *           type: string
+ *         description: Filter by incident status
+ *       - in: query
+ *         name: severity
+ *         schema:
+ *           type: string
+ *         description: Filter by severity level
+ *       - in: query
+ *         name: incident_type
+ *         schema:
+ *           type: string
+ *         description: Filter by incident type
+ *       - in: query
+ *         name: preventability
+ *         schema:
+ *           type: string
+ *         description: Filter by preventability classification
+ *       - in: query
+ *         name: driver_id
+ *         schema:
+ *           type: string
+ *         description: Filter by driver ID
+ *       - in: query
+ *         name: vehicle_id
+ *         schema:
+ *           type: string
+ *         description: Filter by vehicle ID
+ *       - in: query
+ *         name: dateFrom
+ *         schema:
+ *           type: string
+ *           format: date
+ *         description: Filter incidents on or after this date
+ *       - in: query
+ *         name: dateTo
+ *         schema:
+ *           type: string
+ *           format: date
+ *         description: Filter incidents on or before this date
+ *       - in: query
+ *         name: operating_entity_id
+ *         schema:
+ *           type: string
+ *         description: Filter by operating entity ID
+ *       - in: query
+ *         name: search
+ *         schema:
+ *           type: string
+ *         description: Free-text search across incident number, city, and narrative
+ *     responses:
+ *       200:
+ *         description: Paginated list of incidents
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       id:
+ *                         type: string
+ *                         format: uuid
+ *                       incident_number:
+ *                         type: string
+ *                       incident_date:
+ *                         type: string
+ *                         format: date
+ *                       status:
+ *                         type: string
+ *                       severity:
+ *                         type: string
+ *                       incident_type:
+ *                         type: string
+ *                       driver_name:
+ *                         type: string
+ *                 total:
+ *                   type: integer
+ *                 page:
+ *                   type: integer
+ *                 pageSize:
+ *                   type: integer
+ *       401:
+ *         description: Unauthorized — invalid or missing JWT
+ *       500:
+ *         description: Server error
+ */
 router.get('/incidents', canViewIncidents, async (req, res) => {
   try {
     const tid = requireTenant(req, res); if (!tid) return;
@@ -318,6 +491,70 @@ router.get('/incidents', canViewIncidents, async (req, res) => {
 
 // ─── CREATE INCIDENT ──────────────────────────────────────────────────────────
 
+/**
+ * @openapi
+ * /api/safety/incidents:
+ *   post:
+ *     summary: Create a new safety incident
+ *     description: Creates a new safety incident record with an auto-generated incident number (INC-YYYY-NNNN). Triggers driver risk score recalculation. Per 49 CFR Part 390.15 — Accident Register.
+ *     tags:
+ *       - Safety
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               incident_date:
+ *                 type: string
+ *                 format: date
+ *               incident_type:
+ *                 type: string
+ *               severity:
+ *                 type: string
+ *               status:
+ *                 type: string
+ *               preventability:
+ *                 type: string
+ *               driver_id:
+ *                 type: string
+ *                 format: uuid
+ *               vehicle_id:
+ *                 type: string
+ *                 format: uuid
+ *               location_city:
+ *                 type: string
+ *               location_state:
+ *                 type: string
+ *               narrative:
+ *                 type: string
+ *               estimated_loss_amount:
+ *                 type: number
+ *               dot_recordable:
+ *                 type: boolean
+ *               hazmat_involved:
+ *                 type: boolean
+ *     responses:
+ *       201:
+ *         description: Incident created successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 id:
+ *                   type: string
+ *                   format: uuid
+ *                 incident_number:
+ *                   type: string
+ *       401:
+ *         description: Unauthorized — invalid or missing JWT
+ *       500:
+ *         description: Server error
+ */
 router.post('/incidents', canCreateIncidents, async (req, res) => {
   try {
     const tid = requireTenant(req, res); if (!tid) return;
@@ -351,6 +588,53 @@ router.post('/incidents', canCreateIncidents, async (req, res) => {
 
 // ─── GET INCIDENT ─────────────────────────────────────────────────────────────
 
+/**
+ * @openapi
+ * /api/safety/incidents/{id}:
+ *   get:
+ *     summary: Get a single safety incident
+ *     description: Retrieves the full details of a specific safety incident by ID. Per 49 CFR Part 390.15 — Accident Register.
+ *     tags:
+ *       - Safety
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Incident ID
+ *     responses:
+ *       200:
+ *         description: Incident details
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 id:
+ *                   type: string
+ *                   format: uuid
+ *                 incident_number:
+ *                   type: string
+ *                 incident_date:
+ *                   type: string
+ *                   format: date
+ *                 status:
+ *                   type: string
+ *                 severity:
+ *                   type: string
+ *                 incident_type:
+ *                   type: string
+ *       401:
+ *         description: Unauthorized — invalid or missing JWT
+ *       404:
+ *         description: Incident not found
+ *       500:
+ *         description: Server error
+ */
 router.get('/incidents/:id', canViewIncidents, async (req, res) => {
   try {
     const tid = requireTenant(req, res); if (!tid) return;
@@ -365,6 +649,71 @@ router.get('/incidents/:id', canViewIncidents, async (req, res) => {
 
 // ─── UPDATE INCIDENT ──────────────────────────────────────────────────────────
 
+/**
+ * @openapi
+ * /api/safety/incidents/{id}:
+ *   patch:
+ *     summary: Update a safety incident
+ *     description: Updates fields on an existing safety incident. Tracks changes to key fields in the audit log and triggers driver risk score recalculation. Per 49 CFR Part 390.15 — Accident Register.
+ *     tags:
+ *       - Safety
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Incident ID
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               status:
+ *                 type: string
+ *               severity:
+ *                 type: string
+ *               preventability:
+ *                 type: string
+ *               dot_recordable:
+ *                 type: boolean
+ *               hazmat_involved:
+ *                 type: boolean
+ *               litigation_risk:
+ *                 type: string
+ *               root_cause:
+ *                 type: string
+ *               corrective_action:
+ *                 type: string
+ *               estimated_loss_amount:
+ *                 type: number
+ *     responses:
+ *       200:
+ *         description: Updated incident
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 id:
+ *                   type: string
+ *                   format: uuid
+ *                 incident_number:
+ *                   type: string
+ *                 status:
+ *                   type: string
+ *       401:
+ *         description: Unauthorized — invalid or missing JWT
+ *       404:
+ *         description: Incident not found
+ *       500:
+ *         description: Server error
+ */
 router.patch('/incidents/:id', canEditIncidents, async (req, res) => {
   try {
     const tid = requireTenant(req, res); if (!tid) return;
@@ -401,6 +750,41 @@ router.patch('/incidents/:id', canEditIncidents, async (req, res) => {
 
 // ─── DELETE / CLOSE INCIDENT ─────────────────────────────────────────────────
 
+/**
+ * @openapi
+ * /api/safety/incidents/{id}:
+ *   delete:
+ *     summary: Close (soft-delete) a safety incident
+ *     description: Soft-closes an incident by setting status to closed. Preserves audit history rather than performing a hard delete. Per 49 CFR Part 390.15 — Accident Register.
+ *     tags:
+ *       - Safety
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Incident ID
+ *     responses:
+ *       200:
+ *         description: Incident closed successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *       401:
+ *         description: Unauthorized — invalid or missing JWT
+ *       404:
+ *         description: Incident not found
+ *       500:
+ *         description: Server error
+ */
 router.delete('/incidents/:id', canEditIncidents, async (req, res) => {
   try {
     const tid = requireTenant(req, res); if (!tid) return;
@@ -424,6 +808,48 @@ router.delete('/incidents/:id', canEditIncidents, async (req, res) => {
 
 // ─── PARTIES ──────────────────────────────────────────────────────────────────
 
+/**
+ * @openapi
+ * /api/safety/incidents/{id}/parties:
+ *   get:
+ *     summary: List parties involved in an incident
+ *     description: Retrieves all third-party records associated with a safety incident. Per 49 CFR Part 390.15 — Accident Register.
+ *     tags:
+ *       - Safety
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Incident ID
+ *     responses:
+ *       200:
+ *         description: List of parties
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 type: object
+ *                 properties:
+ *                   id:
+ *                     type: integer
+ *                   incident_id:
+ *                     type: string
+ *                     format: uuid
+ *                   name:
+ *                     type: string
+ *       401:
+ *         description: Unauthorized — invalid or missing JWT
+ *       404:
+ *         description: Incident not found
+ *       500:
+ *         description: Server error
+ */
 router.get('/incidents/:id/parties', canViewIncidents, async (req, res) => {
   try {
     const incident = await requireScopedIncident(req, res, req.params.id, ['id']);
@@ -435,6 +861,65 @@ router.get('/incidents/:id/parties', canViewIncidents, async (req, res) => {
   }
 });
 
+/**
+ * @openapi
+ * /api/safety/incidents/{id}/parties:
+ *   post:
+ *     summary: Add a party to an incident
+ *     description: Creates a new involved-party record for a safety incident. Per 49 CFR Part 390.15 — Accident Register.
+ *     tags:
+ *       - Safety
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Incident ID
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               name:
+ *                 type: string
+ *               role:
+ *                 type: string
+ *               phone:
+ *                 type: string
+ *               email:
+ *                 type: string
+ *               insurance_company:
+ *                 type: string
+ *               insurance_policy_number:
+ *                 type: string
+ *     responses:
+ *       201:
+ *         description: Party added successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 id:
+ *                   type: integer
+ *                 incident_id:
+ *                   type: string
+ *                   format: uuid
+ *                 name:
+ *                   type: string
+ *       401:
+ *         description: Unauthorized — invalid or missing JWT
+ *       404:
+ *         description: Incident not found
+ *       500:
+ *         description: Server error
+ */
 router.post('/incidents/:id/parties', canEditIncidents, async (req, res) => {
   try {
     const incident = await requireScopedIncident(req, res, req.params.id, ['id']);
@@ -447,6 +932,47 @@ router.post('/incidents/:id/parties', canEditIncidents, async (req, res) => {
   }
 });
 
+/**
+ * @openapi
+ * /api/safety/incidents/{id}/parties/{partyId}:
+ *   delete:
+ *     summary: Remove a party from an incident
+ *     description: Deletes an involved-party record from a safety incident. Per 49 CFR Part 390.15 — Accident Register.
+ *     tags:
+ *       - Safety
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Incident ID
+ *       - in: path
+ *         name: partyId
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: Party record ID
+ *     responses:
+ *       200:
+ *         description: Party removed successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *       401:
+ *         description: Unauthorized — invalid or missing JWT
+ *       404:
+ *         description: Incident not found
+ *       500:
+ *         description: Server error
+ */
 router.delete('/incidents/:id/parties/:partyId', canEditIncidents, async (req, res) => {
   try {
     const incident = await requireScopedIncident(req, res, req.params.id, ['id']);
@@ -460,6 +986,48 @@ router.delete('/incidents/:id/parties/:partyId', canEditIncidents, async (req, r
 
 // ─── WITNESSES ────────────────────────────────────────────────────────────────
 
+/**
+ * @openapi
+ * /api/safety/incidents/{id}/witnesses:
+ *   get:
+ *     summary: List witnesses for an incident
+ *     description: Retrieves all witness records associated with a safety incident. Per 49 CFR Part 390.15 — Accident Register.
+ *     tags:
+ *       - Safety
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Incident ID
+ *     responses:
+ *       200:
+ *         description: List of witnesses
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 type: object
+ *                 properties:
+ *                   id:
+ *                     type: integer
+ *                   incident_id:
+ *                     type: string
+ *                     format: uuid
+ *                   name:
+ *                     type: string
+ *       401:
+ *         description: Unauthorized — invalid or missing JWT
+ *       404:
+ *         description: Incident not found
+ *       500:
+ *         description: Server error
+ */
 router.get('/incidents/:id/witnesses', canViewIncidents, async (req, res) => {
   try {
     const incident = await requireScopedIncident(req, res, req.params.id, ['id']);
@@ -471,6 +1039,61 @@ router.get('/incidents/:id/witnesses', canViewIncidents, async (req, res) => {
   }
 });
 
+/**
+ * @openapi
+ * /api/safety/incidents/{id}/witnesses:
+ *   post:
+ *     summary: Add a witness to an incident
+ *     description: Creates a new witness record for a safety incident. Per 49 CFR Part 390.15 — Accident Register.
+ *     tags:
+ *       - Safety
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Incident ID
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               name:
+ *                 type: string
+ *               phone:
+ *                 type: string
+ *               email:
+ *                 type: string
+ *               statement:
+ *                 type: string
+ *     responses:
+ *       201:
+ *         description: Witness added successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 id:
+ *                   type: integer
+ *                 incident_id:
+ *                   type: string
+ *                   format: uuid
+ *                 name:
+ *                   type: string
+ *       401:
+ *         description: Unauthorized — invalid or missing JWT
+ *       404:
+ *         description: Incident not found
+ *       500:
+ *         description: Server error
+ */
 router.post('/incidents/:id/witnesses', canEditIncidents, async (req, res) => {
   try {
     const incident = await requireScopedIncident(req, res, req.params.id, ['id']);
@@ -482,6 +1105,47 @@ router.post('/incidents/:id/witnesses', canEditIncidents, async (req, res) => {
   }
 });
 
+/**
+ * @openapi
+ * /api/safety/incidents/{id}/witnesses/{witnessId}:
+ *   delete:
+ *     summary: Remove a witness from an incident
+ *     description: Deletes a witness record from a safety incident. Per 49 CFR Part 390.15 — Accident Register.
+ *     tags:
+ *       - Safety
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Incident ID
+ *       - in: path
+ *         name: witnessId
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: Witness record ID
+ *     responses:
+ *       200:
+ *         description: Witness removed successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *       401:
+ *         description: Unauthorized — invalid or missing JWT
+ *       404:
+ *         description: Incident not found
+ *       500:
+ *         description: Server error
+ */
 router.delete('/incidents/:id/witnesses/:witnessId', canEditIncidents, async (req, res) => {
   try {
     const incident = await requireScopedIncident(req, res, req.params.id, ['id']);
@@ -495,6 +1159,51 @@ router.delete('/incidents/:id/witnesses/:witnessId', canEditIncidents, async (re
 
 // ─── NOTES ────────────────────────────────────────────────────────────────────
 
+/**
+ * @openapi
+ * /api/safety/incidents/{id}/notes:
+ *   get:
+ *     summary: List notes for an incident
+ *     description: Retrieves all notes associated with a safety incident, ordered by most recent first. Per 49 CFR Part 390.15 — Accident Register.
+ *     tags:
+ *       - Safety
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Incident ID
+ *     responses:
+ *       200:
+ *         description: List of notes
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 type: object
+ *                 properties:
+ *                   id:
+ *                     type: integer
+ *                   incident_id:
+ *                     type: string
+ *                     format: uuid
+ *                   author_id:
+ *                     type: string
+ *                   created_at:
+ *                     type: string
+ *                     format: date-time
+ *       401:
+ *         description: Unauthorized — invalid or missing JWT
+ *       404:
+ *         description: Incident not found
+ *       500:
+ *         description: Server error
+ */
 router.get('/incidents/:id/notes', canViewIncidents, async (req, res) => {
   try {
     const incident = await requireScopedIncident(req, res, req.params.id, ['id']);
@@ -506,6 +1215,58 @@ router.get('/incidents/:id/notes', canViewIncidents, async (req, res) => {
   }
 });
 
+/**
+ * @openapi
+ * /api/safety/incidents/{id}/notes:
+ *   post:
+ *     summary: Add a note to an incident
+ *     description: Creates a new note on a safety incident. The current user is recorded as the author. Per 49 CFR Part 390.15 — Accident Register.
+ *     tags:
+ *       - Safety
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Incident ID
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               body:
+ *                 type: string
+ *                 description: Note content
+ *               note_type:
+ *                 type: string
+ *     responses:
+ *       201:
+ *         description: Note added successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 id:
+ *                   type: integer
+ *                 incident_id:
+ *                   type: string
+ *                   format: uuid
+ *                 author_id:
+ *                   type: string
+ *       401:
+ *         description: Unauthorized — invalid or missing JWT
+ *       404:
+ *         description: Incident not found
+ *       500:
+ *         description: Server error
+ */
 router.post('/incidents/:id/notes', canEditIncidents, async (req, res) => {
   try {
     const incident = await requireScopedIncident(req, res, req.params.id, ['id']);
@@ -523,6 +1284,56 @@ router.post('/incidents/:id/notes', canEditIncidents, async (req, res) => {
 
 // ─── DOCUMENTS ────────────────────────────────────────────────────────────────
 
+/**
+ * @openapi
+ * /api/safety/incidents/{id}/documents:
+ *   get:
+ *     summary: List documents for an incident
+ *     description: Retrieves all uploaded documents associated with a safety incident, ordered by most recent first. Per 49 CFR Part 390.15 — Accident Register.
+ *     tags:
+ *       - Safety
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Incident ID
+ *     responses:
+ *       200:
+ *         description: List of documents
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 type: object
+ *                 properties:
+ *                   id:
+ *                     type: integer
+ *                   incident_id:
+ *                     type: string
+ *                     format: uuid
+ *                   document_type:
+ *                     type: string
+ *                   file_name:
+ *                     type: string
+ *                   storage_key:
+ *                     type: string
+ *                   file_size:
+ *                     type: integer
+ *                   mime_type:
+ *                     type: string
+ *       401:
+ *         description: Unauthorized — invalid or missing JWT
+ *       404:
+ *         description: Incident not found
+ *       500:
+ *         description: Server error
+ */
 router.get('/incidents/:id/documents', canViewIncidents, async (req, res) => {
   try {
     const incident = await requireScopedIncident(req, res, req.params.id, ['id']);
@@ -534,6 +1345,74 @@ router.get('/incidents/:id/documents', canViewIncidents, async (req, res) => {
   }
 });
 
+/**
+ * @openapi
+ * /api/safety/incidents/{id}/documents:
+ *   post:
+ *     summary: Upload a document to an incident
+ *     description: Uploads a file (max 20 MB) to R2 storage and creates a document record linked to the incident. Optionally associates the document with a claim. Per 49 CFR Part 390.15 — Accident Register.
+ *     tags:
+ *       - Safety
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Incident ID
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - file
+ *             properties:
+ *               file:
+ *                 type: string
+ *                 format: binary
+ *                 description: File to upload (max 20 MB)
+ *               document_type:
+ *                 type: string
+ *                 description: Document category (defaults to "other")
+ *               claim_id:
+ *                 type: string
+ *                 format: uuid
+ *                 description: Optional claim ID to associate the document with
+ *     responses:
+ *       201:
+ *         description: Document uploaded successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 id:
+ *                   type: integer
+ *                 incident_id:
+ *                   type: string
+ *                   format: uuid
+ *                 file_name:
+ *                   type: string
+ *                 storage_key:
+ *                   type: string
+ *                 file_size:
+ *                   type: integer
+ *                 mime_type:
+ *                   type: string
+ *       400:
+ *         description: No file provided
+ *       401:
+ *         description: Unauthorized — invalid or missing JWT
+ *       404:
+ *         description: Incident or claim not found
+ *       500:
+ *         description: Server error
+ */
 router.post('/incidents/:id/documents', canUploadDocuments, upload.single('file'), async (req, res) => {
   try {
     const incident = await requireScopedIncident(req, res, req.params.id, ['id']);
@@ -573,6 +1452,47 @@ router.post('/incidents/:id/documents', canUploadDocuments, upload.single('file'
   }
 });
 
+/**
+ * @openapi
+ * /api/safety/incidents/{id}/documents/{docId}:
+ *   delete:
+ *     summary: Delete a document from an incident
+ *     description: Removes a document record from a safety incident. Per 49 CFR Part 390.15 — Accident Register.
+ *     tags:
+ *       - Safety
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Incident ID
+ *       - in: path
+ *         name: docId
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: Document record ID
+ *     responses:
+ *       200:
+ *         description: Document deleted successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *       401:
+ *         description: Unauthorized — invalid or missing JWT
+ *       404:
+ *         description: Incident not found
+ *       500:
+ *         description: Server error
+ */
 router.delete('/incidents/:id/documents/:docId', canUploadDocuments, async (req, res) => {
   try {
     const incident = await requireScopedIncident(req, res, req.params.id, ['id']);
@@ -586,6 +1506,53 @@ router.delete('/incidents/:id/documents/:docId', canUploadDocuments, async (req,
 
 // ─── TASKS ────────────────────────────────────────────────────────────────────
 
+/**
+ * @openapi
+ * /api/safety/incidents/{id}/tasks:
+ *   get:
+ *     summary: List tasks for an incident
+ *     description: Retrieves all follow-up tasks associated with a safety incident, ordered by due date. Per 49 CFR Part 385 — Safety Fitness Procedures.
+ *     tags:
+ *       - Safety
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Incident ID
+ *     responses:
+ *       200:
+ *         description: List of tasks
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 type: object
+ *                 properties:
+ *                   id:
+ *                     type: integer
+ *                   incident_id:
+ *                     type: string
+ *                     format: uuid
+ *                   status:
+ *                     type: string
+ *                   due_date:
+ *                     type: string
+ *                     format: date
+ *                   assigned_to:
+ *                     type: string
+ *       401:
+ *         description: Unauthorized — invalid or missing JWT
+ *       404:
+ *         description: Incident not found
+ *       500:
+ *         description: Server error
+ */
 router.get('/incidents/:id/tasks', canViewIncidents, async (req, res) => {
   try {
     const incident = await requireScopedIncident(req, res, req.params.id, ['id']);
@@ -597,6 +1564,67 @@ router.get('/incidents/:id/tasks', canViewIncidents, async (req, res) => {
   }
 });
 
+/**
+ * @openapi
+ * /api/safety/incidents/{id}/tasks:
+ *   post:
+ *     summary: Create a task for an incident
+ *     description: Creates a new follow-up task on a safety incident. Per 49 CFR Part 385 — Safety Fitness Procedures.
+ *     tags:
+ *       - Safety
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Incident ID
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               title:
+ *                 type: string
+ *               description:
+ *                 type: string
+ *               status:
+ *                 type: string
+ *               due_date:
+ *                 type: string
+ *                 format: date
+ *               assigned_to:
+ *                 type: string
+ *     responses:
+ *       201:
+ *         description: Task created successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 id:
+ *                   type: integer
+ *                 incident_id:
+ *                   type: string
+ *                   format: uuid
+ *                 status:
+ *                   type: string
+ *                 due_date:
+ *                   type: string
+ *                   format: date
+ *       401:
+ *         description: Unauthorized — invalid or missing JWT
+ *       404:
+ *         description: Incident not found
+ *       500:
+ *         description: Server error
+ */
 router.post('/incidents/:id/tasks', canEditIncidents, async (req, res) => {
   try {
     const incident = await requireScopedIncident(req, res, req.params.id, ['id']);
@@ -611,6 +1639,71 @@ router.post('/incidents/:id/tasks', canEditIncidents, async (req, res) => {
   }
 });
 
+/**
+ * @openapi
+ * /api/safety/incidents/{id}/tasks/{taskId}:
+ *   patch:
+ *     summary: Update an incident task
+ *     description: Updates fields on a follow-up task. Automatically sets completed_at and completed_by when status transitions to completed. Per 49 CFR Part 385 — Safety Fitness Procedures.
+ *     tags:
+ *       - Safety
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Incident ID
+ *       - in: path
+ *         name: taskId
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: Task ID
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               title:
+ *                 type: string
+ *               description:
+ *                 type: string
+ *               status:
+ *                 type: string
+ *               due_date:
+ *                 type: string
+ *                 format: date
+ *               assigned_to:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Updated task
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 id:
+ *                   type: integer
+ *                 status:
+ *                   type: string
+ *                 completed_at:
+ *                   type: string
+ *                   format: date-time
+ *                   nullable: true
+ *       401:
+ *         description: Unauthorized — invalid or missing JWT
+ *       404:
+ *         description: Incident not found
+ *       500:
+ *         description: Server error
+ */
 router.patch('/incidents/:id/tasks/:taskId', canEditIncidents, async (req, res) => {
   try {
     const incident = await requireScopedIncident(req, res, req.params.id, ['id']);
@@ -629,6 +1722,47 @@ router.patch('/incidents/:id/tasks/:taskId', canEditIncidents, async (req, res) 
   }
 });
 
+/**
+ * @openapi
+ * /api/safety/incidents/{id}/tasks/{taskId}:
+ *   delete:
+ *     summary: Delete an incident task
+ *     description: Removes a follow-up task from a safety incident. Per 49 CFR Part 385 — Safety Fitness Procedures.
+ *     tags:
+ *       - Safety
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Incident ID
+ *       - in: path
+ *         name: taskId
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: Task ID
+ *     responses:
+ *       200:
+ *         description: Task deleted successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *       401:
+ *         description: Unauthorized — invalid or missing JWT
+ *       404:
+ *         description: Incident not found
+ *       500:
+ *         description: Server error
+ */
 router.delete('/incidents/:id/tasks/:taskId', canEditIncidents, async (req, res) => {
   try {
     const incident = await requireScopedIncident(req, res, req.params.id, ['id']);
@@ -642,6 +1776,68 @@ router.delete('/incidents/:id/tasks/:taskId', canEditIncidents, async (req, res)
 
 // ─── AUDIT LOG ────────────────────────────────────────────────────────────────
 
+/**
+ * @openapi
+ * /api/safety/incidents/{id}/audit-log:
+ *   get:
+ *     summary: Get audit log for an incident
+ *     description: Retrieves the full change history for a safety incident, including status transitions, field updates, document uploads, and claim linkages. Per 49 CFR Part 390.15 — Accident Register.
+ *     tags:
+ *       - Safety
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Incident ID
+ *     responses:
+ *       200:
+ *         description: Audit log entries
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 type: object
+ *                 properties:
+ *                   id:
+ *                     type: integer
+ *                   incident_id:
+ *                     type: string
+ *                     format: uuid
+ *                   claim_id:
+ *                     type: string
+ *                     format: uuid
+ *                     nullable: true
+ *                   actor_id:
+ *                     type: string
+ *                   actor_name:
+ *                     type: string
+ *                   action:
+ *                     type: string
+ *                   field_name:
+ *                     type: string
+ *                     nullable: true
+ *                   old_value:
+ *                     type: string
+ *                     nullable: true
+ *                   new_value:
+ *                     type: string
+ *                     nullable: true
+ *                   created_at:
+ *                     type: string
+ *                     format: date-time
+ *       401:
+ *         description: Unauthorized — invalid or missing JWT
+ *       404:
+ *         description: Incident not found
+ *       500:
+ *         description: Server error
+ */
 router.get('/incidents/:id/audit-log', canViewIncidents, async (req, res) => {
   try {
     const incident = await requireScopedIncident(req, res, req.params.id, ['id']);
@@ -655,6 +1851,53 @@ router.get('/incidents/:id/audit-log', canViewIncidents, async (req, res) => {
 
 // ─── CLAIMS (per incident) ────────────────────────────────────────────────────
 
+/**
+ * @openapi
+ * /api/safety/incidents/{id}/claims:
+ *   get:
+ *     summary: List claims for an incident
+ *     description: Retrieves all insurance claims linked to a specific safety incident. Per 49 CFR Part 385 — Safety Fitness Procedures.
+ *     tags:
+ *       - Safety
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Incident ID
+ *     responses:
+ *       200:
+ *         description: List of claims for the incident
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 type: object
+ *                 properties:
+ *                   id:
+ *                     type: string
+ *                     format: uuid
+ *                   incident_id:
+ *                     type: string
+ *                     format: uuid
+ *                   internal_claim_number:
+ *                     type: string
+ *                   status:
+ *                     type: string
+ *                   claim_type:
+ *                     type: string
+ *       401:
+ *         description: Unauthorized — invalid or missing JWT
+ *       404:
+ *         description: Incident not found
+ *       500:
+ *         description: Server error
+ */
 router.get('/incidents/:id/claims', canViewClaims, async (req, res) => {
   try {
     const incident = await requireScopedIncident(req, res, req.params.id, ['id']);
@@ -666,6 +1909,71 @@ router.get('/incidents/:id/claims', canViewClaims, async (req, res) => {
   }
 });
 
+/**
+ * @openapi
+ * /api/safety/incidents/{id}/claims:
+ *   post:
+ *     summary: Create a claim for an incident
+ *     description: Creates a new insurance claim linked to a safety incident with an auto-generated claim number (CLM-YYYY-NNNN). Per 49 CFR Part 385 — Safety Fitness Procedures.
+ *     tags:
+ *       - Safety
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Incident ID
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               claim_type:
+ *                 type: string
+ *               status:
+ *                 type: string
+ *               insurance_carrier:
+ *                 type: string
+ *               external_claim_number:
+ *                 type: string
+ *               opened_date:
+ *                 type: string
+ *                 format: date
+ *               paid_amount:
+ *                 type: number
+ *               reserve_amount:
+ *                 type: number
+ *               net_loss_amount:
+ *                 type: number
+ *     responses:
+ *       201:
+ *         description: Claim created successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 id:
+ *                   type: string
+ *                   format: uuid
+ *                 internal_claim_number:
+ *                   type: string
+ *                 incident_id:
+ *                   type: string
+ *                   format: uuid
+ *       401:
+ *         description: Unauthorized — invalid or missing JWT
+ *       404:
+ *         description: Incident not found
+ *       500:
+ *         description: Server error
+ */
 router.post('/incidents/:id/claims', canCreateClaims, async (req, res) => {
   try {
     const tid = requireTenant(req, res); if (!tid) return;
@@ -700,6 +2008,87 @@ router.post('/incidents/:id/claims', canCreateClaims, async (req, res) => {
 
 // ─── CLAIMS (global list) ─────────────────────────────────────────────────────
 
+/**
+ * @openapi
+ * /api/safety/claims:
+ *   get:
+ *     summary: List all claims across incidents
+ *     description: Returns a paginated list of all insurance claims with related incident data. Supports filtering by status, claim type, and overdue follow-ups. Per 49 CFR Part 385 — Safety Fitness Procedures.
+ *     tags:
+ *       - Safety
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: page
+ *         schema:
+ *           type: integer
+ *           default: 1
+ *         description: Page number
+ *       - in: query
+ *         name: pageSize
+ *         schema:
+ *           type: integer
+ *           default: 25
+ *         description: Number of records per page
+ *       - in: query
+ *         name: status
+ *         schema:
+ *           type: string
+ *         description: Filter by claim status
+ *       - in: query
+ *         name: claim_type
+ *         schema:
+ *           type: string
+ *         description: Filter by claim type
+ *       - in: query
+ *         name: overdue_only
+ *         schema:
+ *           type: string
+ *           enum:
+ *             - "true"
+ *             - "false"
+ *         description: When "true", returns only non-closed claims past their next follow-up date
+ *     responses:
+ *       200:
+ *         description: Paginated list of claims
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       id:
+ *                         type: string
+ *                         format: uuid
+ *                       internal_claim_number:
+ *                         type: string
+ *                       status:
+ *                         type: string
+ *                       claim_type:
+ *                         type: string
+ *                       incident_number:
+ *                         type: string
+ *                       incident_date:
+ *                         type: string
+ *                         format: date
+ *                       incident_type:
+ *                         type: string
+ *                 total:
+ *                   type: integer
+ *                 page:
+ *                   type: integer
+ *                 pageSize:
+ *                   type: integer
+ *       401:
+ *         description: Unauthorized — invalid or missing JWT
+ *       500:
+ *         description: Server error
+ */
 router.get('/claims', canViewClaims, async (req, res) => {
   try {
     const tid = requireTenant(req, res); if (!tid) return;
@@ -728,6 +2117,51 @@ router.get('/claims', canViewClaims, async (req, res) => {
   }
 });
 
+/**
+ * @openapi
+ * /api/safety/claims/{id}:
+ *   get:
+ *     summary: Get a single claim
+ *     description: Retrieves the full details of a specific insurance claim by ID. Per 49 CFR Part 385 — Safety Fitness Procedures.
+ *     tags:
+ *       - Safety
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Claim ID
+ *     responses:
+ *       200:
+ *         description: Claim details
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 id:
+ *                   type: string
+ *                   format: uuid
+ *                 internal_claim_number:
+ *                   type: string
+ *                 status:
+ *                   type: string
+ *                 claim_type:
+ *                   type: string
+ *                 incident_id:
+ *                   type: string
+ *                   format: uuid
+ *       401:
+ *         description: Unauthorized — invalid or missing JWT
+ *       404:
+ *         description: Claim not found
+ *       500:
+ *         description: Server error
+ */
 router.get('/claims/:id', canViewClaims, async (req, res) => {
   try {
     const tid = requireTenant(req, res); if (!tid) return;
@@ -739,6 +2173,70 @@ router.get('/claims/:id', canViewClaims, async (req, res) => {
   }
 });
 
+/**
+ * @openapi
+ * /api/safety/claims/{id}:
+ *   patch:
+ *     summary: Update a claim
+ *     description: Updates fields on an existing insurance claim. Status changes are recorded in the incident audit log. Per 49 CFR Part 385 — Safety Fitness Procedures.
+ *     tags:
+ *       - Safety
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Claim ID
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               status:
+ *                 type: string
+ *               claim_type:
+ *                 type: string
+ *               insurance_carrier:
+ *                 type: string
+ *               external_claim_number:
+ *                 type: string
+ *               paid_amount:
+ *                 type: number
+ *               reserve_amount:
+ *                 type: number
+ *               net_loss_amount:
+ *                 type: number
+ *               next_followup_date:
+ *                 type: string
+ *                 format: date
+ *     responses:
+ *       200:
+ *         description: Updated claim
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 id:
+ *                   type: string
+ *                   format: uuid
+ *                 internal_claim_number:
+ *                   type: string
+ *                 status:
+ *                   type: string
+ *       401:
+ *         description: Unauthorized — invalid or missing JWT
+ *       404:
+ *         description: Claim not found
+ *       500:
+ *         description: Server error
+ */
 router.patch('/claims/:id', canEditClaims, async (req, res) => {
   try {
     const tid = requireTenant(req, res); if (!tid) return;
@@ -769,6 +2267,68 @@ router.patch('/claims/:id', canEditClaims, async (req, res) => {
 
 // ─── ALL TASKS (global view for overdue dashboard) ────────────────────────────
 
+/**
+ * @openapi
+ * /api/safety/tasks:
+ *   get:
+ *     summary: List all safety tasks across incidents
+ *     description: Returns a global view of follow-up tasks across all safety incidents, used for the overdue tasks dashboard. Supports filtering by status, assignee, and overdue flag. Per 49 CFR Part 385 — Safety Fitness Procedures.
+ *     tags:
+ *       - Safety
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: status
+ *         schema:
+ *           type: string
+ *         description: Filter by task status
+ *       - in: query
+ *         name: assigned_to
+ *         schema:
+ *           type: string
+ *         description: Filter by assigned user ID
+ *       - in: query
+ *         name: overdue_only
+ *         schema:
+ *           type: string
+ *           enum:
+ *             - "true"
+ *             - "false"
+ *         description: When "true", returns only non-completed tasks past their due date
+ *     responses:
+ *       200:
+ *         description: List of tasks (max 200)
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 type: object
+ *                 properties:
+ *                   id:
+ *                     type: integer
+ *                   incident_id:
+ *                     type: string
+ *                     format: uuid
+ *                   status:
+ *                     type: string
+ *                   due_date:
+ *                     type: string
+ *                     format: date
+ *                   assigned_to:
+ *                     type: string
+ *                   incident_number:
+ *                     type: string
+ *                   incident_type:
+ *                     type: string
+ *                   incident_status:
+ *                     type: string
+ *       401:
+ *         description: Unauthorized — invalid or missing JWT
+ *       500:
+ *         description: Server error
+ */
 router.get('/tasks', canViewIncidents, async (req, res) => {
   try {
     const tid = requireTenant(req, res); if (!tid) return;
@@ -797,6 +2357,129 @@ router.get('/tasks', canViewIncidents, async (req, res) => {
 
 // ─── REPORTS ──────────────────────────────────────────────────────────────────
 
+/**
+ * @openapi
+ * /api/safety/reports:
+ *   get:
+ *     summary: Get safety analytics and reports
+ *     description: Returns aggregated safety analytics including incidents by month, claims by status, preventability breakdown, loss by claim type, severity distribution, top-cost incidents, and claim aging. Per 49 CFR Part 385 — Safety Fitness Procedures.
+ *     tags:
+ *       - Safety
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: dateFrom
+ *         schema:
+ *           type: string
+ *           format: date
+ *         description: Filter incidents on or after this date
+ *       - in: query
+ *         name: dateTo
+ *         schema:
+ *           type: string
+ *           format: date
+ *         description: Filter incidents on or before this date
+ *     responses:
+ *       200:
+ *         description: Safety report aggregations
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 incidentsByMonth:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       month:
+ *                         type: string
+ *                         example: "2026-03"
+ *                       count:
+ *                         type: integer
+ *                 claimsByStatus:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       status:
+ *                         type: string
+ *                       count:
+ *                         type: integer
+ *                 preventability:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       preventability:
+ *                         type: string
+ *                       count:
+ *                         type: integer
+ *                 lossByClaimType:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       claim_type:
+ *                         type: string
+ *                       total_paid:
+ *                         type: number
+ *                       total_loss:
+ *                         type: number
+ *                 bySeverity:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       severity:
+ *                         type: string
+ *                       count:
+ *                         type: integer
+ *                 topCostIncidents:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       id:
+ *                         type: string
+ *                         format: uuid
+ *                       incident_number:
+ *                         type: string
+ *                       incident_date:
+ *                         type: string
+ *                         format: date
+ *                       incident_type:
+ *                         type: string
+ *                       estimated_loss_amount:
+ *                         type: number
+ *                 claimAging:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       id:
+ *                         type: string
+ *                         format: uuid
+ *                       internal_claim_number:
+ *                         type: string
+ *                       status:
+ *                         type: string
+ *                       claim_type:
+ *                         type: string
+ *                       opened_date:
+ *                         type: string
+ *                         format: date
+ *                       insurance_carrier:
+ *                         type: string
+ *                 degraded:
+ *                   type: boolean
+ *                   description: Present and true when the response is a fallback due to a server error
+ *       401:
+ *         description: Unauthorized — invalid or missing JWT
+ *       500:
+ *         description: Server error
+ */
 router.get('/reports', canViewReports, async (req, res) => {
   try {
     const tid = requireTenant(req, res); if (!tid) return;

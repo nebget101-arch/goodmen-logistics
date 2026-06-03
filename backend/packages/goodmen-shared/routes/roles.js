@@ -8,6 +8,39 @@ const db = require('../internal/db').knex;
 
 const rbac = [authMiddleware, loadUserRbac];
 
+/**
+ * @openapi
+ * /api/roles:
+ *   get:
+ *     summary: List all roles
+ *     description: Returns all RBAC roles ordered by code. Requires roles.view or roles.manage permission.
+ *     tags:
+ *       - Roles
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Array of roles
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean }
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       id: { type: string, format: uuid }
+ *                       code: { type: string }
+ *                       name: { type: string }
+ *                       description: { type: string, nullable: true }
+ *                       created_at: { type: string, format: date-time }
+ *                       updated_at: { type: string, format: date-time }
+ *       503:
+ *         description: Database not available
+ */
 router.get('/', rbac, requireAnyPermission(['roles.view', 'roles.manage']), async (req, res) => {
   try {
     if (!db) return res.status(503).json({ error: 'Database not available' });
@@ -19,6 +52,27 @@ router.get('/', rbac, requireAnyPermission(['roles.view', 'roles.manage']), asyn
   }
 });
 
+/**
+ * @openapi
+ * /api/roles/{id}:
+ *   get:
+ *     summary: Get a role by ID
+ *     description: Returns a single role record. Requires roles.view or roles.manage permission.
+ *     tags:
+ *       - Roles
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200:
+ *         description: Role record
+ *       404:
+ *         description: Role not found
+ */
 router.get('/:id', rbac, requireAnyPermission(['roles.view', 'roles.manage']), async (req, res) => {
   try {
     if (!db) return res.status(503).json({ error: 'Database not available' });
@@ -31,6 +85,43 @@ router.get('/:id', rbac, requireAnyPermission(['roles.view', 'roles.manage']), a
   }
 });
 
+/**
+ * @openapi
+ * /api/roles/{id}/permissions:
+ *   get:
+ *     summary: Get permissions assigned to a role
+ *     description: Returns all permissions linked to the specified role via the role_permissions join table.
+ *     tags:
+ *       - Roles
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200:
+ *         description: Array of permissions
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean }
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       id: { type: string, format: uuid }
+ *                       code: { type: string }
+ *                       module: { type: string }
+ *                       action: { type: string }
+ *                       description: { type: string, nullable: true }
+ *       404:
+ *         description: Role not found
+ */
 router.get('/:id/permissions', rbac, requireAnyPermission(['roles.view', 'roles.manage']), async (req, res) => {
   try {
     if (!db) return res.status(503).json({ error: 'Database not available' });
@@ -47,6 +138,35 @@ router.get('/:id/permissions', rbac, requireAnyPermission(['roles.view', 'roles.
   }
 });
 
+/**
+ * @openapi
+ * /api/roles:
+ *   post:
+ *     summary: Create a new role
+ *     description: Creates a new RBAC role. Requires roles.manage permission.
+ *     tags:
+ *       - Roles
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [code, name]
+ *             properties:
+ *               code: { type: string }
+ *               name: { type: string }
+ *               description: { type: string }
+ *     responses:
+ *       201:
+ *         description: Role created
+ *       400:
+ *         description: code and name required
+ *       409:
+ *         description: Role code already exists
+ */
 router.post('/', rbac, requirePermission('roles.manage'), async (req, res) => {
   try {
     if (!db) return res.status(503).json({ error: 'Database not available' });
@@ -61,6 +181,36 @@ router.post('/', rbac, requirePermission('roles.manage'), async (req, res) => {
   }
 });
 
+/**
+ * @openapi
+ * /api/roles/{id}:
+ *   put:
+ *     summary: Update a role
+ *     description: Updates name and/or description of an existing role. Requires roles.manage permission.
+ *     tags:
+ *       - Roles
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               name: { type: string }
+ *               description: { type: string }
+ *     responses:
+ *       200:
+ *         description: Role updated
+ *       404:
+ *         description: Role not found
+ */
 router.put('/:id', rbac, requirePermission('roles.manage'), async (req, res) => {
   try {
     if (!db) return res.status(503).json({ error: 'Database not available' });
@@ -78,6 +228,42 @@ router.put('/:id', rbac, requirePermission('roles.manage'), async (req, res) => 
   }
 });
 
+/**
+ * @openapi
+ * /api/roles/{id}/permissions:
+ *   put:
+ *     summary: Replace permissions for a role
+ *     description: Replaces all permission assignments for the specified role. Accepts permissionIds or permissionCodes (codes are resolved to IDs). Requires roles.manage permission.
+ *     tags:
+ *       - Roles
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               permissionIds:
+ *                 type: array
+ *                 items: { type: string, format: uuid }
+ *                 description: Array of permission IDs (takes precedence)
+ *               permissionCodes:
+ *                 type: array
+ *                 items: { type: string }
+ *                 description: Fallback — resolved to IDs if permissionIds is empty
+ *     responses:
+ *       200:
+ *         description: Updated permission list for the role
+ *       404:
+ *         description: Role not found
+ */
 router.put('/:id/permissions', rbac, requirePermission('roles.manage'), async (req, res) => {
   try {
     if (!db) return res.status(503).json({ error: 'Database not available' });

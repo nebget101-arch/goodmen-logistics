@@ -1,0 +1,12 @@
+<span
+  class="severity-badge"
+  [class.severity-badge--critical]="severity === 'critical'"
+  [class.severity-badge--high]="severity === 'high'"
+  [class.severity-badge--medium]="severity === 'medium'"
+  [class.severity-badge--low]="severity === 'low'"
+  [attr.aria-label]="'Severity: ' + computedLabel"
+  role="status"
+>
+  <span *ngIf="showPip" class="severity-badge__pip" aria-hidden="true"></span>
+  <span class="severity-badge__label">{{ computedLabel }}</span>
+</span>

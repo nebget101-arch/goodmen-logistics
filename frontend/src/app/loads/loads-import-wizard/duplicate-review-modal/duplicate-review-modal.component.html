@@ -1,0 +1,52 @@
+<div class="li-modal-overlay" role="dialog" aria-modal="true" aria-labelledby="li-dup-modal-title" (click)="onOverlayClick()">
+  <div class="li-modal" (click)="stopPropagation($event)">
+
+    <div class="li-modal-header">
+      <span class="material-symbols-outlined warn">content_copy</span>
+      <h3 id="li-dup-modal-title">Duplicate Loads Skipped ({{ duplicates.length }})</h3>
+      <button type="button" class="li-modal-close" aria-label="Close" (click)="close.emit()">
+        <span class="material-symbols-outlined">close</span>
+      </button>
+    </div>
+
+    <div class="li-modal-body">
+      <p>
+        These rows were <strong>not imported</strong> because a load with the same load number already exists.
+        Open the existing load in a new tab to review or update it.
+      </p>
+
+      <table class="li-dup-table" *ngIf="duplicates.length > 0">
+        <thead>
+          <tr>
+            <th>Row</th>
+            <th>Attempted Load #</th>
+            <th>Existing Load</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngFor="let d of duplicates">
+            <td>{{ d.rowIndex }}</td>
+            <td><strong>{{ d.loadNumber }}</strong></td>
+            <td>
+              <a *ngIf="loadHref(d) as href" [href]="href" target="_blank" rel="noopener">
+                {{ d.existingLoadKey || 'Open' }}
+                <span class="material-symbols-outlined" style="font-size:14px; vertical-align:middle;">open_in_new</span>
+              </a>
+              <span *ngIf="!loadHref(d)">{{ d.existingLoadKey || '—' }}</span>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+
+      <p *ngIf="duplicates.length === 0">No duplicates were found.</p>
+    </div>
+
+    <div class="li-modal-footer">
+      <button type="button" class="li-btn-ghost" (click)="exportCsv()" [disabled]="duplicates.length === 0">
+        <span class="material-symbols-outlined">download</span> Export CSV
+      </button>
+      <button type="button" class="li-btn-primary" (click)="close.emit()">Close</button>
+    </div>
+
+  </div>
+</div>

@@ -1,6 +1,7 @@
-import { Component, HostListener, OnDestroy, OnInit } from '@angular/core';
+import { Component, ElementRef, HostListener, OnDestroy, OnInit, ViewChild } from '@angular/core';
+import { ConnectedPosition, ScrollStrategy, ScrollStrategyOptions } from '@angular/cdk/overlay';
 import { DomSanitizer, SafeResourceUrl } from '@angular/platform-browser';
-import { ActivatedRoute } from '@angular/router';
+import { ActivatedRoute, Router } from '@angular/router';
 import { FormBuilder, FormGroup, Validators } from '@angular/forms';
 import { Subject, debounceTime, distinctUntilChanged, takeUntil, forkJoin, of } from 'rxjs';
 import { map, catchError, switchMap } from 'rxjs/operators';
@@ -15,10 +16,45 @@ import {
   LoadStop,
   LoadAiEndpointExtraction
 } from '../../models/load-dashboard.model';
-import { LoadsService, BrokerOption } from '../../services/loads.service';
+import {
+  LoadsService,
+  BrokerOption,
+  SmartFilterCounts,
+  SmartFilterKey,
+  SMART_FILTER_KEYS,
+  AiInsight,
+  AiInsightType
+} from '../../services/loads.service';
+import { LoadsViewMode } from './primitives/view-toggle.component';
+import { LoadTemplatesService } from '../../services/load-templates.service';
+import { KeyboardShortcutsService } from '../../shared/services/keyboard-shortcuts.service';
+import { UserPreferencesService, LoadsSavedView } from '../../services/user-preferences.service';
+import {
+  WebsocketService,
+  ConnectionStatus,
+  WS_EVENTS,
+} from '../../services/websocket.service';
 import { environment } from '../../../environments/environment';
 import { OperatingEntityContextService } from '../../services/operating-entity-context.service';
+import { AccessControlService } from '../../services/access-control.service';
+import { PERMISSIONS } from '../../models/access-control.model';
 import { AiSelectOption } from '../../shared/ai-select/ai-select.component';
+import { StepBasicsData } from './load-wizard/step-basics/step-basics.component';
+import { WizardAttachment } from './load-wizard/step-attachments/step-attachments.component';
+import {
+  IntelligenceMetrics,
+  IntelligencePeriod,
+} from './intelligence-panel/intelligence-panel.component';
+import {
+  DRAWER_DEFAULT_WIDTH,
+  DRAWER_MAX_WIDTH,
+  DRAWER_MIN_WIDTH,
+} from './load-detail-drawer/load-detail-drawer.component';
+import { EmptyStateMode } from './empty-state/empty-state.component';
+import { SkeletonColumn } from './loading-skeleton/loading-skeleton.component';
+import { selectPdfs } from '../../utils/pdf-upload.util';
+
+type DensityMode = 'compact' | 'comfortable' | 'spacious';
 
 type SortDir = 'asc' | 'desc';
 
@@ -32,14 +68,166 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
   loading = true;
   errorMessage = '';
   successMessage = '';
+
+  // ─── FN-821: list-level error + empty state flags ───────────────────────────
+  /** True when the last list fetch failed. Drives the empty-state error card. */
+  loadError = false;
+  /** 403 variant of loadError — shows the permission-denied empty-state instead. */
+  permissionDenied = false;
+  /** Detail string surfaced on the error card (under the headline). */
+  loadErrorDetail = '';
+  /** FN-821: WebSocket banner — wired by FN-790 when WS client service lands on dev. */
+  wsDisconnected = false;
+  /** FN-821: brief fade-in pulse on `.loads-viewport` whenever filters/sort change. */
+  filterPulseActive = false;
+  private filterPulseTimer: ReturnType<typeof setTimeout> | null = null;
+
+  // ─── FN-1353: list view mode (Table | Cards | Kanban) ─────────────────────
+  /** Persisted in `localStorage` under `loads.list.view`. Default `cards`. */
+  viewMode: LoadsViewMode = 'cards';
+  /** Storage key — exposed for tests. */
+  static readonly VIEW_MODE_STORAGE_KEY = 'loads.list.view';
+
+  /** Pipeline groups for Kanban view (visual grouping by pipeline status only). */
+  readonly kanbanColumns: ReadonlyArray<{ key: string; label: string }> = [
+    { key: 'dispatched', label: 'Dispatched' },
+    { key: 'in_transit', label: 'In Transit' },
+    { key: 'delivered',  label: 'Delivered' },
+    { key: 'invoiced',   label: 'Invoiced' },
+    { key: 'funded',     label: 'Funded' },
+  ];
+
+  // ─── FN-821: density mode ──────────────────────────────────────────────────
+  densityMode: DensityMode = 'comfortable';
+  densityMenuOpen = false;
+  readonly densityOptions: { value: DensityMode; label: string; icon: string; heightPx: number }[] = [
+    { value: 'compact', label: 'Compact', icon: 'density_small', heightPx: 36 },
+    { value: 'comfortable', label: 'Comfortable', icon: 'density_medium', heightPx: 52 },
+    { value: 'spacious', label: 'Spacious', icon: 'density_large', heightPx: 72 },
+  ];
+
+  // ─── FN-821: scroll-to-top button ──────────────────────────────────────────
+  showScrollTop = false;
+
+  /** Column width map mirroring the <col> widths in the template.
+   *  Used by the loading skeleton (FN-1043) — the live table reads from
+   *  `columnWidths` (px) so user-resizable widths (FN-1059) take effect. */
+  private readonly columnWidthMap: Record<string, string> = {
+    load_number: '6%',
+    pickup_date: '7%',
+    driver: '8%',
+    broker: '12%',
+    po_number: '7%',
+    pickup: '11%',
+    delivery: '11%',
+    rate: '5%',
+    completed_date: '8%',
+    status: '6%',
+    billing: '6%',
+    notes: '10%',
+    attachments: '8%',
+    actions: '5%',
+  };
+
+  // ─── FN-1059: user-resizable column widths (px) ─────────────────────────────
+  /** Px clamp shared with `app-resizable-column` and the reset action. */
+  readonly COL_WIDTH_MIN_PX = 60;
+  readonly COL_WIDTH_MAX_PX = 600;
+  /** Default px width per column key — derived from the historical %s. */
+  private readonly columnWidthDefaultsPx: Record<string, number> = {
+    load_number: 110,
+    pickup_date: 120,
+    driver: 140,
+    broker: 200,
+    po_number: 120,
+    pickup: 180,
+    delivery: 180,
+    rate: 100,
+    completed_date: 140,
+    status: 140,
+    billing: 130,
+    notes: 180,
+    attachments: 140,
+    actions: 90,
+  };
+  /** Live px widths bound to both colgroups + read by the directive's
+   *  `currentWidth`. Defaults populated on init; overridden by user prefs. */
+  columnWidths: Record<string, number> = { ...this.columnWidthDefaultsPx };
+  /** Subject that fires whenever a column is resized — debounced for the
+   *  `patchLoadsDashboard({ columnWidths })` write so quick drags don't
+   *  hammer the prefs endpoint (AC4). */
+  private columnWidthsPersist$ = new Subject<void>();
   activeOperatingEntityName = '';
 
   showNewLoadMenu = false;
   showManualModal = false;
   showAutoModal = false;
+
+  // ─── Load Wizard (FN-732) ───────────────────────────────────────────────
+  /** Whether the 4-step load creation wizard is open. */
+  showLoadWizard = false;
+  /**
+   * FN-862 — new shell-based load wizard (create-only at this stage).
+   * Runs alongside the legacy modal until FN-869 (S10) retires it.
+   */
+  showLoadWizardV2 = false;
+  /** FN-1312: V2 wizard mode for the current open instance — `'create'` for the
+   * "+ New Load" button, `'edit'` when reached via a load-context quick-action
+   * deep-link such as `?action=reassign&loadId=X`. */
+  loadWizardV2Mode: 'create' | 'edit' = 'create';
+  /** FN-1312: Load id passed to V2 wizard in edit mode (null for create). */
+  loadWizardV2LoadId: string | null = null;
+  /** Index of the currently active wizard step (0-based, 0–3). */
+  wizardActiveStep = 0;
+  /** Validity state of each wizard step — used by the progress bar jump guard. */
+  wizardStepValid: boolean[] = [false, false, false, false];
+  /** True when the user has made unsaved edits inside the wizard. */
+  wizardDirty = false;
+  /** FN-749: True when the wizard is editing an existing load. */
+  wizardEditMode = false;
+  /** FN-749: The load ID being edited in the wizard (null for new loads). */
+  wizardEditLoadId: string | null = null;
+  /** FN-749: Pre-filled wizard data from loaded existing load. */
+  wizardPrefilledData: any = null;
+
+  // FN-778: Per-step form state projected into the wizard children.
+  wizardBasics: StepBasicsData = this.defaultBasics();
+  wizardStops: LoadStop[] = [];
+  wizardDriverId: string | null = null;
+  wizardTruckId: string | null = null;
+  wizardTrailerId: string | null = null;
+  wizardAttachments: WizardAttachment[] = [];
+  wizardAiExtractedPdf: File | null = null;
+  wizardAiPrefilledFields: Set<string> = new Set();
   showBulkUploadModal = false;
   showDetailsModal = false;
   showInlineNewLoad = false;
+
+  // ─── FN-1063: Clone Existing Load picker ─────────────────────────────────
+  /** Picker visibility (driven by `openCloneLoad()` and the close button). */
+  showCloneLoadPickerModal = false;
+  /** Search query (debounced — re-fetches the picker results). */
+  cloneLoadPickerQuery = '';
+  /** Latest picker results (top 20 matches). */
+  cloneLoadPickerResults: LoadListItem[] = [];
+  /** True while picker results are being fetched. */
+  cloneLoadPickerLoading = false;
+  /** Picker error banner. */
+  cloneLoadPickerError = '';
+  /** Subject driving debounced picker queries. */
+  private cloneLoadPickerSearch$ = new Subject<string>();
+  /** True while the cloned load is being persisted (between row click and drawer open). */
+  cloneLoadPickerSubmitting = false;
+
+  // ─── Load Templates (FN-755) ────────────────────────────────────────────
+  /** Save-As-Template dialog state. */
+  showSaveAsTemplateModal = false;
+  saveAsTemplateName = '';
+  saveAsTemplateDescription = '';
+  saveAsTemplateSubmitting = false;
+  saveAsTemplateError = '';
+  /** Load ID the save-as-template dialog is tied to. */
+  private saveAsTemplateLoadId: string | null = null;
   showRouteModal = false;
   showNewStopModal = false;
   selectedLoad: LoadDetail | null = null;
@@ -83,6 +271,7 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
   autoExtracting = false;
   autoError = '';
   autoExtraction: LoadAiEndpointExtraction | null = null;
+  autoIsDragOver = false;
 
   // Bulk upload rate confirmations
   bulkPdfFiles: File[] = [];
@@ -90,9 +279,18 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
   bulkError = '';
   bulkResults: Array<{ success: boolean; data?: LoadDetail; error?: string; filename: string }> = [];
 
+  // FN-1083: when files are already queued and the user picks/drops more,
+  // hold the new selection here and show an inline confirm prompt asking
+  // whether to replace or add to the existing queue.
+  bulkPendingAddFiles: File[] = [];
+
+  // FN-745: Bulk extraction grid
+  showBulkExtractionGrid = false;
+  bulkExtractionFiles: File[] = [];
+
   deletingDraft = false;
 
-  drivers: { id: string; name: string }[] = [];
+  drivers: { id: string; name: string; truckId?: string | null; trailerId?: string | null }[] = [];
   trucks: { id: string; label: string }[] = [];
   trailers: { id: string; label: string }[] = [];
   brokers: { id: string; name: string }[] = [];
@@ -117,10 +315,36 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
   selectedAttachmentFiles: FileList | null = null;
 
   search$ = new Subject<string>();
+
+  /** FN-765: reference to the header search input for `/` and Cmd/Ctrl+K shortcuts. */
+  @ViewChild('searchInput', { static: false }) searchInputRef?: ElementRef<HTMLInputElement>;
+
+  /** FN-821: hidden file input used by the "Import from PDF" empty-state action. */
+  @ViewChild('emptyStateBulkInput', { static: false }) emptyStateBulkInput?: ElementRef<HTMLInputElement>;
+
+  /** FN-765: unregister callback returned by KeyboardShortcutsService.registerAll. */
+  private _unregisterShortcuts: (() => void) | null = null;
   /** Broker search query – debounced and switchMap cancels in-flight requests. */
   private brokerSearch$ = new Subject<string>();
   private destroy$ = new Subject<void>();
   private lastOperatingEntityId: string | null | undefined = undefined;
+
+  // ─── FN-813: realtime (WebSocket) state ──────────────────────────────────
+  /** Current websocket status — drives the header dot and reconnecting banner. */
+  wsStatus: ConnectionStatus = 'disconnected';
+  /** Users currently viewing the loads page (via `presence:join` / `presence:leave`). */
+  presenceUsers: Array<{ userId: string; displayName: string; avatarUrl?: string | null }> = [];
+  /** Load IDs that should animate fade-in ("just created"). */
+  private recentlyCreatedIds = new Set<string>();
+  /** Load IDs that should pulse ("just updated"). */
+  private recentlyUpdatedIds = new Set<string>();
+  /** Load IDs that should fade out ("just deleted") before being removed. */
+  private recentlyDeletedIds = new Set<string>();
+  /** Timers for clearing animation markers. Keyed by loadId + suffix. */
+  private animationTimers = new Map<string, any>();
+  /** 60s tick counter used to refresh ETA countdown labels without full CD runs. */
+  etaTick = 0;
+  private etaIntervalId: any = null;
 
   // Inline searchable combos for driver / truck / trailer
   driverSearch = '';
@@ -148,8 +372,45 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
   private routeTileLayers: { map: L.TileLayer; satellite: L.TileLayer } | null = null;
 
   page = 1;
-  pageSize = 25;
+  pageSize = 100;
+  /** FN-1063: rows-per-page options surfaced next to the paginator. */
+  readonly pageSizeOptions: ReadonlyArray<number> = [25, 50, 100, 200];
   total = 0;
+
+  // ─── FN-808: Load Detail Side Drawer ────────────────────────────────────
+  /** When non-null, the drawer is open and shows the detail for this load. */
+  drawerLoadId: string | null = null;
+  /** Drawer width in px (persisted via UserPreferences). */
+  drawerWidth: number = DRAWER_DEFAULT_WIDTH;
+  /** FN-818: when the drawer was opened via the confidence badge, highlight low-conf fields. */
+  drawerFocusLowConfidence = false;
+  /** FN-1063: which mode the drawer should open in — 'view' for load-number / View row button, 'edit' for Edit row button. */
+  drawerInitialMode: 'view' | 'edit' = 'view';
+
+  // ─── FN-818: AI extraction visual markers ───────────────────────────────
+  /** Loads whose IDs are brand-new AI-sourced rows — receive a one-off glow on first render. */
+  newAiLoadIds = new Set<string>();
+  /** Tracks which load IDs were already present in the list so we can diff on refresh. */
+  private previousLoadIds = new Set<string>();
+  /** First list load: suppress glow so the initial render isn't a spotlight of everything. */
+  private seenFirstLoadsResponse = false;
+  /** Handle for the timer that clears the glow after the animation completes. */
+  private newAiGlowTimer: ReturnType<typeof setTimeout> | null = null;
+
+  // ─── FN-768: Bulk selection + actions ─────────────────────────────────────
+  /** Set of load ids the user has checked for bulk operations. */
+  selectedIds = new Set<string>();
+  /** Value chosen in the bulk-status dropdown. Empty string = no action pending. */
+  bulkStatusToApply = '';
+  /** Value chosen in the bulk-driver dropdown. */
+  bulkDriverToApply = '';
+  /** Value chosen in the bulk-truck dropdown. */
+  bulkTruckToApply = '';
+  /** Whether a bulk operation network call is currently in flight. */
+  bulkActionInFlight = false;
+
+  /** FN-795: collapsible status/billing chip rows — collapsed by default. */
+  chipRowsOpen = false;
 
   /** True when current user has role driver (sees only their loads, can upload docs). */
   isDriverRole = false;
@@ -159,15 +420,28 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
     billingStatus: string;
     driverId: string;
     q: string;
+    /** FN-746: shows only loads flagged for dispatcher review. */
+    needsReview: boolean;
+    /** FN-762: restricts to loads created from a given source (e.g. 'email'). */
+    source: string;
   } = {
     status: '',
     billingStatus: '',
     driverId: '',
-    q: ''
+    q: '',
+    needsReview: false,
+    source: ''
   };
 
+  // FN-798: Smart filter chips (AND'd server-side). Each entry is a chip key
+  // from SMART_FILTER_KEYS. `smartFilterCounts` backs the badge numbers.
+  smartFilterKeys: SmartFilterKey[] = [];
+  smartFilterCounts: SmartFilterCounts | null = null;
+  smartFilterCountsLoading = false;
+
   sortBy: 'load_number' | 'pickup_date' | 'rate' | 'completed_date' = 'pickup_date';
-  sortDir: SortDir = 'asc';
+  /** Default: newest pickups first on initial page load / refresh. */
+  sortDir: SortDir = 'desc';
 
   // Summary totals for quick gross amount reporting on current page
   summaryTotals: {
@@ -219,6 +493,195 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
   statusOptions: LoadStatus[] = ['NEW', 'DRAFT', 'DISPATCHED', 'CANCELLED', 'TONU', 'EN_ROUTE', 'PICKED_UP', 'IN_TRANSIT', 'DELIVERED'];
   billingOptions: BillingStatus[] = ['PENDING', 'CANCELLED', 'BOL_RECEIVED', 'INVOICED', 'SENT_TO_FACTORING', 'FUNDED', 'PAID'];
 
+  // ─── FN-767: Column visibility + saved views + inline status ───────────────
+  /** Ordered column metadata matching the loads table. `alwaysVisible` columns
+   *  cannot be hidden by the user (e.g. load number, actions). */
+  readonly columnDefs: { key: string; label: string; alwaysVisible?: boolean }[] = [
+    { key: 'load_number', label: 'Load #', alwaysVisible: true },
+    { key: 'pickup_date', label: 'Pickup Date' },
+    { key: 'driver', label: 'Driver' },
+    { key: 'broker', label: 'Broker' },
+    { key: 'po_number', label: 'PO #' },
+    { key: 'pickup', label: 'Pickup' },
+    { key: 'delivery', label: 'Delivery' },
+    { key: 'rate', label: 'Rate' },
+    { key: 'completed_date', label: 'Completed' },
+    { key: 'status', label: 'Status' },
+    { key: 'billing', label: 'Billing' },
+    { key: 'notes', label: 'Notes' },
+    { key: 'attachments', label: 'Attachments' },
+    { key: 'actions', label: 'Actions', alwaysVisible: true }
+  ];
+  /** Map of column key → visible. Defaults to all visible; overridden by loaded preferences. */
+  visibleColumns: Record<string, boolean> = {};
+  savedViews: LoadsSavedView[] = [];
+  showColumnPicker = false;
+  showSavedViewsMenu = false;
+  /** Name input buffer for "Save current view as…". */
+  newViewName = '';
+  /** ID of the load whose inline status dropdown is open. */
+  statusMenuLoadId: string | null = null;
+
+  // FN-854: Inline Status/Billing dropdowns render through a CDK Overlay
+  // portal. Rendering inline inside the <td> gets clipped by the parent
+  // cdk-virtual-scroll-viewport's overflow:auto, so the menu was never
+  // visible to the user.
+  readonly inlineMenuPositions: ConnectedPosition[] = [
+    { originX: 'start', originY: 'bottom', overlayX: 'start', overlayY: 'top', offsetY: 4 },
+    { originX: 'start', originY: 'top', overlayX: 'start', overlayY: 'bottom', offsetY: -4 },
+  ];
+  inlineMenuScrollStrategy!: ScrollStrategy;
+
+  // ─── FN-805: Hover toolbar + inline billing/notes editing ───────────────
+  /** ID of the load whose inline billing dropdown is open. */
+  billingMenuLoadId: string | null = null;
+  /** ID of the load whose notes cell is in inline-edit mode. */
+  editingNotesLoadId: string | null = null;
+  /** Buffer for the in-flight notes edit (committed to the row on save). */
+  editingNotesDraft = '';
+  /** Latched on blur so a subsequent (keydown.enter) doesn't double-save. */
+  private notesSaveInFlight = false;
+
+  /**
+   * Valid NEXT status transitions per current status. Cancel/TONU are
+   * terminal-escape branches available from any live state.
+   * Happy path: DRAFT → NEW → DISPATCHED → IN_TRANSIT → DELIVERED.
+   */
+  private readonly statusTransitions: Record<string, LoadStatus[]> = {
+    DRAFT: ['NEW', 'CANCELLED'],
+    NEW: ['DISPATCHED', 'CANCELLED'],
+    DISPATCHED: ['EN_ROUTE', 'PICKED_UP', 'IN_TRANSIT', 'CANCELLED', 'TONU'],
+    EN_ROUTE: ['PICKED_UP', 'IN_TRANSIT', 'DELIVERED', 'CANCELLED'],
+    PICKED_UP: ['IN_TRANSIT', 'DELIVERED', 'CANCELLED'],
+    IN_TRANSIT: ['DELIVERED', 'CANCELLED'],
+    DELIVERED: [],
+    CANCELLED: [],
+    CANCELED: [],
+    TONU: []
+  };
+
+  /** Valid NEXT billing transitions per current billing_status. */
+  private readonly billingTransitions: Record<string, BillingStatus[]> = {
+    PENDING: ['BOL_RECEIVED', 'CANCELLED'],
+    BOL_RECEIVED: ['INVOICED', 'CANCELLED'],
+    INVOICED: ['SENT_TO_FACTORING', 'PAID', 'CANCELLED'],
+    SENT_TO_FACTORING: ['FUNDED', 'PAID', 'CANCELLED'],
+    FUNDED: ['PAID'],
+    PAID: [],
+    CANCELLED: [],
+    CANCELED: []
+  };
+
+  /** Valid next statuses for a given load; hides options that would be no-ops. */
+  getValidStatusTransitions(load: LoadListItem): LoadStatus[] {
+    const current = (load.status || '').toString().toUpperCase();
+    return this.statusTransitions[current] ?? [];
+  }
+
+  /** Valid next billing statuses for a given load. */
+  getValidBillingTransitions(load: LoadListItem): BillingStatus[] {
+    const current = (load.billing_status || '').toString().toUpperCase();
+    return this.billingTransitions[current] ?? [];
+  }
+
+  // ─── FN-806: Hover-preview state (driver / broker / attachments / notes) ─
+  /**
+   * Cache of per-load LoadDetail fetched on hover. `null` means fetch is
+   * in-flight or failed; a concrete value means we have data to display.
+   */
+  private loadPreviewCache = new Map<string, LoadDetail | null>();
+  /** Cache of broker details keyed by broker_id. */
+  private brokerPreviewCache = new Map<string, BrokerOption | null>();
+  /** The load whose hover preview is currently the focus. */
+  previewLoadId: string | null = null;
+
+  /**
+   * Kicks off a lazy fetch for driver/broker/attachment preview data when
+   * the user hovers a driver/broker/attachments cell. Safe to call on every
+   * mouseenter — the cache guards against duplicate requests.
+   */
+  prefetchLoadPreview(load: LoadListItem): void {
+    if (!load || !load.id) return;
+    this.previewLoadId = load.id;
+    if (this.loadPreviewCache.has(load.id)) {
+      const cached = this.loadPreviewCache.get(load.id);
+      if (cached) this.prefetchBroker(cached);
+      return;
+    }
+    this.loadPreviewCache.set(load.id, null);
+    this.loadsService.getLoad(load.id).subscribe({
+      next: (res) => {
+        const detail = res?.data ?? null;
+        this.loadPreviewCache.set(load.id, detail);
+        if (detail) this.prefetchBroker(detail);
+      },
+      error: () => {
+        this.loadPreviewCache.delete(load.id);
+      }
+    });
+  }
+
+  /** Secondary fetch: look up full broker details for credit/terms line. */
+  private prefetchBroker(detail: LoadDetail): void {
+    const id = detail.broker_id;
+    if (!id || this.brokerPreviewCache.has(id)) return;
+    this.brokerPreviewCache.set(id, null);
+    const searchHint = detail.broker_display_name || detail.broker_name || '';
+    this.loadsService.getBrokers(searchHint, 1, 50).subscribe({
+      next: (res) => {
+        const found = (res?.data || []).find((b) => b.id === id) ?? null;
+        this.brokerPreviewCache.set(id, found);
+      },
+      error: () => {
+        this.brokerPreviewCache.delete(id);
+      }
+    });
+  }
+
+  /** The currently-hovered load's details (or null while loading / on error). */
+  get previewLoad(): LoadDetail | null {
+    if (!this.previewLoadId) return null;
+    return this.loadPreviewCache.get(this.previewLoadId) ?? null;
+  }
+
+  /** The broker record for the currently-hovered load (null until loaded). */
+  get previewBroker(): BrokerOption | null {
+    const detail = this.previewLoad;
+    if (!detail?.broker_id) return null;
+    return this.brokerPreviewCache.get(detail.broker_id) ?? null;
+  }
+
+  /** Display string for "City, ST" position lines, or empty when unavailable. */
+  getPreviewDriverPosition(): string {
+    const detail = this.previewLoad;
+    if (!detail) return '';
+    const city = detail.driver_position_city || '';
+    const state = detail.driver_position_state || '';
+    if (city && state) return `${city}, ${state}`;
+    return city || state || '';
+  }
+
+  /** Combine payment rating + credit score into one short line. */
+  getBrokerCreditLabel(broker: BrokerOption | null): string {
+    if (!broker) return '';
+    const rating = (broker.payment_rating || '').toString().trim();
+    const score = broker.credit_score != null ? String(broker.credit_score).trim() : '';
+    if (rating && score) return `${rating} · ${score}`;
+    return rating || score || '';
+  }
+
+  /** First N attachments from LoadDetail for the hover list. */
+  getPreviewAttachments(max = 4): LoadAttachment[] {
+    const atts = this.previewLoad?.attachments || [];
+    return atts.slice(0, max);
+  }
+
+  /** Overflow count for the "+N more" line on the attachments popover. */
+  getPreviewAttachmentOverflow(max = 4): number {
+    const total = this.previewLoad?.attachments?.length ?? 0;
+    return Math.max(0, total - max);
+  }
+
   driverFilterOptions: AiSelectOption[] = [];
   statusFilterOptions: AiSelectOption[] = [];
   billingFilterOptions: AiSelectOption[] = [];
@@ -232,6 +695,18 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
     { value: 'OTHER', label: 'Other' },
     { value: 'CONFIRMATION', label: 'Confirmation' }
   ];
+
+  // ─── FN-794: Intelligence panel state ────────────────────────────────────
+  /** Current period pill (Today / Week / Month / All). Drives list + cards. */
+  intelligencePeriod: IntelligencePeriod = 'all';
+  /** Metric payload passed to <app-intelligence-panel>. Re-built on each load. */
+  intelligenceMetrics: IntelligenceMetrics | null = null;
+  /** Raw aggregate for the previous period (used to compute trend). */
+  private prevIntelligenceAggregate: {
+    gross: number; delivered: number; inTransit: number; needsAttention: number;
+  } | null = null;
+  /** True when the Needs Attention card is active (client-side filter). */
+  needsAttentionActive = false;
 
   grossPeriod = 'all';
   grossPeriodOptions: { value: string; label: string }[] = [
@@ -293,6 +768,38 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
         pct: ((this.summaryTotals.byStatus[s] || 0) / total) * 100,
         color: this.statusColorMap[s] || '#64748b'
       }));
+  }
+
+  // FN-795: color palette for billing breakdown chips.
+  private billingColorMap: Record<string, string> = {
+    PENDING: '#6366f1',
+    BOL_RECEIVED: '#38bdf8',
+    INVOICED: '#22c55e',
+    SENT_TO_FACTORING: '#a78bfa',
+    FUNDED: '#10b981',
+    PAID: '#059669',
+    CANCELLED: '#ef4444',
+    CANCELED: '#ef4444',
+  };
+
+  /** FN-795: billing-status segments for the collapsible breakdown section. */
+  get billingBarSegments(): { status: string; label: string; amount: number; pct: number; color: string }[] {
+    const total = this.summaryTotals.totalGross || 0;
+    if (total <= 0) return [];
+    return this.billingOptions
+      .filter(s => (this.summaryTotals.byBilling[s] || 0) > 0)
+      .map(s => ({
+        status: s,
+        label: this.getBillingLabel(s),
+        amount: this.summaryTotals.byBilling[s] || 0,
+        pct: ((this.summaryTotals.byBilling[s] || 0) / total) * 100,
+        color: this.billingColorMap[s] || '#64748b'
+      }));
+  }
+
+  /** FN-795: toggle the collapsible Status/Billing breakdown panel. */
+  toggleChipRows(): void {
+    this.chipRowsOpen = !this.chipRowsOpen;
   }
 
   private headerFilterLabels: { [K in keyof typeof this.headerFilters]: string } = {
@@ -415,9 +922,19 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
     private loadsService: LoadsService,
     private fb: FormBuilder,
     private route: ActivatedRoute,
+    private router: Router,
     private sanitizer: DomSanitizer,
-    private operatingEntityContext: OperatingEntityContextService
+    private operatingEntityContext: OperatingEntityContextService,
+    private loadTemplatesService: LoadTemplatesService,
+    private keyboardShortcuts: KeyboardShortcutsService,
+    private userPreferences: UserPreferencesService,
+    private scrollStrategies: ScrollStrategyOptions,
+    private websocket: WebsocketService,
+    private accessControl: AccessControlService
   ) {
+    // Close the inline menu when any ancestor scrolls — the virtual-scroll
+    // viewport may recycle the trigger row while the menu is open.
+    this.inlineMenuScrollStrategy = this.scrollStrategies.close();
     this.manualLoadForm = this.fb.group({
       status: ['NEW', Validators.required],
       billingStatus: ['PENDING', Validators.required],
@@ -506,23 +1023,18 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
 
   ngOnInit(): void {
     this.bindOperatingEntityContext();
-    this.route.queryParams.subscribe((params) => {
-      if (params['status']) this.filters.status = params['status'];
-      if (params['billingStatus']) this.filters.billingStatus = params['billingStatus'];
-      const loadId = params['loadId'];
-      if (loadId) {
-        this.loadsService.getLoad(loadId).subscribe({
-          next: (res) => {
-            this.selectedLoad = res?.data || null;
-            this.showDetailsModal = true;
-          }
-        });
-      }
-    });
+    this.route.queryParams.subscribe((params) => this.applyRouteQueryParams(params));
     this.statusFilterOptions = this.statusOptions.map(s => ({ value: s, label: this.getStatusLabel(s) }));
     this.billingFilterOptions = this.billingOptions.map(b => ({ value: b, label: this.getBillingLabel(b) }));
+    this.initColumnVisibility();
+    // FN-1353: hydrate persisted view mode before first render so the right
+    // view container is mounted on initial paint.
+    this.hydrateViewMode();
     this.loadDropdownData();
     this.loadLoads();
+    this.applyUseTemplateFromRouterState();
+    this.registerKeyboardShortcuts();
+    this.loadUserPreferences();
 
     this.search$
       .pipe(debounceTime(300), distinctUntilChanged(), takeUntil(this.destroy$))
@@ -531,6 +1043,11 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
         this.page = 1;
         this.loadLoads();
       });
+
+    // FN-1063: debounced clone-picker search.
+    this.cloneLoadPickerSearch$
+      .pipe(debounceTime(300), distinctUntilChanged(), takeUntil(this.destroy$))
+      .subscribe((value) => this.fetchCloneLoadPickerResults(value));
 
     this.brokerSearch$
       .pipe(
@@ -553,11 +1070,252 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
         }));
         this.brokerSearchLoading = false;
       });
+
+    this.subscribeRealtime();
+    this.startEtaTicker();
+    // Announce presence on the loads page. Server broadcasts to tenant room.
+    this.websocket.send('presence:join', { page: 'loads' });
+
+    // FN-1059: debounce per-column resize → patchLoadsDashboard so a quick
+    // drag fires one PUT instead of one per pixel.
+    this.columnWidthsPersist$
+      .pipe(debounceTime(400), takeUntil(this.destroy$))
+      .subscribe(() => {
+        this.userPreferences
+          .patchLoadsDashboard({ columnWidths: { ...this.columnWidths } })
+          .subscribe();
+      });
   }
 
+  /**
+   * FN-813: wire WebSocket event streams to in-place list mutations. Each
+   * handler applies a short-lived animation class to the affected row so the
+   * user sees the change land (fade-in / pulse / fade-out).
+   */
+  private subscribeRealtime(): void {
+    this.websocket.status$
+      .pipe(takeUntil(this.destroy$))
+      .subscribe((s) => { this.wsStatus = s; });
+
+    this.websocket.on<LoadListItem>(WS_EVENTS.LOAD_CREATED)
+      .pipe(takeUntil(this.destroy$))
+      .subscribe((load) => this.handleLoadCreated(load));
+
+    this.websocket.on<LoadListItem>(WS_EVENTS.LOAD_UPDATED)
+      .pipe(takeUntil(this.destroy$))
+      .subscribe((load) => this.handleLoadUpdated(load));
+
+    this.websocket.on<LoadListItem>(WS_EVENTS.LOAD_STATUS_CHANGED)
+      .pipe(takeUntil(this.destroy$))
+      .subscribe((load) => this.handleLoadUpdated(load));
+
+    this.websocket.on<{ id: string }>(WS_EVENTS.LOAD_DELETED)
+      .pipe(takeUntil(this.destroy$))
+      .subscribe((payload) => this.handleLoadDeleted(payload?.id));
+
+    this.websocket.on<{ userId: string; displayName?: string; avatarUrl?: string; page?: string }>(
+      WS_EVENTS.PRESENCE_JOIN
+    )
+      .pipe(takeUntil(this.destroy$))
+      .subscribe((p) => this.handlePresenceJoin(p));
+
+    this.websocket.on<{ userId: string }>(WS_EVENTS.PRESENCE_LEAVE)
+      .pipe(takeUntil(this.destroy$))
+      .subscribe((p) => this.handlePresenceLeave(p?.userId));
+
+    this.websocket.pollTick$
+      .pipe(takeUntil(this.destroy$))
+      .subscribe(() => this.loadLoads());
+  }
+
+  /** FN-813: refresh ETA countdown strings every minute for in-transit rows. */
+  private startEtaTicker(): void {
+    if (this.etaIntervalId) return;
+    this.etaIntervalId = setInterval(() => { this.etaTick++; }, 60_000);
+  }
+
+  private stopEtaTicker(): void {
+    if (this.etaIntervalId) { clearInterval(this.etaIntervalId); this.etaIntervalId = null; }
+  }
+
+  private handleLoadCreated(load: LoadListItem | null | undefined): void {
+    if (!load || !load.id) return;
+    // Replace if it somehow already exists; otherwise prepend so the new row
+    // is visible at the top of the virtual-scroll viewport.
+    const idx = this.loads.findIndex((l) => l.id === load.id);
+    if (idx >= 0) {
+      this.loads = this.loads.map((l) => (l.id === load.id ? { ...l, ...load } : l));
+    } else {
+      this.loads = [load, ...this.loads];
+      this.total = (this.total || 0) + 1;
+    }
+    this.markRecent(this.recentlyCreatedIds, load.id, 1500);
+    this.recomputeSummaryTotals();
+    this.recomputeIntelligenceMetrics();
+  }
+
+  private handleLoadUpdated(load: LoadListItem | null | undefined): void {
+    if (!load || !load.id) return;
+    const idx = this.loads.findIndex((l) => l.id === load.id);
+    if (idx < 0) return;
+    this.loads = this.loads.map((l) => (l.id === load.id ? { ...l, ...load } : l));
+    this.markRecent(this.recentlyUpdatedIds, load.id, 1200);
+    this.recomputeSummaryTotals();
+    this.recomputeIntelligenceMetrics();
+  }
+
+  private handleLoadDeleted(id: string | null | undefined): void {
+    if (!id) return;
+    const idx = this.loads.findIndex((l) => l.id === id);
+    if (idx < 0) return;
+    // Apply fade-out class for 400ms, then splice the row out.
+    this.markRecent(this.recentlyDeletedIds, id, 450);
+    const timerKey = `delete:${id}`;
+    this.clearAnimationTimer(timerKey);
+    this.animationTimers.set(timerKey, setTimeout(() => {
+      this.loads = this.loads.filter((l) => l.id !== id);
+      this.total = Math.max(0, (this.total || 0) - 1);
+      this.recentlyDeletedIds.delete(id);
+      this.animationTimers.delete(timerKey);
+      this.recomputeSummaryTotals();
+      this.recomputeIntelligenceMetrics();
+    }, 400));
+  }
+
+  private handlePresenceJoin(p: { userId: string; displayName?: string; avatarUrl?: string; page?: string } | null | undefined): void {
+    if (!p || !p.userId) return;
+    if (p.page && p.page !== 'loads') return;
+    if (this.presenceUsers.some((u) => u.userId === p.userId)) return;
+    this.presenceUsers = [
+      ...this.presenceUsers,
+      { userId: p.userId, displayName: p.displayName || 'Teammate', avatarUrl: p.avatarUrl || null }
+    ];
+  }
+
+  private handlePresenceLeave(userId: string | null | undefined): void {
+    if (!userId) return;
+    this.presenceUsers = this.presenceUsers.filter((u) => u.userId !== userId);
+  }
+
+  private markRecent(set: Set<string>, id: string, ms: number): void {
+    set.add(id);
+    const key = `anim:${id}:${set === this.recentlyCreatedIds ? 'c' : set === this.recentlyUpdatedIds ? 'u' : 'd'}`;
+    this.clearAnimationTimer(key);
+    this.animationTimers.set(key, setTimeout(() => {
+      set.delete(id);
+      this.animationTimers.delete(key);
+    }, ms));
+  }
+
+  private clearAnimationTimer(key: string): void {
+    const existing = this.animationTimers.get(key);
+    if (existing) { clearTimeout(existing); this.animationTimers.delete(key); }
+  }
+
+  /** True when a load is currently in transit — controls the pulsing dot + ETA. */
+  isInTransit(load: LoadListItem): boolean {
+    const s = (load?.status || '').toString().toUpperCase();
+    return s === 'IN_TRANSIT' || s === 'EN_ROUTE' || s === 'PICKED_UP';
+  }
+
+  /**
+   * Short ETA countdown string for in-transit rows. Uses `delivery_date` as
+   * the target; returns '' when the date is missing or not parseable. The
+   * `etaTick` field is read here purely to create a change-detection
+   * dependency so the label refreshes each minute.
+   */
+  etaLabel(load: LoadListItem): string {
+    void this.etaTick; // CD dependency
+    if (!this.isInTransit(load)) return '';
+    const target = load.delivery_date ? new Date(load.delivery_date) : null;
+    if (!target || Number.isNaN(target.getTime())) return '';
+    const diffMs = target.getTime() - Date.now();
+    if (diffMs <= 0) return 'Due now';
+    const minutes = Math.floor(diffMs / 60_000);
+    if (minutes < 60) return `${minutes}m`;
+    const hours = Math.floor(minutes / 60);
+    if (hours < 24) return `${hours}h ${minutes % 60}m`;
+    const days = Math.floor(hours / 24);
+    return `${days}d ${hours % 24}h`;
+  }
+
+  /** 2-letter initials for presence avatars when no image is available. */
+  presenceInitials(u: { displayName: string }): string {
+    const name = (u?.displayName || '').trim();
+    if (!name) return '?';
+    const parts = name.split(/\s+/).filter(Boolean);
+    if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+    return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+  }
+
+  /** Stable trackBy for the presence avatar list. */
+  trackByPresence(_i: number, u: { userId: string }): string { return u.userId; }
+
   ngOnDestroy(): void {
+    if (this._unregisterShortcuts) {
+      this._unregisterShortcuts();
+      this._unregisterShortcuts = null;
+    }
+    this.websocket.send('presence:leave', { page: 'loads' });
+    this.stopEtaTicker();
+    this.animationTimers.forEach((t) => clearTimeout(t));
+    this.animationTimers.clear();
+    if (this.filterPulseTimer) {
+      clearTimeout(this.filterPulseTimer);
+      this.filterPulseTimer = null;
+    }
+    if (this.newAiGlowTimer) {
+      clearTimeout(this.newAiGlowTimer);
+      this.newAiGlowTimer = null;
+    }
     this.destroy$.next();
     this.destroy$.complete();
+  }
+
+  // ─── FN-765: Keyboard shortcuts ─────────────────────────────────────────────
+
+  /**
+   * Register Loads-view shortcuts via KeyboardShortcutsService. Bindings are
+   * unregistered in ngOnDestroy so they don't leak to other views.
+   */
+  private registerKeyboardShortcuts(): void {
+    if (this._unregisterShortcuts) { return; }
+    this._unregisterShortcuts = this.keyboardShortcuts.registerAll([
+      {
+        id: 'loads.new',
+        key: 'n',
+        description: 'New load',
+        group: 'Loads',
+        handler: () => this.openLoadWizard(),
+      },
+      {
+        id: 'loads.quickSearch',
+        key: 'k',
+        ctrlOrCmd: true,
+        allowInInput: true,
+        description: 'Quick search loads',
+        group: 'Loads',
+        handler: () => this.focusSearch(),
+      },
+      {
+        id: 'loads.focusSearch',
+        key: '/',
+        description: 'Focus search bar',
+        group: 'Loads',
+        handler: () => this.focusSearch(),
+      },
+    ]);
+    // Wizard-specific shortcuts (Esc, Cmd+S, Cmd+Shift+S, Enter) are owned by
+    // LoadWizardComponent so they only appear in the help modal when the
+    // wizard is open.
+  }
+
+  /** Focus and select the contents of the header search input. */
+  focusSearch(): void {
+    const el = this.searchInputRef?.nativeElement;
+    if (!el) { return; }
+    el.focus();
+    try { el.select(); } catch { /* some browsers throw on non-text inputs */ }
   }
 
   private bindOperatingEntityContext(): void {
@@ -591,7 +1349,9 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
       next: (data) => {
         this.drivers = (data || []).map((driver) => ({
           id: driver.id,
-          name: `${driver.firstName} ${driver.lastName}`.trim()
+          name: `${driver.firstName} ${driver.lastName}`.trim(),
+          truckId: driver.truckId || null,
+          trailerId: driver.trailerId || null
         }));
         this.driverFilterOptions = this.drivers.map(d => ({ value: d.id, label: d.name }));
       },
@@ -773,10 +1533,22 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
     return this.trailers.filter((t) => t.label.toLowerCase().includes(q)).slice(0, 50);
   }
 
-  selectInlineDriver(driver: { id: string; name: string }): void {
+  selectInlineDriver(driver: { id: string; name: string; truckId?: string | null; trailerId?: string | null }): void {
     this.manualLoadForm.patchValue({ driverId: driver.id });
     this.driverSearch = driver.name;
     this.driverDropdownOpen = false;
+    // FN-545: auto-fill truck and trailer from driver's current dispatch assignment
+    const cached = this.drivers.find(d => d.id === driver.id);
+    if (cached?.truckId) {
+      this.manualLoadForm.patchValue({ truckId: cached.truckId });
+      const truck = this.trucks.find(t => t.id === cached.truckId);
+      if (truck) this.truckSearch = truck.label;
+    }
+    if (cached?.trailerId) {
+      this.manualLoadForm.patchValue({ trailerId: cached.trailerId });
+      const trailer = this.trailers.find(t => t.id === cached.trailerId);
+      if (trailer) this.trailerSearch = trailer.label;
+    }
   }
 
   selectInlineTruck(truck: { id: string; label: string }): void {
@@ -794,6 +1566,10 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
   loadLoads(): void {
     this.loading = true;
     this.errorMessage = '';
+    this.loadError = false;
+    this.permissionDenied = false;
+    this.loadErrorDetail = '';
+    this.triggerFilterPulse();
     const range = this.getGrossPeriodDateRange();
     this.loadsService
       .listLoads({
@@ -806,20 +1582,231 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
         page: this.page,
         pageSize: this.pageSize,
         sortBy: this.sortBy,
-        sortDir: this.sortDir
+        sortDir: this.sortDir,
+        needsReview: this.filters.needsReview || undefined,
+        source: this.filters.source || undefined,
+        smartFilter: this.smartFilterKeys.length ? this.smartFilterKeys : undefined
       })
       .subscribe({
         next: (res) => {
           this.loads = res?.data || [];
           this.total = res?.meta?.total || 0;
           this.loading = false;
+          this.trackNewAiLoads(this.loads);
         this.recomputeSummaryTotals();
+        this.recomputeIntelligenceMetrics();
         },
-        error: () => {
-          this.errorMessage = 'Failed to load loads.';
+        error: (err: any) => {
+          this.loadError = true;
+          this.permissionDenied = err?.status === 403;
+          this.loadErrorDetail = err?.error?.error || err?.message || '';
+          // FN-821: empty-state card carries the user-visible retry CTA —
+          // suppress the redundant transient toast.
+          this.errorMessage = '';
           this.loading = false;
         }
       });
+    // FN-798: refresh chip counts alongside the list so badges stay in sync
+    // with the underlying data (counts are tenant/OE/driver-scoped, not filter-scoped).
+    this.loadSmartFilterCounts();
+  }
+
+  /** FN-798: pull per-chip counts. Non-blocking; failure silently leaves stale counts. */
+  private loadSmartFilterCounts(): void {
+    this.smartFilterCountsLoading = true;
+    this.loadsService.getSmartFilterCounts().pipe(takeUntil(this.destroy$)).subscribe({
+      next: (res) => {
+        this.smartFilterCounts = res?.data || null;
+        this.smartFilterCountsLoading = false;
+      },
+      error: () => {
+        this.smartFilterCountsLoading = false;
+      }
+    });
+  }
+
+  /** FN-798: toggle a smart-filter chip. Multiple active chips AND together. */
+  toggleSmartFilter(key: SmartFilterKey): void {
+    if (!SMART_FILTER_KEYS.includes(key)) return;
+    const idx = this.smartFilterKeys.indexOf(key);
+    if (idx >= 0) {
+      this.smartFilterKeys = this.smartFilterKeys.filter((k) => k !== key);
+    } else {
+      this.smartFilterKeys = [...this.smartFilterKeys, key];
+    }
+    this.page = 1;
+    this.loadLoads();
+  }
+
+  /** FN-798: clear every active smart-filter chip and reload the list. */
+  clearSmartFilters(): void {
+    if (!this.smartFilterKeys.length) return;
+    this.smartFilterKeys = [];
+    this.page = 1;
+    this.loadLoads();
+  }
+
+  // ─── FN-1353: list view mode (Table | Cards | Kanban) ────────────────────
+
+  /** Hydrate `viewMode` from localStorage. Defaults to `cards`. */
+  hydrateViewMode(): void {
+    try {
+      const raw = (typeof window !== 'undefined' && window.localStorage)
+        ? window.localStorage.getItem(LoadsDashboardComponent.VIEW_MODE_STORAGE_KEY)
+        : null;
+      if (raw === 'table' || raw === 'cards' || raw === 'kanban') {
+        this.viewMode = raw;
+      } else {
+        this.viewMode = 'cards';
+      }
+    } catch {
+      this.viewMode = 'cards';
+    }
+  }
+
+  /** Persist + apply a new view mode. */
+  setViewMode(mode: LoadsViewMode): void {
+    if (this.viewMode === mode) { return; }
+    this.viewMode = mode;
+    try {
+      if (typeof window !== 'undefined' && window.localStorage) {
+        window.localStorage.setItem(LoadsDashboardComponent.VIEW_MODE_STORAGE_KEY, mode);
+      }
+    } catch {
+      /* storage may be disabled (private mode); ignore. */
+    }
+  }
+
+  /**
+   * FN-1353 — Per-row attention predicate for Cards/Kanban views. A row
+   * gets the warning accent stripe when:
+   *   1. It needs attention by the existing rule (`isNeedsAttention`); OR
+   *   2. It is missing required documents (`missing_docs` smart-filter
+   *      logic — no BOL/POD attached for delivered/in-transit loads); OR
+   *   3. The user has the `idle_drivers` chip toggled on (per-row idle
+   *      data isn't on the list payload yet, so we keep this conservative).
+   */
+  isRowAttention(load: LoadListItem): boolean {
+    if (this.isNeedsAttention(load)) { return true; }
+    // Mirror the smart-filter "missing_docs" idea client-side.
+    const types = Array.isArray(load.attachment_types) ? load.attachment_types : [];
+    const status = (load.status || '').toString().toUpperCase();
+    if ((status === 'DELIVERED' || status === 'IN_TRANSIT' || status === 'EN_ROUTE')
+        && !types.includes('BOL')
+        && !types.includes('PROOF_OF_DELIVERY')) {
+      return true;
+    }
+    return false;
+  }
+
+  /** FN-1353 — Group filtered loads by pipeline column key for Kanban view. */
+  loadsForKanbanColumn(columnKey: string): LoadListItem[] {
+    const rows = this.filteredLoads;
+    return rows.filter((l) => this.kanbanKeyForLoad(l) === columnKey);
+  }
+
+  /** Map a load's (status, billing_status) pair to a Kanban column key. */
+  kanbanKeyForLoad(load: LoadListItem): string {
+    const ls = (load.status || '').toString().toUpperCase();
+    const bs = (load.billing_status || '').toString().toUpperCase();
+    if (bs === 'FUNDED' || bs === 'PAID') { return 'funded'; }
+    if (bs === 'INVOICED' || bs === 'SENT_TO_FACTORING') { return 'invoiced'; }
+    if (ls === 'DELIVERED') { return 'delivered'; }
+    if (ls === 'EN_ROUTE' || ls === 'PICKED_UP' || ls === 'IN_TRANSIT') { return 'in_transit'; }
+    if (ls === 'DISPATCHED') { return 'dispatched'; }
+    return 'dispatched';
+  }
+
+  // ─── FN-1353: AI insight → smart filter wiring ───────────────────────────
+
+  /** Mapping from AiInsight.type → SmartFilterKey for the in-app apply path. */
+  private readonly aiInsightFilterMap: Partial<Record<AiInsightType, SmartFilterKey>> = {
+    overdue: 'overdue',
+    missing_documents: 'missing_docs',
+    driver_idle: 'idle_drivers',
+  };
+
+  /**
+   * FN-1353 — invoked when an AI insight row is clicked. For mapped types
+   * (overdue / missing_documents / driver_idle), set the corresponding
+   * smart-filter chip active. For unmapped types, fall back to navigating
+   * via the original `insight.href`. After applying, scroll the list region
+   * into view on the next tick so the filter render completes first.
+   */
+  applyAiInsight(insight: AiInsight): void {
+    if (!insight) { return; }
+    const filterKey = this.aiInsightFilterMap[insight.type];
+    if (filterKey && SMART_FILTER_KEYS.includes(filterKey)) {
+      if (!this.smartFilterKeys.includes(filterKey)) {
+        this.smartFilterKeys = [...this.smartFilterKeys, filterKey];
+        this.page = 1;
+        this.loadLoads();
+      }
+      setTimeout(() => {
+        const el = document.querySelector('.table-card');
+        if (el && (el as HTMLElement).scrollIntoView) {
+          (el as HTMLElement).scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+      }, 0);
+      return;
+    }
+    // Unmapped types — navigate to the legacy href.
+    if (insight.href) {
+      this.router.navigateByUrl(insight.href);
+    }
+  }
+
+  // ─── FN-1353: row action handlers (shared across Cards / Kanban) ─────────
+
+  /** Open the read-only detail drawer for a load (Cards/Kanban "Open" action). */
+  onCardOpen(loadId: string): void {
+    if (loadId) { this.openLoadDrawer(loadId); }
+  }
+
+  /** Open the load wizard in edit mode for a load. */
+  onCardEdit(loadId: string): void {
+    if (loadId) { this.openLoadWizardForEdit(loadId); }
+  }
+
+  /** Clone a load — wraps the existing `cloneLoad(load)` helper for an id-only callsite. */
+  onCardClone(loadId: string): void {
+    if (!loadId) { return; }
+    const load = (this.loads || []).find((l) => l.id === loadId);
+    if (load) { this.cloneLoad(load); }
+  }
+
+  /** "View on map" → navigate to the existing load-map deep-link. */
+  onCardViewOnMap(loadId: string): void {
+    if (!loadId) { return; }
+    this.router.navigateByUrl(`/load-map?loadId=${encodeURIComponent(loadId)}`);
+  }
+
+  /** "Track driver" → navigate to fleet view scoped to this load's driver if known. */
+  onCardTrackDriver(loadId: string): void {
+    if (!loadId) { return; }
+    const load = (this.loads || []).find((l) => l.id === loadId);
+    if (load) {
+      this.router.navigateByUrl(`/load-map?loadId=${encodeURIComponent(loadId)}`);
+    }
+  }
+
+  /** "Copy link" → copy `/loads?loadId=…` to clipboard. */
+  onCardCopyLink(loadId: string): void {
+    if (!loadId) { return; }
+    const url = `${window.location.origin}/loads?loadId=${encodeURIComponent(loadId)}`;
+    try {
+      if (navigator?.clipboard?.writeText) {
+        navigator.clipboard.writeText(url).then(
+          () => {
+            this.successMessage = 'Load link copied to clipboard.';
+            setTimeout(() => { this.successMessage = ''; }, 2500);
+          },
+          () => { /* permission denied — silent fallback */ },
+        );
+      }
+    } catch {
+      /* clipboard unavailable — silent. */
+    }
   }
 
   onSearch(value: string): void {
@@ -843,6 +1830,20 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
 
   setStatusFilter(value: string): void {
     this.filters.status = value;
+    this.page = 1;
+    this.loadLoads();
+  }
+
+  /** FN-746: toggle the Needs Review filter chip. */
+  toggleNeedsReview(): void {
+    this.filters.needsReview = !this.filters.needsReview;
+    this.page = 1;
+    this.loadLoads();
+  }
+
+  /** FN-762: toggle the "Source: Email" filter chip. */
+  toggleEmailSource(): void {
+    this.filters.source = this.filters.source === 'email' ? '' : 'email';
     this.page = 1;
     this.loadLoads();
   }
@@ -954,6 +1955,17 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
     this.loadLoads();
   }
 
+  /** FN-1063: rows-per-page selector — resets to page 1, re-fetches, persists. */
+  onPageSizeChange(next: number | string): void {
+    const size = Number(next);
+    if (!Number.isFinite(size) || !this.pageSizeOptions.includes(size)) return;
+    if (size === this.pageSize) return;
+    this.pageSize = size;
+    this.page = 1;
+    this.loadLoads();
+    this.userPreferences.patchLoadsDashboard({ pageSize: size }).subscribe();
+  }
+
   openManualEntry(): void {
     this.editingLoadId = null;
     this.editingLoadDetail = null;
@@ -980,6 +1992,521 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
     this.showNewLoadMenu = false;
   }
 
+  // ─── Load Wizard methods (FN-732) ─────────────────────────────────────────
+
+  /** Open the 4-step load creation wizard (replaces the inline new-load form). */
+  openLoadWizard(): void {
+    this.wizardActiveStep = 0;
+    this.wizardStepValid = [false, false, false, false];
+    this.wizardDirty = false;
+    this.resetWizardFormState();
+    this.applySmartDefaults();
+    this.showLoadWizard = true;
+    this.showNewLoadMenu = false;
+  }
+
+  /**
+   * FN-1078: open the 4-step wizard with optional AI prefill + the source PDF
+   * queued for attachment. Keeps the existing reset → smart-defaults sequence
+   * so untouched fields still get sensible defaults; extraction overrides are
+   * layered on top.
+   */
+  private openLoadWizardWithExtraction(opts: {
+    extraction: LoadAiEndpointExtraction | null;
+    pdfFile: File;
+  }): void {
+    this.wizardActiveStep = 0;
+    this.wizardStepValid = [false, false, false, false];
+    this.wizardDirty = false;
+    this.resetWizardFormState();
+    this.applySmartDefaults();
+    if (opts.extraction) {
+      this.applyExtractionToWizard(opts.extraction);
+    }
+    this.wizardAiExtractedPdf = opts.pdfFile;
+    this.showLoadWizard = true;
+    this.showNewLoadMenu = false;
+  }
+
+  /**
+   * FN-1078: mirror of `applyExtractionToForm` but writes into the wizard's
+   * step state. Builds `wizardAiPrefilledFields` so step-basics renders the
+   * FN-818 sparkle on AI-derived fields.
+   */
+  private applyExtractionToWizard(extraction: LoadAiEndpointExtraction): void {
+    const pickup = extraction.pickup || ({} as any);
+    const delivery = extraction.delivery || ({} as any);
+
+    const poNumber = extraction.poNumber
+      || (extraction.loadId || extraction.orderId || extraction.proNumber || '').toString()
+      || '';
+
+    this.wizardBasics = {
+      ...this.wizardBasics,
+      brokerName: extraction.brokerName || this.wizardBasics.brokerName || '',
+      poNumber,
+      rate: extraction.rate != null ? extraction.rate : this.wizardBasics.rate,
+      notes: extraction.notes || this.wizardBasics.notes || ''
+    };
+
+    const prefilled = new Set<string>();
+    if (extraction.brokerName) prefilled.add('brokerName');
+    if (poNumber) prefilled.add('poNumber');
+    if (extraction.rate != null) prefilled.add('rate');
+    if (extraction.notes) prefilled.add('notes');
+    this.wizardAiPrefilledFields = prefilled;
+
+    const rawStops = extraction.stops && Array.isArray(extraction.stops) ? extraction.stops : [];
+    if (rawStops.length > 0) {
+      this.wizardStops = rawStops
+        .map((s, i) => ({
+          stop_type: (s.type || (i === 0 ? 'PICKUP' : 'DELIVERY')) as 'PICKUP' | 'DELIVERY',
+          sequence: s.sequence ?? i + 1,
+          stop_date: s.date || null,
+          stop_time: null,
+          city: s.city || null,
+          state: s.state || null,
+          zip: s.zip || null,
+          address1: s.address1 || null,
+          facility_name: null,
+          notes: null
+        }) as LoadStop)
+        .sort((a, b) => (a.sequence ?? 0) - (b.sequence ?? 0));
+      return;
+    }
+
+    // No structured stops — fold the legacy pickup/delivery objects onto the
+    // smart-default stops so the user sees city/state/zip prefilled.
+    this.wizardStops = this.wizardStops.map((stop) => {
+      if (stop.stop_type === 'PICKUP') {
+        return {
+          ...stop,
+          stop_date: pickup.date || stop.stop_date,
+          city: pickup.city || stop.city,
+          state: pickup.state || stop.state,
+          zip: pickup.zip || stop.zip,
+          address1: pickup.address1 || stop.address1
+        };
+      }
+      if (stop.stop_type === 'DELIVERY') {
+        return {
+          ...stop,
+          stop_date: delivery.date || stop.stop_date,
+          city: delivery.city || stop.city,
+          state: delivery.state || stop.state,
+          zip: delivery.zip || stop.zip,
+          address1: delivery.address1 || stop.address1
+        };
+      }
+      return stop;
+    });
+  }
+
+  /**
+   * FN-764: Pre-fill smart defaults on new loads.
+   *  - Dispatcher = current user
+   *  - Status = DRAFT, Billing = PENDING (already set in defaultBasics)
+   *  - Pickup = today, Delivery = today + 1
+   *  - Driver = most-recent driver per dispatcher (from UserPreferencesService)
+   */
+  private applySmartDefaults(): void {
+    this.wizardBasics = {
+      ...this.wizardBasics,
+      dispatcher: this.dispatcherName || this.wizardBasics.dispatcher || ''
+    };
+
+    const pickupIso = this.formatLocalDate(new Date());
+    const deliveryDate = new Date();
+    deliveryDate.setDate(deliveryDate.getDate() + 1);
+    const deliveryIso = this.formatLocalDate(deliveryDate);
+
+    this.wizardStops = this.wizardStops.map((stop) => {
+      if (stop.stop_type === 'PICKUP' && !stop.stop_date) {
+        return { ...stop, stop_date: pickupIso };
+      }
+      if (stop.stop_type === 'DELIVERY' && !stop.stop_date) {
+        return { ...stop, stop_date: deliveryIso };
+      }
+      return stop;
+    });
+    if (!this.wizardStops.length) {
+      this.wizardStops = [
+        {
+          stop_type: 'PICKUP', sequence: 0,
+          city: null, state: null, zip: null,
+          stop_date: pickupIso, stop_time: null,
+          facility_name: null, notes: null
+        },
+        {
+          stop_type: 'DELIVERY', sequence: 1,
+          city: null, state: null, zip: null,
+          stop_date: deliveryIso, stop_time: null,
+          facility_name: null, notes: null
+        }
+      ];
+    }
+
+    const recentDriverId = this.userPreferences.getRecentDriverId(this.dispatcherUserId);
+    if (recentDriverId) {
+      this.wizardDriverId = recentDriverId;
+    }
+  }
+
+  /** Format a Date as "YYYY-MM-DD" in local time (avoids UTC off-by-one). */
+  private formatLocalDate(d: Date): string {
+    const yyyy = d.getFullYear();
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const dd = String(d.getDate()).padStart(2, '0');
+    return `${yyyy}-${mm}-${dd}`;
+  }
+
+  /**
+   * FN-749: Open the wizard in edit mode with data pre-filled from an existing load.
+   * All steps are freely jumpable — no step validation gating.
+   */
+  openLoadWizardForEdit(loadId: string): void {
+    this.wizardEditMode = true;
+    this.wizardEditLoadId = loadId;
+    this.wizardActiveStep = 0;
+    this.wizardStepValid = [true, true, true, true]; // all valid — existing load
+    this.wizardDirty = false;
+    this.showLoadWizard = true;
+
+    // Load the existing load detail and pre-fill wizard data
+    this.loadsService.getLoad(loadId).subscribe({
+      next: (res: any) => {
+        const load = res?.data || res;
+        this.wizardPrefilledData = load;
+      },
+      error: () => {
+        this.wizardPrefilledData = null;
+      }
+    });
+  }
+
+  // ─── Load Templates (FN-755) ───────────────────────────────────────────
+
+  /** Navigate to the Load Templates admin page. */
+  navigateToTemplates(): void {
+    this.router.navigate(['/loads/templates']);
+  }
+
+  /** FN-1594: open the spreadsheet-import wizard. */
+  navigateToImport(): void {
+    this.router.navigate(['/loads/import']);
+  }
+
+  /**
+   * Open the Save-As-Template prompt for the given load ID.
+   * Defaults to the currently-open editing load when no id is passed.
+   */
+  openSaveAsTemplateModal(loadId?: string): void {
+    const id = loadId ?? this.editingLoadId;
+    if (!id) return;
+    this.saveAsTemplateLoadId = id;
+    this.saveAsTemplateName = '';
+    this.saveAsTemplateDescription = '';
+    this.saveAsTemplateError = '';
+    this.saveAsTemplateSubmitting = false;
+    this.showSaveAsTemplateModal = true;
+  }
+
+  closeSaveAsTemplateModal(): void {
+    if (this.saveAsTemplateSubmitting) return;
+    this.showSaveAsTemplateModal = false;
+    this.saveAsTemplateLoadId = null;
+    this.saveAsTemplateError = '';
+  }
+
+  submitSaveAsTemplate(): void {
+    const name = (this.saveAsTemplateName || '').trim();
+    if (!this.saveAsTemplateLoadId) return;
+    if (!name) {
+      this.saveAsTemplateError = 'Name is required.';
+      return;
+    }
+    this.saveAsTemplateSubmitting = true;
+    this.saveAsTemplateError = '';
+    this.loadTemplatesService.create({
+      load_id: this.saveAsTemplateLoadId,
+      name,
+      description: (this.saveAsTemplateDescription || '').trim() || null
+    }).subscribe({
+      next: () => {
+        this.saveAsTemplateSubmitting = false;
+        this.showSaveAsTemplateModal = false;
+        this.saveAsTemplateLoadId = null;
+        this.successMessage = `Template "${name}" saved.`;
+        setTimeout(() => (this.successMessage = ''), 3500);
+      },
+      error: (err) => {
+        this.saveAsTemplateSubmitting = false;
+        const serverMsg = err?.error?.error || err?.error?.message;
+        this.saveAsTemplateError = serverMsg || 'Failed to save template.';
+      }
+    });
+  }
+
+  /**
+   * Apply template data to the inline new-load form.
+   * Dates are intentionally NOT pre-filled — templates are reusable snapshots
+   * that should prompt the user to set new dates for each trip.
+   */
+  private applyTemplateToManualForm(data: any): void {
+    if (!data) return;
+    this.openManualEntry();
+
+    const stops: LoadStop[] = Array.isArray(data?.stops) ? data.stops : [];
+    const firstPickup = stops.find(s => (s.stop_type || '').toUpperCase() === 'PICKUP') || stops[0] || {} as LoadStop;
+    const lastDelivery = [...stops].reverse().find(s => (s.stop_type || '').toUpperCase() === 'DELIVERY') || stops[stops.length - 1] || {} as LoadStop;
+
+    this.manualLoadForm.patchValue({
+      status: 'DRAFT',
+      billingStatus: 'PENDING',
+      brokerId: data.broker_id || '',
+      brokerName: data.broker_name || data.broker_display_name || '',
+      driverId: data.driver_id || '',
+      truckId: data.truck_id || '',
+      trailerId: data.trailer_id || '',
+      rate: data.rate != null ? data.rate : '',
+      notes: data.notes || '',
+      pickupCity: firstPickup?.city || '',
+      pickupState: firstPickup?.state || '',
+      pickupZip: firstPickup?.zip || '',
+      deliveryCity: lastDelivery?.city || '',
+      deliveryState: lastDelivery?.state || '',
+      deliveryZip: lastDelivery?.zip || ''
+    });
+
+    if (stops.length > 2) {
+      this.sortedStops = stops.map((s, i) => ({
+        stop_type: (s.stop_type as 'PICKUP' | 'DELIVERY') || (i === 0 ? 'PICKUP' : 'DELIVERY'),
+        stop_date: null,
+        city: s.city || null,
+        state: s.state || null,
+        zip: s.zip || null,
+        address1: s.address1 || null,
+        sequence: s.sequence ?? i + 1
+      })).sort((a, b) => (a.sequence ?? 0) - (b.sequence ?? 0));
+    }
+  }
+
+  /** If the current router navigation carried a `useTemplate` state, pre-fill the form. */
+  private applyUseTemplateFromRouterState(): void {
+    const state = (typeof history !== 'undefined' ? history.state : null) as any;
+    const useTemplate = state?.useTemplate;
+    if (!useTemplate?.data) return;
+    this.applyTemplateToManualForm(useTemplate.data);
+    this.successMessage = `Using template "${useTemplate.name || 'load template'}". Dates and PO were cleared — fill them in and save.`;
+    // Clear the state so a browser back/forward doesn't re-trigger this.
+    try { history.replaceState({}, '', window.location.pathname + window.location.search); } catch { /* noop */ }
+    setTimeout(() => (this.successMessage = ''), 6000);
+  }
+
+  /** Close the wizard and reset its state. */
+  closeWizard(): void {
+    this.showLoadWizard = false;
+    this.wizardActiveStep = 0;
+    this.wizardDirty = false;
+    this.wizardEditMode = false;
+    this.wizardEditLoadId = null;
+    this.wizardPrefilledData = null;
+  }
+
+  // ─── FN-862: new shell-based load wizard (create-only at this stage) ─────
+
+  /** Open the FN-862 wizard in create mode (alongside the legacy modal). */
+  openLoadWizardV2(): void {
+    this.loadWizardV2Mode = 'create';
+    this.loadWizardV2LoadId = null;
+    this.showLoadWizardV2 = true;
+    this.showNewLoadMenu = false;
+  }
+
+  /** Close the FN-862 wizard (emitted from `closed`). */
+  closeLoadWizardV2(): void {
+    const wasEdit = this.loadWizardV2Mode === 'edit';
+    this.showLoadWizardV2 = false;
+    this.loadWizardV2Mode = 'create';
+    this.loadWizardV2LoadId = null;
+    // FN-1312: Clear deep-link query params so a refresh doesn't reopen.
+    if (wasEdit) this.clearLoadActionQueryParams();
+  }
+
+  /** Handle `created` output from the FN-862 wizard — reload grid, show toast. */
+  onLoadWizardV2Created(load: LoadDetail): void {
+    this.showLoadWizardV2 = false;
+    this.loadWizardV2Mode = 'create';
+    this.loadWizardV2LoadId = null;
+    this.successMessage = `Load ${load?.load_number || load?.id || ''} created.`;
+    this.loadLoads();
+    setTimeout(() => (this.successMessage = ''), 4000);
+  }
+
+  /** FN-1312: Handle `updated` output from the FN-862 wizard in edit mode. */
+  onLoadWizardV2Updated(load: LoadDetail): void {
+    this.showLoadWizardV2 = false;
+    this.loadWizardV2Mode = 'create';
+    this.loadWizardV2LoadId = null;
+    this.successMessage = `Load ${load?.load_number || load?.id || ''} updated.`;
+    this.loadLoads();
+    this.clearLoadActionQueryParams();
+    setTimeout(() => (this.successMessage = ''), 4000);
+  }
+
+  /**
+   * FN-1312: Apply `?action=...&loadId=...` deep-link routing for the loads
+   * page. `action=reassign` (a load-context quick-action from Smart Alert /
+   * Predictive Insight cards) opens the V2 wizard in edit mode for the
+   * referenced load. A bare `loadId` (no action) keeps the legacy detail
+   * drawer behavior.
+   *
+   * Extracted from `ngOnInit` so unit tests can drive the routing branches
+   * without spinning up the full lifecycle.
+   */
+  applyRouteQueryParams(params: Record<string, string | undefined>): void {
+    if (params['status']) this.filters.status = params['status']!;
+    if (params['billingStatus']) this.filters.billingStatus = params['billingStatus']!;
+
+    const loadId = params['loadId'];
+    const action = params['action'];
+
+    if (!loadId) return;
+
+    if (action === 'reassign') {
+      // Load-context quick-action deep-link: open V2 wizard in edit mode.
+      // Permission gate: users without LOADS_EDIT fall through to the
+      // read-only detail drawer (matches the wizard's own canEdit gate).
+      if (this.accessControl.hasPermission(PERMISSIONS.LOADS_EDIT)) {
+        this.loadWizardV2Mode = 'edit';
+        this.loadWizardV2LoadId = loadId;
+        this.showLoadWizardV2 = true;
+        this.showDetailsModal = false;
+        return;
+      }
+    }
+
+    // Default loadId-only deep-link → existing detail-drawer behavior.
+    this.loadsService.getLoad(loadId).subscribe({
+      next: (res) => {
+        this.selectedLoad = res?.data || null;
+        this.showDetailsModal = true;
+      }
+    });
+  }
+
+  /**
+   * FN-1312: Strip `action` and `loadId` from the URL (preserving any other
+   * query params) so a page refresh doesn't reopen the wizard. Uses
+   * `queryParamsHandling: 'merge'` with `null` values, which is the Angular
+   * idiom for removing specific keys.
+   */
+  private clearLoadActionQueryParams(): void {
+    this.router.navigate([], {
+      relativeTo: this.route,
+      queryParams: { action: null, loadId: null },
+      queryParamsHandling: 'merge',
+      replaceUrl: true
+    });
+  }
+
+  /** Called when the wizard emits (save). Creates the load and closes the wizard. */
+  onWizardSave(): void {
+    // Step implementations (FN-733 through FN-736) will call createLoad() here.
+    // For now the save event closes the wizard as a placeholder.
+    this.closeWizard();
+  }
+
+  /** Called when the wizard emits (saveAndNew). Creates the load and resets to step 0. */
+  onWizardSaveAndNew(): void {
+    // Step implementations will call createLoad() then reset wizard state.
+    this.wizardActiveStep = 0;
+    this.wizardStepValid = [false, false, false, false];
+    this.wizardDirty = false;
+    this.resetWizardFormState();
+  }
+
+  // ─── FN-778: Wizard step bindings ────────────────────────────────────────
+
+  onWizardBasicsChange(data: StepBasicsData): void {
+    this.wizardBasics = data;
+    this.wizardDirty = true;
+  }
+
+  onWizardBasicsValid(valid: boolean): void {
+    this.wizardStepValid = this.updateStepValid(0, valid);
+  }
+
+  onWizardStopsChange(stops: LoadStop[]): void {
+    this.wizardStops = stops;
+    this.wizardDirty = true;
+  }
+
+  onWizardStopsValid(valid: boolean): void {
+    this.wizardStepValid = this.updateStepValid(1, valid);
+  }
+
+  onWizardDriverChange(driverId: string | null): void {
+    this.wizardDriverId = driverId;
+    this.wizardDirty = true;
+    // FN-764: remember so next "New Load" suggests this driver by default.
+    if (driverId) {
+      this.userPreferences.setRecentDriverId(this.dispatcherUserId, driverId);
+    }
+  }
+
+  onWizardTruckChange(truckId: string | null): void {
+    this.wizardTruckId = truckId;
+    this.wizardDirty = true;
+  }
+
+  onWizardTrailerChange(trailerId: string | null): void {
+    this.wizardTrailerId = trailerId;
+    this.wizardDirty = true;
+  }
+
+  onWizardDriverValid(valid: boolean): void {
+    this.wizardStepValid = this.updateStepValid(2, valid);
+  }
+
+  onWizardAttachmentsChange(attachments: WizardAttachment[]): void {
+    this.wizardAttachments = attachments;
+    this.wizardDirty = true;
+  }
+
+  private updateStepValid(index: number, valid: boolean): boolean[] {
+    const next = [...this.wizardStepValid];
+    next[index] = valid;
+    return next;
+  }
+
+  private resetWizardFormState(): void {
+    this.wizardBasics = this.defaultBasics();
+    this.wizardStops = [];
+    this.wizardDriverId = null;
+    this.wizardTruckId = null;
+    this.wizardTrailerId = null;
+    this.wizardAttachments = [];
+    this.wizardAiExtractedPdf = null;
+    this.wizardAiPrefilledFields = new Set();
+  }
+
+  private defaultBasics(): StepBasicsData {
+    return {
+      loadNumber: '',
+      // FN-764: new loads default to DRAFT / PENDING so dispatchers can
+      // capture-first-refine-later without accidentally advancing lifecycle.
+      status: 'DRAFT',
+      billingStatus: 'PENDING',
+      brokerId: null,
+      brokerName: '',
+      poNumber: '',
+      rate: null,
+      dispatcher: '',
+      notes: ''
+    };
+  }
+
   openBulkUpload(): void {
     this.bulkPdfFiles = [];
     this.bulkUploading = false;
@@ -989,10 +2516,146 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
     this.showNewLoadMenu = false;
   }
 
+  // ─── Hero CTA handlers (FN-743) ────────────────────────────────────────
+
+  /** Single PDF selected from hero upload zone — pre-fills the auto-create modal. */
+  onHeroSinglePdf(file: File): void {
+    this.autoPdfFile = file;
+    this.autoExtracting = false;
+    this.autoError = '';
+    this.autoExtraction = null;
+    this.showAutoModal = true;
+  }
+
+  /** Multiple PDFs selected from hero upload zone — pre-fills the bulk upload modal. */
+  onHeroBulkPdfs(files: File[]): void {
+    this.bulkPdfFiles = files.slice(0, 10);
+    this.bulkUploading = false;
+    this.bulkError = '';
+    this.bulkResults = [];
+    this.showBulkUploadModal = true;
+  }
+
+  /**
+   * FN-1063: Clone Existing Load — opens a picker (search + paginated
+   * results). On selection, calls `loadsService.cloneLoad(id)` then
+   * persists the returned draft via `createLoad` and opens the side
+   * drawer in edit mode on the new row.
+   */
+  openCloneLoad(): void {
+    this.successMessage = '';
+    this.errorMessage = '';
+    this.cloneLoadPickerQuery = '';
+    this.cloneLoadPickerResults = [];
+    this.cloneLoadPickerError = '';
+    this.cloneLoadPickerSubmitting = false;
+    this.showCloneLoadPickerModal = true;
+    this.showNewLoadMenu = false;
+    // Seed results with the most recent loads so the picker is useful even
+    // before the user types anything.
+    this.fetchCloneLoadPickerResults('');
+  }
+
+  closeCloneLoadPickerModal(): void {
+    this.showCloneLoadPickerModal = false;
+    this.cloneLoadPickerQuery = '';
+    this.cloneLoadPickerResults = [];
+    this.cloneLoadPickerError = '';
+    this.cloneLoadPickerLoading = false;
+    this.cloneLoadPickerSubmitting = false;
+  }
+
+  onCloneLoadPickerQueryChange(value: string): void {
+    this.cloneLoadPickerQuery = value;
+    this.cloneLoadPickerSearch$.next(value);
+  }
+
+  private fetchCloneLoadPickerResults(query: string): void {
+    this.cloneLoadPickerLoading = true;
+    this.cloneLoadPickerError = '';
+    this.loadsService
+      .listLoads({ q: query, page: 1, pageSize: 20 } as any)
+      .pipe(takeUntil(this.destroy$))
+      .subscribe({
+        next: (res) => {
+          this.cloneLoadPickerResults = res?.data || [];
+          this.cloneLoadPickerLoading = false;
+        },
+        error: () => {
+          this.cloneLoadPickerError = 'Failed to load search results.';
+          this.cloneLoadPickerLoading = false;
+        }
+      });
+  }
+
+  /** Picker selection → clone via backend → persist → open drawer in edit. */
+  selectCloneLoadPickerLoad(load: LoadListItem): void {
+    if (!load?.id || this.cloneLoadPickerSubmitting) return;
+    this.cloneLoadPickerSubmitting = true;
+    this.cloneLoadPickerError = '';
+    this.loadsService.cloneLoad(load.id).subscribe({
+      next: (res) => {
+        const draft = res?.data as any;
+        if (!draft) {
+          this.cloneLoadPickerError = 'Failed to clone load.';
+          this.cloneLoadPickerSubmitting = false;
+          return;
+        }
+        this.loadsService.createLoad(draft).subscribe({
+          next: (created) => {
+            const newId = created?.data?.id;
+            this.cloneLoadPickerSubmitting = false;
+            if (!newId) {
+              this.cloneLoadPickerError = 'Failed to save cloned draft.';
+              return;
+            }
+            this.closeCloneLoadPickerModal();
+            this.loadLoads();
+            this.successMessage = 'Cloned — set the pickup/delivery dates and save.';
+            setTimeout(() => { this.successMessage = ''; }, 5000);
+            this.openLoadDrawer(newId, false, 'edit');
+          },
+          error: (err) => {
+            this.cloneLoadPickerError = err?.error?.error || 'Failed to save cloned draft.';
+            this.cloneLoadPickerSubmitting = false;
+          }
+        });
+      },
+      error: (err) => {
+        this.cloneLoadPickerError = err?.error?.error || 'Failed to clone load.';
+        this.cloneLoadPickerSubmitting = false;
+      }
+    });
+  }
+
   closeBulkUploadModal(): void {
     this.showBulkUploadModal = false;
     this.bulkPdfFiles = [];
     this.bulkResults = [];
+    this.bulkPendingAddFiles = [];
+  }
+
+  // ─── FN-745: Bulk Extraction Grid ─────────────────────────────────────
+  openBulkExtractionGrid(files: File[]): void {
+    const pdfs = files.filter((f) => f.type === 'application/pdf');
+    if (pdfs.length < 2 || pdfs.length > 10) return;
+    this.bulkExtractionFiles = pdfs;
+    this.showBulkExtractionGrid = true;
+  }
+
+  closeBulkExtractionGrid(): void {
+    this.showBulkExtractionGrid = false;
+    this.bulkExtractionFiles = [];
+    this.loadLoads();
+  }
+
+  onBulkExtractionReviewNow(): void {
+    this.showBulkExtractionGrid = false;
+    this.bulkExtractionFiles = [];
+    // Reload the list filtered to drafts needing review
+    this.filters.status = 'DRAFT';
+    this.page = 1;
+    this.loadLoads();
   }
 
   onBulkFilesSelected(files: FileList | null, inputEl?: HTMLInputElement): void {
@@ -1001,11 +2664,27 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
     const pdfs = Array.from(files).filter((f) => f.type === 'application/pdf');
     if (files.length > 0 && pdfs.length === 0) {
       this.bulkError = 'Please select PDF files only.';
+      if (inputEl) inputEl.value = '';
       return;
     }
+    // FN-1083: if files are already queued, ask whether to replace or add
+    // instead of silently appending. User confirms via the inline prompt.
+    if (this.bulkPdfFiles.length > 0) {
+      this.bulkPendingAddFiles = pdfs;
+      if (inputEl) inputEl.value = '';
+      return;
+    }
+    this.appendBulkFiles(pdfs);
+    if (inputEl) inputEl.value = '';
+  }
+
+  /**
+   * Append PDFs to the bulk queue, capped at 10. Shared by the initial
+   * selection path and the FN-1083 "Add to queue" confirm action.
+   */
+  private appendBulkFiles(pdfs: File[]): void {
     const maxTotal = 10;
-    const current = this.bulkPdfFiles.length;
-    const remaining = Math.max(0, maxTotal - current);
+    const remaining = Math.max(0, maxTotal - this.bulkPdfFiles.length);
     if (remaining === 0) {
       this.bulkError = 'Maximum 10 rate confirmations. Remove one to add more.';
       return;
@@ -1015,7 +2694,30 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
     if (pdfs.length > remaining) {
       this.bulkError = `Added ${toAdd.length} file(s). Maximum 10 total; ${pdfs.length - remaining} not added.`;
     }
-    if (inputEl) inputEl.value = '';
+  }
+
+  // FN-1083: replace-vs-add confirm actions for the bulk-upload modal.
+
+  /** Replace the existing queue with the pending selection. */
+  confirmBulkReplace(): void {
+    if (this.bulkPendingAddFiles.length === 0) return;
+    this.bulkError = '';
+    this.bulkPdfFiles = [];
+    this.appendBulkFiles(this.bulkPendingAddFiles);
+    this.bulkPendingAddFiles = [];
+  }
+
+  /** Append the pending selection to the existing queue. */
+  confirmBulkAdd(): void {
+    if (this.bulkPendingAddFiles.length === 0) return;
+    this.bulkError = '';
+    this.appendBulkFiles(this.bulkPendingAddFiles);
+    this.bulkPendingAddFiles = [];
+  }
+
+  /** Discard the pending selection without changing the queue. */
+  cancelBulkPending(): void {
+    this.bulkPendingAddFiles = [];
   }
 
   removeBulkFile(index: number): void {
@@ -1166,6 +2868,190 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
   canDeleteLoad(load: LoadListItem): boolean {
     const s = (load.status || '').toString().toUpperCase();
     return s === 'DRAFT' || s === 'NEW';
+  }
+
+  // ─── FN-768: Bulk selection + actions ─────────────────────────────────────
+
+  /** Number of loads currently selected. Used by the toolbar. */
+  get selectedCount(): number { return this.selectedIds.size; }
+
+  /** True when every load on the current page is selected. */
+  get allVisibleSelected(): boolean {
+    const rows = this.filteredLoads;
+    return rows.length > 0 && rows.every((l) => this.selectedIds.has(l.id));
+  }
+
+  /** True when some — but not all — visible rows are selected (for the header checkbox). */
+  get someVisibleSelected(): boolean {
+    const rows = this.filteredLoads;
+    const selected = rows.filter((l) => this.selectedIds.has(l.id)).length;
+    return selected > 0 && selected < rows.length;
+  }
+
+  isSelected(load: LoadListItem): boolean { return this.selectedIds.has(load.id); }
+
+  toggleRowSelect(load: LoadListItem, event?: Event): void {
+    if (event) { event.stopPropagation(); }
+    if (this.selectedIds.has(load.id)) {
+      this.selectedIds.delete(load.id);
+    } else {
+      this.selectedIds.add(load.id);
+    }
+  }
+
+  /** Select or clear every load on the currently visible page. */
+  toggleSelectAll(): void {
+    const rows = this.filteredLoads;
+    if (this.allVisibleSelected) {
+      rows.forEach((l) => this.selectedIds.delete(l.id));
+    } else {
+      rows.forEach((l) => this.selectedIds.add(l.id));
+    }
+  }
+
+  clearSelection(): void {
+    this.selectedIds.clear();
+    this.bulkStatusToApply = '';
+    this.bulkDriverToApply = '';
+    this.bulkTruckToApply = '';
+  }
+
+  /** The subset of selected loads that are still present in the list cache. */
+  get selectedLoads(): LoadListItem[] {
+    return this.loads.filter((l) => this.selectedIds.has(l.id));
+  }
+
+  /** The subset of selected loads that are currently DRAFT. */
+  get selectedDraftIds(): string[] {
+    return this.selectedLoads.filter((l) => this.isDraftLoad(l)).map((l) => l.id);
+  }
+
+  applyBulkStatus(): void {
+    const status = (this.bulkStatusToApply || '').trim();
+    if (!status || !this.selectedCount || this.bulkActionInFlight) { return; }
+    this._bulkUpdate({ status }, `${this.selectedCount} load(s) status set to ${status}.`);
+  }
+
+  applyBulkDriver(): void {
+    const driverId = (this.bulkDriverToApply || '').trim();
+    if (!driverId || !this.selectedCount || this.bulkActionInFlight) { return; }
+    const name = this.drivers.find((d) => d.id === driverId)?.name || 'driver';
+    this._bulkUpdate({ driverId }, `Assigned ${name} to ${this.selectedCount} load(s).`);
+  }
+
+  applyBulkTruck(): void {
+    const truckId = (this.bulkTruckToApply || '').trim();
+    if (!truckId || !this.selectedCount || this.bulkActionInFlight) { return; }
+    const label = this.trucks.find((t) => t.id === truckId)?.label || 'truck';
+    this._bulkUpdate({ truckId }, `Assigned ${label} to ${this.selectedCount} load(s).`);
+  }
+
+  bulkDeleteSelectedDrafts(): void {
+    const ids = this.selectedDraftIds;
+    if (!ids.length) {
+      this.errorMessage = 'No DRAFT loads in the selection. Bulk delete only works on drafts.';
+      setTimeout(() => { this.errorMessage = ''; }, 4000);
+      return;
+    }
+    if (!confirm(`Delete ${ids.length} draft load(s)? This cannot be undone.`)) { return; }
+    this.bulkActionInFlight = true;
+    this.errorMessage = '';
+    this.loadsService.bulkDeleteDrafts(ids).subscribe({
+      next: (res) => {
+        this.bulkActionInFlight = false;
+        this.successMessage = `Deleted ${res.deleted} draft(s).`;
+        this.clearSelection();
+        this.loadLoads();
+        setTimeout(() => { this.successMessage = ''; }, 3000);
+      },
+      error: (err) => {
+        this.bulkActionInFlight = false;
+        this.errorMessage = err?.error?.error || 'Failed to delete drafts.';
+      }
+    });
+  }
+
+  bulkApproveSelectedDrafts(): void {
+    const ids = this.selectedDraftIds;
+    if (!ids.length) {
+      this.errorMessage = 'No DRAFT loads in the selection.';
+      setTimeout(() => { this.errorMessage = ''; }, 4000);
+      return;
+    }
+    if (!confirm(`Approve ${ids.length} draft(s)? They will move to NEW status.`)) { return; }
+    this._bulkUpdate({ status: 'NEW' }, `Approved ${ids.length} draft(s).`, ids);
+  }
+
+  /** Shared bulk-update pipeline: POST to backend, refresh list, clear selection. */
+  private _bulkUpdate(
+    changes: { status?: string; billingStatus?: string; driverId?: string | null; truckId?: string | null },
+    successMessage: string,
+    idsOverride?: string[]
+  ): void {
+    const ids = idsOverride || Array.from(this.selectedIds);
+    if (!ids.length) { return; }
+    this.bulkActionInFlight = true;
+    this.errorMessage = '';
+    this.loadsService.bulkUpdate(ids, changes).subscribe({
+      next: () => {
+        this.bulkActionInFlight = false;
+        this.successMessage = successMessage;
+        this.clearSelection();
+        this.loadLoads();
+        setTimeout(() => { this.successMessage = ''; }, 3000);
+      },
+      error: (err) => {
+        this.bulkActionInFlight = false;
+        this.errorMessage = err?.error?.error || 'Bulk update failed.';
+      }
+    });
+  }
+
+  /**
+   * Export the selected loads to a CSV file. Uses the already-loaded row data
+   * — no round-trip to the server — so exported columns match what the user
+   * sees in the table.
+   */
+  exportSelectedToCsv(): void {
+    const rows = this.selectedLoads;
+    if (!rows.length) { return; }
+    const header = [
+      'Load #', 'Status', 'Billing', 'Driver', 'Broker', 'PO #',
+      'Pickup City', 'Pickup State', 'Delivery City', 'Delivery State',
+      'Rate', 'Completed Date'
+    ];
+    const esc = (v: unknown): string => {
+      const s = v == null ? '' : String(v);
+      return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+    };
+    const lines = [header.join(',')];
+    for (const l of rows) {
+      const anyL = l as any;
+      lines.push([
+        esc(l.load_number),
+        esc(l.status),
+        esc(l.billing_status),
+        esc(anyL.driver_name || ''),
+        esc(anyL.broker_name || anyL.broker_display_name || ''),
+        esc(anyL.po_number || ''),
+        esc(anyL.pickup_city || ''),
+        esc(anyL.pickup_state || ''),
+        esc(anyL.delivery_city || ''),
+        esc(anyL.delivery_state || ''),
+        esc(l.rate != null ? l.rate : ''),
+        esc(anyL.completed_date || ''),
+      ].join(','));
+    }
+    const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    const ts = new Date().toISOString().slice(0, 10);
+    a.href = url;
+    a.download = `loads-${ts}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
   }
 
   getBulkFileNames(): string {
@@ -1422,10 +3308,18 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
     if (zip.length < 5) return;
     this.loadsService.lookupZip(zip).subscribe({
       next: (res) => {
-        this.editStopForm.patchValue({
-          city: res?.data?.city || '',
-          state: res?.data?.state || ''
-        });
+        const d = res?.data;
+        if (!d?.city && !d?.state) return;
+        // FN-1089: mirror the FN-1087 wizard fix — setValue on individual
+        // controls + updateValueAndValidity. patchValue from inside subscribe
+        // was leaving the State input visually unsynced even when the
+        // FormControl held the correct value, and the empty-string fallback
+        // was blanking existing user input on partial responses.
+        const cityCtrl = this.editStopForm.get('city');
+        const stateCtrl = this.editStopForm.get('state');
+        cityCtrl?.setValue(d.city || cityCtrl.value || '');
+        stateCtrl?.setValue(d.state || stateCtrl.value || '');
+        this.editStopForm.updateValueAndValidity();
       }
     });
   }
@@ -1642,6 +3536,13 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
 
   closeAutoModal(): void {
     this.showAutoModal = false;
+    this.autoIsDragOver = false;
+  }
+
+  clearAutoPdf(): void {
+    this.autoPdfFile = null;
+    this.autoError = '';
+    this.autoExtraction = null;
   }
 
   openDetails(load: LoadListItem): void {
@@ -1788,6 +3689,128 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
     };
   }
 
+  /**
+   * FN-756 / FN-1063: Clone an existing load. The backend returns an
+   * in-memory draft payload (no `id`); we persist it via `createLoad` so a
+   * real DRAFT exists in the list, then open the side drawer on the new
+   * row in edit mode. The legacy modal flow (`applyDraftToManualForm`) is
+   * retained for `createReturnLoad`.
+   */
+  cloneLoad(load: LoadListItem): void {
+    if (!load?.id) return;
+    this.errorMessage = '';
+    this.successMessage = '';
+    this.loadsService.cloneLoad(load.id).subscribe({
+      next: (res) => {
+        const draft = res?.data as any;
+        if (!draft) {
+          this.errorMessage = 'Failed to clone load.';
+          return;
+        }
+        this.persistClonedDraftAndOpenDrawer(draft);
+      },
+      error: (err) => {
+        this.errorMessage = err?.error?.error || 'Failed to clone load.';
+      }
+    });
+  }
+
+  /**
+   * FN-1063: Persist a clone draft as a real DRAFT load, then open the
+   * side drawer on the new row in edit mode.
+   */
+  private persistClonedDraftAndOpenDrawer(draft: any): void {
+    this.loadsService.createLoad(draft).subscribe({
+      next: (created) => {
+        const newId = created?.data?.id;
+        if (!newId) {
+          this.errorMessage = 'Failed to save cloned draft.';
+          return;
+        }
+        this.loadLoads();
+        this.successMessage = 'Cloned — set the pickup/delivery dates and save.';
+        setTimeout(() => { this.successMessage = ''; }, 5000);
+        this.openLoadDrawer(newId, false, 'edit');
+      },
+      error: (err) => {
+        this.errorMessage = err?.error?.error || 'Failed to save cloned draft.';
+      }
+    });
+  }
+
+  /**
+   * FN-756: Create a Return Load — backend returns a draft-ready payload with
+   * stops reversed, rate cleared, dates cleared, broker/driver/equipment kept,
+   * status=DRAFT. Nothing persists until the user saves.
+   */
+  createReturnLoad(load: LoadListItem): void {
+    if (!load?.id) return;
+    this.errorMessage = '';
+    this.successMessage = '';
+    this.loadsService.returnLoad(load.id).subscribe({
+      next: (res) => {
+        const draft = res?.data;
+        if (!draft) {
+          this.errorMessage = 'Failed to create return load.';
+          return;
+        }
+        this.applyDraftToManualForm(draft);
+        this.successMessage = 'Return load ready — review stops, set dates and rate, then save.';
+        setTimeout(() => { this.successMessage = ''; }, 5000);
+      },
+      error: (err) => {
+        this.errorMessage = err?.error?.error || 'Failed to create return load.';
+      }
+    });
+  }
+
+  /**
+   * FN-756: Seed the inline new-load form from a clone/return-load draft payload.
+   * The backend is authoritative for what carries over (dates, rate, PO, etc.);
+   * this function just patches whatever the server returned.
+   */
+  private applyDraftToManualForm(draft: LoadDetail): void {
+    this.openManualEntry();
+
+    const stops = (draft.stops || []).slice().sort((a, b) => (a.sequence ?? 0) - (b.sequence ?? 0));
+    const pickup = stops.find((s) => (s.stop_type || '').toString().toUpperCase() === 'PICKUP') || stops[0];
+    const delivery = [...stops].reverse().find((s) => (s.stop_type || '').toString().toUpperCase() === 'DELIVERY') || stops[stops.length - 1];
+
+    this.manualLoadForm.patchValue({
+      status: draft.status || 'DRAFT',
+      billingStatus: draft.billing_status || 'PENDING',
+      brokerId: draft.broker_id || '',
+      brokerName: draft.broker_display_name || draft.broker_name || '',
+      driverId: draft.driver_id || '',
+      truckId: draft.truck_id || '',
+      trailerId: draft.trailer_id || '',
+      poNumber: draft.po_number || '',
+      rate: draft.rate != null ? draft.rate : '',
+      notes: draft.notes || '',
+      pickupDate: draft.pickup_date ? String(draft.pickup_date).slice(0, 10) : '',
+      pickupCity: pickup?.city || '',
+      pickupState: pickup?.state || '',
+      pickupZip: pickup?.zip || '',
+      deliveryDate: draft.delivery_date ? String(draft.delivery_date).slice(0, 10) : '',
+      deliveryCity: delivery?.city || '',
+      deliveryState: delivery?.state || '',
+      deliveryZip: delivery?.zip || ''
+    });
+
+    // Preserve intermediate stops when there are more than two
+    if (stops.length > 2) {
+      this.sortedStops = stops.map((s, i) => ({
+        stop_type: (s.stop_type as 'PICKUP' | 'DELIVERY') || (i === 0 ? 'PICKUP' : 'DELIVERY'),
+        stop_date: s.stop_date ?? null,
+        city: s.city || null,
+        state: s.state || null,
+        zip: s.zip || null,
+        address1: s.address1 || null,
+        sequence: s.sequence ?? i + 1
+      }));
+    }
+  }
+
   private populateFormFromDetail(detail: LoadDetail): void {
     const normalizeDate = (value: unknown): string => {
       if (!value) return '';
@@ -1818,8 +3841,9 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
       deliveryState: delivery?.state || '',
       deliveryZip: delivery?.zip || '',
       driverId: detail.driver_id || '',
-      truckId: detail.truck_id || '',
-      trailerId: detail.trailer_id || '',
+      // FN-545: fall back to driver's assigned truck/trailer if load fields are blank
+      truckId: detail.truck_id || this.drivers.find(d => d.id === detail.driver_id)?.truckId || '',
+      trailerId: detail.trailer_id || this.drivers.find(d => d.id === detail.driver_id)?.trailerId || '',
       brokerId: detail.broker_id || '',
       brokerName: detail.broker_name || '',
       poNumber: detail.po_number || '',
@@ -1830,6 +3854,15 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
     this.pickupStateEdited = false;
     this.deliveryCityEdited = false;
     this.deliveryStateEdited = false;
+    // FN-545: sync inline search labels for driver/truck/trailer
+    const driverObj = this.drivers.find(d => d.id === (detail.driver_id || ''));
+    this.driverSearch = driverObj ? driverObj.name : '';
+    const resolvedTruckId = detail.truck_id || driverObj?.truckId || '';
+    const truckObj = this.trucks.find(t => t.id === resolvedTruckId);
+    this.truckSearch = truckObj ? truckObj.label : '';
+    const resolvedTrailerId = detail.trailer_id || driverObj?.trailerId || '';
+    const trailerObj = this.trailers.find(t => t.id === resolvedTrailerId);
+    this.trailerSearch = trailerObj ? trailerObj.label : '';
   }
 
   resetManualForm(): void {
@@ -2254,11 +4287,244 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
     }, 4000);
   }
 
+  // ─── FN-821: empty-state + error-state helpers ─────────────────────────────
+
+  /** Active smart-filter / header-filter / status-filter surface. */
+  get hasActiveListFilters(): boolean {
+    const f = this.filters;
+    if (f.status || f.billingStatus || f.driverId || f.q || f.needsReview || f.source) return true;
+    if (this.smartFilterKeys.length > 0) return true;
+    const hf = this.headerFilters;
+    return !!(hf.date || hf.driver || hf.broker || hf.po || hf.pickup || hf.delivery
+      || hf.rate || hf.completed || hf.status || hf.billingStatus || hf.attachmentType);
+  }
+
+  /** Which empty-state variant the card should render right now. */
+  get emptyStateMode(): EmptyStateMode {
+    if (this.loadError) {
+      return this.permissionDenied ? 'permission-denied' : 'api-error';
+    }
+    // Smart-filter returning zero gets the celebratory variant when the
+    // chip's semantics are "bad things" (overdue, needs review) — otherwise
+    // fall through to the regular filtered empty.
+    if (this.smartFilterKeys.length > 0 && this.isCelebratorySmartFilter(this.smartFilterKeys[0])) {
+      return 'smart-filter-celebrate';
+    }
+    if (this.hasActiveListFilters) return 'filtered';
+    return 'no-loads';
+  }
+
+  /** Friendly label of the first active smart-filter chip, for celebrate mode copy. */
+  get activeSmartFilterLabel(): string {
+    if (!this.smartFilterKeys.length) return '';
+    const key = this.smartFilterKeys[0];
+    const labels: Record<string, string> = {
+      overdue: 'overdue',
+      needs_review: 'loads needing review',
+      missing_pod: 'loads missing POD',
+      unpaid: 'unpaid',
+      upcoming: 'upcoming',
+    };
+    return labels[key as string] || (key as string).replace(/_/g, ' ');
+  }
+
+  /** Smart filters whose "0 matches" reads as good news rather than empty. */
+  private isCelebratorySmartFilter(key: string): boolean {
+    return key === 'overdue' || key === 'needs_review' || key === 'missing_pod';
+  }
+
+  /** Skeleton row column config derived from columnDefs + visibility + width map. */
+  get skeletonColumns(): SkeletonColumn[] {
+    return this.columnDefs.map((c) => ({
+      key: c.key,
+      width: this.columnWidthMap[c.key] || 'auto',
+      visible: this.isColVisible(c.key),
+    }));
+  }
+
+  /** Empty-state: "Clear filters" action — reuses the existing clearAllFilters. */
+  onEmptyStateClearFilters(): void {
+    this.clearAllFilters();
+  }
+
+  /** Empty-state: "Create your first load" — opens the standard wizard. */
+  onEmptyStateCreateLoad(): void {
+    this.openLoadWizard();
+  }
+
+  /** Empty-state: "Import from PDF" — trigger the hidden file picker. */
+  onEmptyStateImportFromPdf(): void {
+    this.emptyStateBulkInput?.nativeElement?.click();
+  }
+
+  /** Hidden file input change → route through the existing hero-bulk handler. */
+  onEmptyStateBulkPdfsChange(event: Event): void {
+    const input = event.target as HTMLInputElement;
+    const files = input?.files;
+    if (!files || files.length === 0) return;
+    this.onHeroBulkPdfs(Array.from(files));
+    // Reset so the same file can be re-selected later.
+    input.value = '';
+  }
+
+  /** Empty-state: "Try again" after an API failure. */
+  onEmptyStateRetry(): void {
+    this.loadLoads();
+  }
+
+  // ─── FN-821: filter-applied fade pulse ─────────────────────────────────────
+
+  private triggerFilterPulse(): void {
+    this.filterPulseActive = true;
+    if (this.filterPulseTimer) {
+      clearTimeout(this.filterPulseTimer);
+    }
+    // Matches the CSS animation duration (280ms) + small buffer.
+    this.filterPulseTimer = setTimeout(() => {
+      this.filterPulseActive = false;
+      this.filterPulseTimer = null;
+    }, 320);
+  }
+
+  // ─── FN-821: density mode ──────────────────────────────────────────────────
+
+  /** Row height in px for both CSS vars and the cdk-virtual-scroll itemSize. */
+  get rowHeightPx(): number {
+    return this.densityOptions.find((o) => o.value === this.densityMode)?.heightPx ?? 52;
+  }
+
+  toggleDensityMenu(): void {
+    this.densityMenuOpen = !this.densityMenuOpen;
+    if (this.densityMenuOpen) {
+      this.showColumnPicker = false;
+      this.showSavedViewsMenu = false;
+    }
+  }
+
+  setDensity(mode: DensityMode): void {
+    if (this.densityMode === mode) {
+      this.densityMenuOpen = false;
+      return;
+    }
+    this.densityMode = mode;
+    this.densityMenuOpen = false;
+    this.userPreferences.patchLoadsDashboard({ density: mode }).subscribe();
+  }
+
+  // ─── FN-821: scroll-to-top button ──────────────────────────────────────────
+
+  @HostListener('window:scroll')
+  onWindowScroll(): void {
+    const y = window.pageYOffset || document.documentElement.scrollTop || 0;
+    const next = y > 300;
+    if (next !== this.showScrollTop) {
+      this.showScrollTop = next;
+    }
+  }
+
+  scrollToTop(): void {
+    const reduceMotion = typeof window !== 'undefined'
+      && window.matchMedia
+      && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    window.scrollTo({ top: 0, behavior: reduceMotion ? 'auto' : 'smooth' });
+  }
+
   rowClass(load: LoadListItem): string {
     const status = (load.status || '').toString().toUpperCase();
-    if (status === 'DELIVERED') return 'row-delivered';
-    if (status === 'CANCELLED') return 'row-cancelled';
-    return '';
+    const classes: string[] = [];
+    if (status === 'DELIVERED') classes.push('row-delivered');
+    if (status === 'CANCELLED') classes.push('row-cancelled');
+    // FN-808: teal left-border highlight on the active drawer row.
+    if (this.isDrawerActive(load)) classes.push('row-drawer-active');
+    // FN-818: one-off glow when a new AI-extracted load lands in the list.
+    if (this.newAiLoadIds.has(load.id)) classes.push('row-new-ai');
+    // FN-813: realtime animation classes. Cleared automatically by the
+    // timers in handleLoadCreated / handleLoadUpdated / handleLoadDeleted.
+    if (this.recentlyCreatedIds.has(load.id)) classes.push('row-just-created');
+    if (this.recentlyUpdatedIds.has(load.id)) classes.push('row-just-updated');
+    if (this.recentlyDeletedIds.has(load.id)) classes.push('row-just-deleted');
+    return classes.join(' ');
+  }
+
+  // ─── FN-818: AI extraction helpers ─────────────────────────────────────────
+
+  /** True when the load was created by an AI extraction pipeline (PDF or email). */
+  isAiExtractedSource(load: LoadListItem): boolean {
+    const src = (load.source || '').toLowerCase();
+    return src === 'ai_extraction' || src === 'ai' || src === 'email';
+  }
+
+  /** Overall confidence as 0–100 pulled from ai_metadata (null when missing). */
+  getOverallConfidence(load: LoadListItem): number | null {
+    const raw = load.ai_metadata?.overall_confidence;
+    if (raw == null || !Number.isFinite(raw)) return null;
+    // Accept 0–1 floats from some extractors; normalise to percent.
+    return raw <= 1 ? raw * 100 : raw;
+  }
+
+  /** Hover copy for the row sparkle. Matches FN-789 spec. */
+  getSparkleTooltip(load: LoadListItem): string {
+    const meta = load.ai_metadata;
+    const when = meta?.extracted_at ? new Date(meta.extracted_at as string) : null;
+    const whenStr = when && !isNaN(when.getTime()) ? when.toLocaleDateString() : null;
+    const label = (meta?.source_label as string | undefined)
+      || (load.source === 'email' ? 'forwarded email' : 'rate confirmation PDF');
+    return whenStr
+      ? `Auto-extracted from ${label} on ${whenStr}`
+      : `Auto-extracted from ${label}`;
+  }
+
+  /** Whether to surface the confidence chip in the status column (DRAFT + confidence present). */
+  shouldShowConfidenceBadge(load: LoadListItem): boolean {
+    const status = (load.status || '').toUpperCase();
+    if (status !== 'DRAFT' && status !== 'NEW') return false;
+    return this.getOverallConfidence(load) != null;
+  }
+
+  /** Confidence chip click → open the drawer focused on low-confidence fields. */
+  onConfidenceBadgeClick(load: LoadListItem, event?: MouseEvent): void {
+    if (event) {
+      event.stopPropagation();
+      event.preventDefault();
+    }
+    this.openLoadDrawer(load.id, true);
+  }
+
+  /** Row sparkle click → open the drawer on the AI-extracted load. */
+  onRowSparkleClick(load: LoadListItem, event?: MouseEvent): void {
+    if (event) {
+      event.stopPropagation();
+      event.preventDefault();
+    }
+    this.openLoadDrawer(load.id);
+  }
+
+  /**
+   * FN-818 — diff the incoming list against the last snapshot; any AI-sourced IDs
+   * that weren't present before get flagged so the `<tr>` picks up a one-off glow
+   * class via `rowClass`. We deliberately skip the very first response so users
+   * don't see every existing AI load light up on page load.
+   */
+  private trackNewAiLoads(loads: LoadListItem[]): void {
+    const currentIds = new Set(loads.map((l) => l.id));
+    if (!this.seenFirstLoadsResponse) {
+      this.seenFirstLoadsResponse = true;
+      this.previousLoadIds = currentIds;
+      return;
+    }
+    const freshAiIds = loads
+      .filter((l) => this.isAiExtractedSource(l) && !this.previousLoadIds.has(l.id))
+      .map((l) => l.id);
+    if (freshAiIds.length) {
+      freshAiIds.forEach((id) => this.newAiLoadIds.add(id));
+      if (this.newAiGlowTimer) clearTimeout(this.newAiGlowTimer);
+      // 3.2s ≈ glow CSS animation duration + small buffer.
+      this.newAiGlowTimer = setTimeout(() => {
+        this.newAiLoadIds.clear();
+        this.newAiGlowTimer = null;
+      }, 3200);
+    }
+    this.previousLoadIds = currentIds;
   }
 
   /** Build full URL for attachment download (backend serves /uploads). */
@@ -2300,6 +4566,17 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
     return url ? this.sanitizer.bypassSecurityTrustResourceUrl(url) : this.sanitizer.bypassSecurityTrustResourceUrl('about:blank');
   }
 
+  // FN-854: Esc closes the inline Status/Billing dropdown. The menu is
+  // portaled via CDK Overlay, so keydown does not bubble through the
+  // component host — listen at document level, act only if a menu is open.
+  @HostListener('document:keydown.escape')
+  onDocumentEscape(): void {
+    if (this.statusMenuLoadId || this.billingMenuLoadId) {
+      this.statusMenuLoadId = null;
+      this.billingMenuLoadId = null;
+    }
+  }
+
   @HostListener('document:click')
   onDocumentClick(): void {
     this.showNewLoadMenu = false;
@@ -2308,13 +4585,114 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
     this.driverDropdownOpen = false;
     this.truckDropdownOpen = false;
     this.trailerDropdownOpen = false;
+    this.showColumnPicker = false;
+    this.showSavedViewsMenu = false;
+    this.densityMenuOpen = false;
+    this.statusMenuLoadId = null;
+    this.billingMenuLoadId = null;
+    // Notes editor commits on blur, which fires before this handler — safe to
+    // clear here too in case blur was skipped (e.g. clicking a non-focusable area).
+    this.editingNotesLoadId = null;
+    this.editingNotesDraft = '';
+  }
+
+  // FN-745: Page-level drop handler for multi-PDF bulk extraction
+  @HostListener('document:dragover', ['$event'])
+  onPageDragOver(event: DragEvent): void {
+    // Prevent default to allow drops on the page
+    event.preventDefault();
+  }
+
+  @HostListener('document:drop', ['$event'])
+  onPageDrop(event: DragEvent): void {
+    // Skip if a modal is already open or we're inside a specific dropzone
+    if (this.showBulkUploadModal || this.showAutoModal || this.showBulkExtractionGrid || this.showManualModal || this.showLoadWizard || this.showLoadWizardV2) {
+      return;
+    }
+    const files = event.dataTransfer?.files;
+    if (!files || files.length < 2) return;
+    const pdfs = Array.from(files).filter((f) => f.type === 'application/pdf');
+    if (pdfs.length >= 2 && pdfs.length <= 10) {
+      event.preventDefault();
+      this.openBulkExtractionGrid(pdfs);
+    }
   }
 
   // Auto-create from PDF handlers
 
   onAutoFileSelected(files: FileList | null): void {
+    this._handleAutoModalFiles(files);
+  }
+
+  onAutoFileDragOver(event: DragEvent): void {
+    if (this.autoExtracting) return;
+    event.preventDefault();
+    event.stopPropagation();
+    this.autoIsDragOver = true;
+  }
+
+  onAutoFileDragLeave(event: DragEvent): void {
+    event.stopPropagation();
+    this.autoIsDragOver = false;
+  }
+
+  onAutoFileDropped(event: DragEvent): void {
+    event.preventDefault();
+    event.stopPropagation();
+    this.autoIsDragOver = false;
+    if (this.autoExtracting) return;
+    this._handleAutoModalFiles(event.dataTransfer?.files ?? null);
+  }
+
+  // FN-1057: Hero CTA emits this when 11+ PDFs were selected and capped to 10.
+  onPdfsCapped(): void {
+    this._notifyPdfsCapped();
+  }
+
+  private _handleAutoModalFiles(files: FileList | null): void {
     this.autoError = '';
-    this.autoPdfFile = files && files.length > 0 ? files[0] : null;
+    if (!files || files.length === 0) return;
+    const hasNonPdf = Array.from(files).some((f) => f.type !== 'application/pdf');
+    const { pdfs, capped } = selectPdfs(files);
+    if (pdfs.length === 0) {
+      this.autoError = hasNonPdf
+        ? 'Please select PDF files only.'
+        : 'Please select a PDF file.';
+      return;
+    }
+    if (capped) this._notifyPdfsCapped();
+    // FN-1078: when a PDF is already queued and the user picks more, route to
+    // the bulk-extraction grid instead of silently overwriting the first one.
+    if (this.autoPdfFile && pdfs.length >= 1) {
+      const queued = this.autoPdfFile;
+      const merged: File[] = [queued, ...pdfs.filter((p) => p !== queued)].slice(0, 10);
+      if (merged.length >= 2) {
+        this.showAutoModal = false;
+        this.autoPdfFile = null;
+        this.autoExtraction = null;
+        this.openBulkExtractionGrid(merged);
+        return;
+      }
+    }
+    if (pdfs.length === 1) {
+      this.autoPdfFile = pdfs[0];
+      return;
+    }
+    // 2–10 PDFs → close Auto-Create modal and route to the bulk flow,
+    // matching the hero CTA's bulkPdfsSelected behavior.
+    this.showAutoModal = false;
+    this.autoPdfFile = null;
+    this.autoExtraction = null;
+    this.onHeroBulkPdfs(pdfs);
+  }
+
+  private _notifyPdfsCapped(): void {
+    this.errorMessage = 'Maximum 10 PDFs. Extra files were not added.';
+    setTimeout(() => {
+      if (this.errorMessage === 'Maximum 10 PDFs. Extra files were not added.') {
+        this.errorMessage = '';
+      }
+    }, 4000);
   }
 
   runAutoExtraction(): void {
@@ -2323,66 +4701,213 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
       this.autoError = 'Please select a PDF file first.';
       return;
     }
+    const pdfFile = this.autoPdfFile;
     this.autoExtracting = true;
-    this.loadsService.aiExtractFromPdf(this.autoPdfFile).subscribe({
+    this.loadsService.aiExtractFromPdf(pdfFile).subscribe({
       next: (res) => {
         this.autoExtracting = false;
         const data = res?.data;
+
+        // FN-1078: every successful response routes through the 4-step wizard.
+        // Surface "no data" / vision-only as transient banners instead of the
+        // legacy manual modal so the user lands in a single creation surface.
         if (!data) {
-          this.autoError = 'Extraction returned no data. You can continue with manual entry.';
-          // Queue attachment and open manual entry anyway
-          this.pendingAttachments.push({
-            file: this.autoPdfFile as File,
-            type: 'RATE_CONFIRMATION',
-            notes: 'Uploaded via Auto-Create'
-          });
-          this.showAutoModal = false;
-          this.showManualModal = true;
+          this.errorMessage = 'Extraction returned no data — continuing with manual entry. Your PDF is queued.';
+          setTimeout(() => {
+            if (this.errorMessage.startsWith('Extraction returned no data')) this.errorMessage = '';
+          }, 6000);
+          this._continueAutoToWizard(pdfFile, null);
           return;
         }
         this.autoExtraction = data;
 
-        // If the backend reports no text / vision-only PDF, surface that clearly.
         if (data.provider === 'none' && data.warning) {
-          this.autoError = data.warning;
-          // Attach the PDF but keep the user in manual mode.
-          this.pendingAttachments.push({
-            file: this.autoPdfFile as File,
-            type: 'RATE_CONFIRMATION',
-            notes: 'Rate confirmation (scanned PDF - manual entry)'
-          });
-          this.showAutoModal = false;
-          this.showManualModal = true;
+          this.errorMessage = data.warning;
+          setTimeout(() => {
+            if (this.errorMessage === data.warning) this.errorMessage = '';
+          }, 6000);
+          this._continueAutoToWizard(pdfFile, null);
           return;
         }
 
-        // Normal case: we have structured extraction to apply.
-        this.pendingAttachments.push({
-          file: this.autoPdfFile as File,
-          type: 'RATE_CONFIRMATION',
-          notes: 'Rate confirmation (Auto-Create PDF)'
-        });
-        this.applyExtractionToForm(data);
-        this.showAutoModal = false;
-        this.showManualModal = true;
+        // Normal case: hand the extraction off to the wizard with prefill.
+        this._continueAutoToWizard(pdfFile, data);
       },
       error: (err) => {
         console.error('AI extract failed', err);
         this.autoExtracting = false;
+        // FN-1078: keep the user in the Auto-Create modal so they can retry,
+        // close, or use the new "Continue manually" button. The button routes
+        // to the same 4-step wizard with the PDF queued and no prefill.
         this.autoError =
-          'Failed to extract from PDF. You can still create the load manually and the PDF will be attached.';
-        // Still attach the PDF and open manual entry so the user can continue.
-        if (this.autoPdfFile) {
-          this.pendingAttachments.push({
-            file: this.autoPdfFile,
-            type: 'RATE_CONFIRMATION',
-            notes: 'Rate confirmation (Auto-Create PDF)'
-          });
-        }
-        this.showAutoModal = false;
-        this.showManualModal = true;
+          'Failed to extract from PDF. Click "Continue manually" to enter the load by hand — the PDF will be attached.';
       }
     });
+  }
+
+  /**
+   * FN-1078: bridge from the Auto-Create modal into the 4-step wizard.
+   * Closes the modal, queues the PDF on the wizard's attachment slot, and
+   * (when extraction is present) prefills wizard step state with confidence
+   * markers for FN-818 per-field highlighting.
+   */
+  private _continueAutoToWizard(pdfFile: File, extraction: LoadAiEndpointExtraction | null): void {
+    this.showAutoModal = false;
+    this.openLoadWizardWithExtraction({ extraction, pdfFile });
+    // Reset modal state so a fresh re-open starts clean.
+    this.autoPdfFile = null;
+    this.autoError = '';
+    this.autoExtraction = null;
+    this.autoIsDragOver = false;
+  }
+
+  /**
+   * FN-1078: error-state escape hatch — open the wizard with just the PDF
+   * queued (no prefill) when extraction failed but the user still wants to
+   * record the load.
+   */
+  continueAutoManually(): void {
+    if (!this.autoPdfFile) return;
+    this._continueAutoToWizard(this.autoPdfFile, null);
+  }
+
+  // ─── FN-794: Intelligence panel metrics + handlers ──────────────────────
+
+  /** Map an Intelligence period pill to the existing `grossPeriod` values. */
+  private mapIntelPeriodToGrossPeriod(p: IntelligencePeriod): string {
+    switch (p) {
+      case 'today': return 'today';
+      case 'week':  return 'this_week';
+      case 'month': return 'this_month';
+      case 'all':   return 'all';
+    }
+  }
+
+  /** True when a load should count as "needs attention" (drafts + overdue + needs_review). */
+  isNeedsAttention(load: LoadListItem): boolean {
+    const status = (load.status || '').toString().toUpperCase();
+    if (status === 'DRAFT') { return true; }
+    if ((load as any).needs_review) { return true; }
+    // Overdue: has a delivery date in the past but is still open.
+    const dDate = (load as any).delivery_date || (load as any).last_delivery_date;
+    if (dDate && status !== 'DELIVERED' && status !== 'COMPLETED' && status !== 'CANCELLED' && status !== 'CANCELED') {
+      const d = new Date(dDate);
+      if (!Number.isNaN(d.getTime())) {
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        if (d.getTime() < today.getTime()) { return true; }
+      }
+    }
+    return false;
+  }
+
+  /** Aggregate the 4 Intelligence metrics from a list of loads. */
+  private _aggregateIntelligence(loads: LoadListItem[]): {
+    gross: number; delivered: number; inTransit: number; needsAttention: number;
+  } {
+    let gross = 0;
+    let delivered = 0;
+    let inTransit = 0;
+    let needsAttention = 0;
+    for (const l of loads) {
+      const r = l.rate != null ? Number(l.rate) : 0;
+      gross += Number.isFinite(r) ? r : 0;
+      const s = (l.status || '').toString().toUpperCase();
+      if (s === 'DELIVERED' || s === 'COMPLETED') { delivered += 1; }
+      if (s === 'IN_TRANSIT' || s === 'EN_ROUTE' || s === 'PICKED_UP' || s === 'DISPATCHED') { inTransit += 1; }
+      if (this.isNeedsAttention(l)) { needsAttention += 1; }
+    }
+    return { gross, delivered, inTransit, needsAttention };
+  }
+
+  /** Build `intelligenceMetrics` from the current page + cached previous-period aggregate. */
+  private recomputeIntelligenceMetrics(): void {
+    const curr = this._aggregateIntelligence(this.loads || []);
+    const prev = this.prevIntelligenceAggregate;
+    this.intelligenceMetrics = {
+      gross:          { current: curr.gross,          previous: prev ? prev.gross          : null },
+      delivered:      { current: curr.delivered,      previous: prev ? prev.delivered      : null },
+      inTransit:      { current: curr.inTransit,      previous: prev ? prev.inTransit      : null },
+      needsAttention: { current: curr.needsAttention, previous: prev ? prev.needsAttention : null },
+    };
+  }
+
+  /** Fetch the previous equivalent period so trend arrows are meaningful. */
+  private fetchPreviousPeriodForTrend(): void {
+    const range = this._previousIntelligencePeriodRange();
+    if (!range) {
+      this.prevIntelligenceAggregate = null;
+      this.recomputeIntelligenceMetrics();
+      return;
+    }
+    // A single pass — pageSize 500 covers nearly every realistic period without paging.
+    this.loadsService.listLoads({
+      dateFrom: range.dateFrom,
+      dateTo:   range.dateTo,
+      page: 1,
+      pageSize: 500,
+    }).subscribe({
+      next: (res) => {
+        this.prevIntelligenceAggregate = this._aggregateIntelligence(res?.data || []);
+        this.recomputeIntelligenceMetrics();
+      },
+      error: () => {
+        this.prevIntelligenceAggregate = null;
+        this.recomputeIntelligenceMetrics();
+      }
+    });
+  }
+
+  /** Date range for the equivalent period immediately before `intelligencePeriod`. */
+  private _previousIntelligencePeriodRange(): { dateFrom: string; dateTo: string } | null {
+    const toStr = (d: Date) => {
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, '0');
+      const day = String(d.getDate()).padStart(2, '0');
+      return `${y}-${m}-${day}`;
+    };
+    const now = new Date();
+    switch (this.intelligencePeriod) {
+      case 'today': {
+        const y = new Date(now);
+        y.setDate(y.getDate() - 1);
+        return { dateFrom: toStr(y), dateTo: toStr(y) };
+      }
+      case 'week': {
+        // Previous ISO-ish week (Mon–Sun before the current one).
+        const startOfThisWeek = new Date(now);
+        const dow = startOfThisWeek.getDay() || 7; // Sun=0 → 7
+        startOfThisWeek.setDate(startOfThisWeek.getDate() - (dow - 1));
+        const endPrev = new Date(startOfThisWeek);
+        endPrev.setDate(endPrev.getDate() - 1);
+        const startPrev = new Date(endPrev);
+        startPrev.setDate(startPrev.getDate() - 6);
+        return { dateFrom: toStr(startPrev), dateTo: toStr(endPrev) };
+      }
+      case 'month': {
+        const startPrev = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+        const endPrev = new Date(now.getFullYear(), now.getMonth(), 0); // last day of prev month
+        return { dateFrom: toStr(startPrev), dateTo: toStr(endPrev) };
+      }
+      case 'all':
+      default:
+        return null;
+    }
+  }
+
+  /** Handler: user clicked a period pill. */
+  onIntelligencePeriodChange(period: IntelligencePeriod): void {
+    this.intelligencePeriod = period;
+    this.grossPeriod = this.mapIntelPeriodToGrossPeriod(period);
+    this.page = 1;
+    this.loadLoads();
+    this.fetchPreviousPeriodForTrend();
+  }
+
+  /** Handler: user clicked the Needs Attention card → toggle client-side filter. */
+  onIntelligenceNeedsAttentionClick(): void {
+    this.needsAttentionActive = !this.needsAttentionActive;
+    this.page = 1;
   }
 
   // Recompute gross totals on the current page for dashboard summary
@@ -2411,10 +4936,18 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
     };
   }
 
+  // FN-766: stable identity for cdk-virtual-scroll-viewport row recycling
+  trackByLoadId(_index: number, load: LoadListItem): string {
+    return load.id;
+  }
+
   // Apply header row filters client-side on the current page of loads
   get filteredLoads(): LoadListItem[] {
     const hf = this.headerFilters;
     return (this.loads || []).filter((load) => {
+      // FN-794: Needs Attention card filter (drafts + overdue + needs_review)
+      if (this.needsAttentionActive && !this.isNeedsAttention(load)) { return false; }
+
       // Date filter on pickup_date or delivery/completed date
       if (hf.date) {
         const filterStr = hf.date.toString();
@@ -2482,13 +5015,13 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
     key: string;
     label: string;
     value: string;
-    kind: 'header' | 'status' | 'billing' | 'driver';
+    kind: 'header' | 'status' | 'billing' | 'driver' | 'needs_review' | 'source';
   }> {
     const chips: Array<{
       key: string;
       label: string;
       value: string;
-      kind: 'header' | 'status' | 'billing' | 'driver';
+      kind: 'header' | 'status' | 'billing' | 'driver' | 'needs_review' | 'source';
     }> = [];
 
     // Header filters
@@ -2534,10 +5067,30 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
       });
     }
 
+    // FN-746: Needs review filter
+    if (this.filters.needsReview) {
+      chips.push({
+        key: 'needsReview',
+        label: 'Filter',
+        value: 'Needs review',
+        kind: 'needs_review'
+      });
+    }
+
+    // FN-762: Source filter (email-sourced loads)
+    if (this.filters.source) {
+      chips.push({
+        key: 'source',
+        label: 'Source',
+        value: this.filters.source === 'email' ? 'Email' : this.filters.source,
+        kind: 'source'
+      });
+    }
+
     return chips;
   }
 
-  clearFilterChip(chip: { key: string; kind: 'header' | 'status' | 'billing' | 'driver' }): void {
+  clearFilterChip(chip: { key: string; kind: 'header' | 'status' | 'billing' | 'driver' | 'needs_review' | 'source' }): void {
     if (chip.kind === 'header') {
       this.headerFilters = {
         ...this.headerFilters,
@@ -2564,6 +5117,20 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
       this.filters.driverId = '';
       this.page = 1;
       this.loadLoads();
+      return;
+    }
+
+    if (chip.kind === 'needs_review') {
+      this.filters.needsReview = false;
+      this.page = 1;
+      this.loadLoads();
+      return;
+    }
+
+    if (chip.kind === 'source') {
+      this.filters.source = '';
+      this.page = 1;
+      this.loadLoads();
     }
   }
 
@@ -2586,10 +5153,479 @@ export class LoadsDashboardComponent implements OnInit, OnDestroy {
       ...this.filters,
       status: '',
       billingStatus: '',
-      driverId: ''
+      driverId: '',
+      needsReview: false,
+      source: ''
     };
+
+    // FN-798: "Clear all" must also drop every active smart-filter chip.
+    this.smartFilterKeys = [];
 
     this.page = 1;
     this.loadLoads();
+  }
+
+  // ─── FN-767: Column visibility + saved views + inline status ───────────────
+
+  private initColumnVisibility(): void {
+    this.visibleColumns = this.columnDefs.reduce<Record<string, boolean>>((acc, col) => {
+      acc[col.key] = true;
+      return acc;
+    }, {});
+  }
+
+  private loadUserPreferences(): void {
+    this.userPreferences.load().pipe(takeUntil(this.destroy$)).subscribe(() => {
+      const prefs = this.userPreferences.getLoadsDashboardPrefs();
+      if (prefs.columnVisibility) {
+        for (const col of this.columnDefs) {
+          if (col.alwaysVisible) {
+            this.visibleColumns[col.key] = true;
+            continue;
+          }
+          if (prefs.columnVisibility[col.key] === false) {
+            this.visibleColumns[col.key] = false;
+          }
+        }
+      }
+      this.savedViews = Array.isArray(prefs.savedViews) ? [...prefs.savedViews] : [];
+      if (this.savedViews.length === 0) {
+        this.savedViews = this.defaultSavedViews();
+      }
+      // FN-808: restore persisted drawer width if within supported range.
+      if (typeof prefs.drawerWidth === 'number') {
+        const w = Math.min(DRAWER_MAX_WIDTH, Math.max(DRAWER_MIN_WIDTH, Math.round(prefs.drawerWidth)));
+        this.drawerWidth = w;
+      }
+      // FN-821: restore persisted density mode; defaults to 'comfortable' otherwise.
+      if (prefs.density === 'compact' || prefs.density === 'comfortable' || prefs.density === 'spacious') {
+        this.densityMode = prefs.density;
+      }
+      // FN-1063: restore persisted rows-per-page (only when valid + different).
+      if (typeof prefs.pageSize === 'number' && this.pageSizeOptions.includes(prefs.pageSize) && prefs.pageSize !== this.pageSize) {
+        this.pageSize = prefs.pageSize;
+        this.page = 1;
+        this.loadLoads();
+      }
+      // FN-1059: restore per-column widths over the px defaults.
+      this.columnWidths = { ...this.columnWidthDefaultsPx };
+      const stored = prefs.columnWidths;
+      if (stored && typeof stored === 'object') {
+        for (const key of Object.keys(stored)) {
+          const v = Number(stored[key]);
+          if (Number.isFinite(v)) {
+            this.columnWidths[key] = Math.max(
+              this.COL_WIDTH_MIN_PX,
+              Math.min(this.COL_WIDTH_MAX_PX, Math.round(v)),
+            );
+          }
+        }
+      }
+    });
+  }
+
+  // ─── FN-1059: column width helpers ─────────────────────────────────────────
+
+  /** Width in px for `<col>` and the directive `currentWidth` input. */
+  getColWidth(key: string): number {
+    return this.columnWidths[key] ?? this.columnWidthDefaultsPx[key] ?? 100;
+  }
+
+  /** True when a column may be resized — `load_number` and `actions` are
+   *  pinned (always visible) so we leave them at their default width. */
+  isColResizable(key: string): boolean {
+    const def = this.columnDefs.find((c) => c.key === key);
+    return !!def && !def.alwaysVisible;
+  }
+
+  /** Live update from the `appResizableColumn` directive. Mutates by
+   *  reassigning the map so OnPush callers (none today) would still see it. */
+  onColumnWidthChange(key: string, width: number): void {
+    if (!Number.isFinite(width)) return;
+    const next = Math.max(
+      this.COL_WIDTH_MIN_PX,
+      Math.min(this.COL_WIDTH_MAX_PX, Math.round(width)),
+    );
+    if (this.columnWidths[key] === next) return;
+    this.columnWidths = { ...this.columnWidths, [key]: next };
+    this.columnWidthsPersist$.next();
+  }
+
+  /** "Reset column widths" — wipes the persisted map and reverts the live
+   *  widths to the px defaults. (AC6) */
+  resetColumnWidths(): void {
+    this.columnWidths = { ...this.columnWidthDefaultsPx };
+    this.showColumnPicker = false;
+    this.userPreferences
+      .patchLoadsDashboard({ columnWidths: {} })
+      .subscribe();
+  }
+
+  // ─── FN-808: Load Detail Side Drawer handlers ─────────────────────────────
+
+  /**
+   * Row-click handler. Opens the drawer for the given load unless the click
+   * originated inside an interactive control (checkbox, action button,
+   * status dropdown, etc.) — those stop propagation at their own cell.
+   */
+  onRowClick(load: LoadListItem, event: Event): void {
+    // Guard: if the event bubbled up from an interactive target, ignore it.
+    // Individual cells (checkbox, actions, status dropdown) already call
+    // $event.stopPropagation(), but we also defensively ignore clicks on
+    // <a>, <button>, <input>, <select>, <textarea>.
+    const target = event.target as HTMLElement | null;
+    if (target && target.closest('a, button, input, select, textarea, [role="button"]')) {
+      return;
+    }
+    this.openLoadDrawer(load.id);
+  }
+
+  openLoadDrawer(loadId: string, focusLowConfidence = false, mode: 'view' | 'edit' = 'view'): void {
+    this.drawerFocusLowConfidence = focusLowConfidence;
+    this.drawerInitialMode = mode;
+    this.drawerLoadId = loadId;
+  }
+
+  closeLoadDrawer(): void {
+    this.drawerLoadId = null;
+    this.drawerFocusLowConfidence = false;
+  }
+
+  /** Step to the previous load in the currently filtered list (wraps). */
+  onDrawerPrev(): void {
+    if (!this.drawerLoadId) { return; }
+    const rows = this.filteredLoads;
+    if (!rows.length) { return; }
+    const idx = rows.findIndex((l) => l.id === this.drawerLoadId);
+    const prevIdx = idx <= 0 ? rows.length - 1 : idx - 1;
+    this.drawerLoadId = rows[prevIdx].id;
+  }
+
+  /** Step to the next load in the currently filtered list (wraps). */
+  onDrawerNext(): void {
+    if (!this.drawerLoadId) { return; }
+    const rows = this.filteredLoads;
+    if (!rows.length) { return; }
+    const idx = rows.findIndex((l) => l.id === this.drawerLoadId);
+    const nextIdx = idx < 0 || idx === rows.length - 1 ? 0 : idx + 1;
+    this.drawerLoadId = rows[nextIdx].id;
+  }
+
+  /** Drawer header "expand to modal" — hand off to the existing wizard flow. */
+  onDrawerExpand(): void {
+    if (!this.drawerLoadId) { return; }
+    const id = this.drawerLoadId;
+    this.closeLoadDrawer();
+    this.openLoadWizardForEdit(id);
+  }
+
+  /** Persist the new width once the user finishes dragging the resize handle. */
+  onDrawerWidthChange(width: number): void {
+    this.drawerWidth = width;
+    this.userPreferences.patchLoadsDashboard({ drawerWidth: width }).subscribe();
+  }
+
+  /** After drawer save, refresh the list so card changes are reflected. */
+  onDrawerSaved(): void {
+    this.successMessage = 'Load saved.';
+    setTimeout(() => (this.successMessage = ''), 2500);
+    this.loadLoads();
+  }
+
+  /** True when the current drawerLoadId is the first row of filteredLoads. */
+  get drawerHasPrev(): boolean {
+    return !!this.drawerLoadId && this.filteredLoads.length > 1;
+  }
+
+  /** True when the current drawerLoadId is not the last row of filteredLoads. */
+  get drawerHasNext(): boolean {
+    return !!this.drawerLoadId && this.filteredLoads.length > 1;
+  }
+
+  /** Returns true when `load` is the active row highlighted with the teal border. */
+  isDrawerActive(load: LoadListItem): boolean {
+    return !!this.drawerLoadId && load.id === this.drawerLoadId;
+  }
+
+  /** Default seed views shown on first use; not persisted until user saves/edits. */
+  private defaultSavedViews(): LoadsSavedView[] {
+    return [
+      {
+        id: 'default-my-drafts',
+        name: 'My Drafts',
+        filters: { status: 'DRAFT' },
+        sortBy: 'pickup_date',
+        sortDir: 'desc'
+      },
+      {
+        id: 'default-this-week',
+        name: 'This Week',
+        filters: {},
+        sortBy: 'pickup_date',
+        sortDir: 'desc'
+      },
+      {
+        id: 'default-unpaid',
+        name: 'Unpaid',
+        filters: { billingStatus: 'PENDING' },
+        sortBy: 'pickup_date',
+        sortDir: 'desc'
+      }
+    ];
+  }
+
+  isColVisible(key: string): boolean {
+    return this.visibleColumns[key] !== false;
+  }
+
+  /** Number of currently visible columns — used for empty-state colspan. */
+  get visibleColumnCount(): number {
+    return this.columnDefs.reduce((n, c) => n + (this.isColVisible(c.key) ? 1 : 0), 0);
+  }
+
+  toggleColumnPicker(): void {
+    this.showColumnPicker = !this.showColumnPicker;
+    if (this.showColumnPicker) this.showSavedViewsMenu = false;
+  }
+
+  toggleColumnVisible(key: string): void {
+    const def = this.columnDefs.find(c => c.key === key);
+    if (!def || def.alwaysVisible) return;
+    this.visibleColumns[key] = !this.isColVisible(key);
+    this.persistColumnVisibility();
+  }
+
+  private persistColumnVisibility(): void {
+    const payload: Record<string, boolean> = {};
+    for (const col of this.columnDefs) {
+      if (col.alwaysVisible) continue;
+      payload[col.key] = this.isColVisible(col.key);
+    }
+    this.userPreferences.patchLoadsDashboard({ columnVisibility: payload }).subscribe();
+  }
+
+  toggleSavedViewsMenu(): void {
+    this.showSavedViewsMenu = !this.showSavedViewsMenu;
+    if (this.showSavedViewsMenu) this.showColumnPicker = false;
+  }
+
+  applySavedView(view: LoadsSavedView): void {
+    this.filters = {
+      status: view.filters.status || '',
+      billingStatus: view.filters.billingStatus || '',
+      driverId: view.filters.driverId || '',
+      q: view.filters.q || '',
+      needsReview: !!view.filters.needsReview,
+      source: view.filters.source || ''
+    };
+    if (view.sortBy) this.sortBy = view.sortBy as any;
+    if (view.sortDir) this.sortDir = view.sortDir;
+    this.page = 1;
+    this.showSavedViewsMenu = false;
+    this.loadLoads();
+  }
+
+  saveCurrentAsView(): void {
+    const name = (this.newViewName || '').trim();
+    if (!name) return;
+    const view: LoadsSavedView = {
+      id: `view-${Date.now()}`,
+      name,
+      filters: {
+        status: this.filters.status || undefined,
+        billingStatus: this.filters.billingStatus || undefined,
+        driverId: this.filters.driverId || undefined,
+        q: this.filters.q || undefined,
+        needsReview: this.filters.needsReview || undefined,
+        source: this.filters.source || undefined
+      },
+      sortBy: this.sortBy,
+      sortDir: this.sortDir
+    };
+    this.savedViews = [...this.savedViews, view];
+    this.newViewName = '';
+    this.persistSavedViews();
+  }
+
+  deleteSavedView(id: string): void {
+    this.savedViews = this.savedViews.filter(v => v.id !== id);
+    this.persistSavedViews();
+  }
+
+  private persistSavedViews(): void {
+    this.userPreferences.patchLoadsDashboard({ savedViews: this.savedViews }).subscribe();
+  }
+
+  openStatusMenu(loadId: string | undefined | null, event?: Event): void {
+    if (event) {
+      event.stopPropagation();
+      event.preventDefault();
+    }
+    if (!loadId) return;
+    this.statusMenuLoadId = this.statusMenuLoadId === loadId ? null : loadId;
+    this.billingMenuLoadId = null;
+  }
+
+  closeStatusMenu(): void {
+    this.statusMenuLoadId = null;
+  }
+
+  /** Inline status change — PUTs a single-field update via LoadsService.updateLoad. */
+  changeLoadStatus(load: LoadListItem, newStatus: LoadStatus, event?: Event): void {
+    if (event) {
+      event.stopPropagation();
+      event.preventDefault();
+    }
+    this.statusMenuLoadId = null;
+    if (!load || !load.id) return;
+    if (load.status === newStatus) return;
+
+    const previousStatus = load.status;
+    load.status = newStatus; // optimistic UI update
+
+    this.loadsService.updateLoad(load.id, { status: newStatus }).subscribe({
+      next: (res) => {
+        if (res && res.data && res.data.status) {
+          load.status = res.data.status as LoadStatus;
+        }
+        this.successMessage = `Status updated to ${this.getStatusLabel(newStatus)}`;
+        setTimeout(() => { this.successMessage = ''; }, 2500);
+      },
+      error: (err) => {
+        load.status = previousStatus;
+        this.errorMessage = (err && err.error && err.error.error) || 'Failed to update load status';
+        setTimeout(() => { this.errorMessage = ''; }, 4000);
+      }
+    });
+  }
+
+  // ─── FN-805: Inline billing dropdown ──────────────────────────────────────
+
+  openBillingMenu(loadId: string | undefined | null, event?: Event): void {
+    if (event) {
+      event.stopPropagation();
+      event.preventDefault();
+    }
+    if (!loadId) return;
+    this.billingMenuLoadId = this.billingMenuLoadId === loadId ? null : loadId;
+    this.statusMenuLoadId = null;
+  }
+
+  closeBillingMenu(): void {
+    this.billingMenuLoadId = null;
+  }
+
+  /** Inline billing change — same PUT pattern as status. */
+  changeLoadBilling(load: LoadListItem, newBilling: BillingStatus, event?: Event): void {
+    if (event) {
+      event.stopPropagation();
+      event.preventDefault();
+    }
+    this.billingMenuLoadId = null;
+    if (!load || !load.id) return;
+    if (load.billing_status === newBilling) return;
+
+    const previousBilling = load.billing_status;
+    load.billing_status = newBilling;
+
+    this.loadsService.updateLoad(load.id, { billingStatus: newBilling }).subscribe({
+      next: (res) => {
+        if (res && res.data && res.data.billing_status) {
+          load.billing_status = res.data.billing_status as BillingStatus;
+        }
+        this.successMessage = `Billing updated to ${this.getBillingLabel(newBilling)}`;
+        setTimeout(() => { this.successMessage = ''; }, 2500);
+      },
+      error: (err) => {
+        load.billing_status = previousBilling;
+        this.errorMessage = (err && err.error && err.error.error) || 'Failed to update billing status';
+        setTimeout(() => { this.errorMessage = ''; }, 4000);
+      }
+    });
+  }
+
+  // ─── FN-805: Inline notes edit ────────────────────────────────────────────
+
+  openNotesEditor(load: LoadListItem, event?: Event): void {
+    if (event) {
+      event.stopPropagation();
+      event.preventDefault();
+    }
+    if (!load || !load.id) return;
+    this.editingNotesLoadId = load.id;
+    this.editingNotesDraft = load.notes ?? '';
+    this.notesSaveInFlight = false;
+    this.statusMenuLoadId = null;
+    this.billingMenuLoadId = null;
+    // Focus the textarea after Angular mounts it via *ngIf.
+    setTimeout(() => {
+      const el = document.querySelector('.notes-inline__textarea') as HTMLTextAreaElement | null;
+      if (el) {
+        el.focus();
+        el.select();
+      }
+    }, 0);
+  }
+
+  /** Cancel inline notes edit without saving (Esc). */
+  cancelNotesEdit(event?: Event): void {
+    if (event) {
+      event.stopPropagation();
+      event.preventDefault();
+    }
+    this.editingNotesLoadId = null;
+    this.editingNotesDraft = '';
+    this.notesSaveInFlight = false;
+  }
+
+  /** Commit inline notes edit (Enter or blur). Skips network when unchanged. */
+  saveNotesEdit(load: LoadListItem, event?: Event): void {
+    if (event) {
+      event.stopPropagation();
+      // Enter should commit, not insert a newline.
+      if ((event as KeyboardEvent).key === 'Enter') {
+        event.preventDefault();
+      }
+    }
+    if (this.notesSaveInFlight) return;
+    if (!load || !load.id) { this.cancelNotesEdit(); return; }
+    if (this.editingNotesLoadId !== load.id) return;
+
+    const next = (this.editingNotesDraft ?? '').trim();
+    const current = (load.notes ?? '').trim();
+    if (next === current) {
+      this.cancelNotesEdit();
+      return;
+    }
+
+    this.notesSaveInFlight = true;
+    const previous = load.notes ?? null;
+    load.notes = next.length ? next : null;
+    const loadId = load.id;
+
+    this.loadsService.updateLoad(loadId, { notes: load.notes }).subscribe({
+      next: (res) => {
+        if (res && res.data) {
+          load.notes = res.data.notes ?? null;
+        }
+        this.successMessage = 'Notes updated';
+        setTimeout(() => { this.successMessage = ''; }, 2000);
+        if (this.editingNotesLoadId === loadId) {
+          this.editingNotesLoadId = null;
+          this.editingNotesDraft = '';
+        }
+        this.notesSaveInFlight = false;
+      },
+      error: (err) => {
+        load.notes = previous;
+        this.errorMessage = (err && err.error && err.error.error) || 'Failed to update notes';
+        setTimeout(() => { this.errorMessage = ''; }, 4000);
+        if (this.editingNotesLoadId === loadId) {
+          this.editingNotesLoadId = null;
+          this.editingNotesDraft = '';
+        }
+        this.notesSaveInFlight = false;
+      }
+    });
   }
 }

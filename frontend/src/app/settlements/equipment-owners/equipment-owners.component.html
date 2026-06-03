@@ -151,7 +151,7 @@
             <div class="owner-billing-row">
               <label class="check-row">
                 <input type="checkbox" [(ngModel)]="formData.is_additional_payee" />
-                <span>Additional payee</span>
+                <span>Equipment Owner</span>
               </label>
               <label class="check-row">
                 <input type="checkbox" [(ngModel)]="formData.is_equipment_owner" />
@@ -160,7 +160,7 @@
             </div>
 
             <div class="field field-wide">
-              <label for="ownerAdditionalPayeeRate">Additional payee rate, % (e.g. 90)</label>
+              <label for="ownerAdditionalPayeeRate">Equipment Owner rate, % (e.g. 90)</label>
               <input id="ownerAdditionalPayeeRate" class="form-input" type="number" step="0.01" [(ngModel)]="formData.additional_payee_rate" />
             </div>
 
@@ -171,7 +171,7 @@
 
             <label class="check-inline field-wide active-check">
               <input type="checkbox" [(ngModel)]="formData.is_active" />
-              <span>Active (visible in Additional Payee search)</span>
+              <span>Active (visible in Equipment Owner search)</span>
             </label>
           </div>
         </aside>

@@ -1,0 +1,122 @@
+<div class="auto-replenishment-dashboard">
+  <div class="header">
+    <h1>Auto-Replenishment Suggestions</h1>
+    <p class="subtitle">Low-stock parts at shop locations with warehouse transfer recommendations</p>
+  </div>
+
+  <!-- Summary stats -->
+  <div class="stats-bar">
+    <div class="stat-card">
+      <div class="stat-value">{{ totalItemsNeeding }}</div>
+      <div class="stat-label">Items Needing Replenishment</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-value">{{ uniqueShopsAffected }}</div>
+      <div class="stat-label">Shops Affected</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-value">{{ estimatedTransfers }}</div>
+      <div class="stat-label">Estimated Transfers</div>
+    </div>
+  </div>
+
+  <div class="card reports-card">
+    <!-- Error alert -->
+    <div *ngIf="error" class="alert alert-danger">{{ error }}</div>
+
+    <!-- Filter bar -->
+    <div class="filters-panel">
+      <div class="filters-grid">
+        <div class="filter-item">
+          <label for="replenish-search">Search Part</label>
+          <input
+            id="replenish-search"
+            type="text"
+            class="form-control"
+            placeholder="Part name or SKU"
+            [(ngModel)]="searchTerm"
+            (input)="applyFilters()"
+          />
+        </div>
+        <div class="filter-item">
+          <label for="replenish-shop">Shop Location</label>
+          <select
+            id="replenish-shop"
+            class="form-control"
+            [(ngModel)]="selectedShopId"
+            (change)="applyFilters()"
+          >
+            <option value="">All Shops</option>
+            <option *ngFor="let shop of shopLocations" [value]="shop['id']">{{ shop['name'] }}</option>
+          </select>
+        </div>
+      </div>
+    </div>
+
+    <!-- Loading state -->
+    <div *ngIf="loading" class="loading-state">
+      <div class="spinner"></div>
+      <span>Analyzing inventory levels across all shops...</span>
+    </div>
+
+    <!-- Data table -->
+    <div *ngIf="!loading && rows.length > 0" class="section">
+      <div class="table-wrap">
+        <table class="report-table">
+          <thead>
+            <tr>
+              <th>Shop</th>
+              <th>Part</th>
+              <th>Current Qty</th>
+              <th>Min Stock</th>
+              <th>Shortage</th>
+              <th>Suggested Warehouse</th>
+              <th>Delivery Days</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr *ngFor="let row of rows; trackBy: trackByRow">
+              <td>{{ row.shopName }}</td>
+              <td>
+                <span class="part-name">{{ row.partName }}</span>
+                <span class="part-sku" *ngIf="row.partSku">{{ row.partSku }}</span>
+              </td>
+              <td [class.qty-zero]="row.currentQty === 0" [class.qty-low]="row.currentQty > 0">
+                {{ row.currentQty }}
+              </td>
+              <td>{{ row.minStockLevel }}</td>
+              <td class="shortage-cell">{{ row.shortage }}</td>
+              <td>
+                <span *ngIf="row.suggestedWarehouseName">{{ row.suggestedWarehouseName }}</span>
+                <span *ngIf="!row.suggestedWarehouseName" class="no-supplier">No supplier</span>
+              </td>
+              <td>
+                <span *ngIf="row.deliveryDays != null">{{ row.deliveryDays }}d</span>
+                <span *ngIf="row.deliveryDays == null" class="no-data">&mdash;</span>
+              </td>
+              <td class="action-cell">
+                <button
+                  type="button"
+                  class="btn-create-transfer"
+                  [disabled]="!row.suggestedWarehouseId"
+                  (click)="createTransfer(row)"
+                  title="Create transfer from {{ row.suggestedWarehouseName || 'warehouse' }} to {{ row.shopName }}"
+                >
+                  Create Transfer
+                </button>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Empty state -->
+    <div *ngIf="!loading && rows.length === 0 && !error" class="empty-state">
+      <span class="material-symbols-outlined empty-icon">check_circle</span>
+      <h3>All shops are fully stocked</h3>
+      <p>No parts are below their minimum stock levels at any shop location.</p>
+    </div>
+  </div>
+</div>

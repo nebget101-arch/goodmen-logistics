@@ -154,6 +154,35 @@ async function refreshOverdueRowsForAgreement(trx, agreement) {
   }
 }
 
+/**
+ * @openapi
+ * /api:
+ *   get:
+ *     summary: Lease & Financing module summary
+ *     description: Returns a list of available Lease & Financing API endpoints.
+ *     tags:
+ *       - Lease & Financing
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Module summary with available endpoints
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 message:
+ *                   type: string
+ *                 endpoints:
+ *                   type: array
+ *                   items:
+ *                     type: string
+ *       401:
+ *         description: Unauthorized
+ */
 router.get('/', canView, (_req, res) => {
   res.json({
     success: true,
@@ -168,6 +197,90 @@ router.get('/', canView, (_req, res) => {
   });
 });
 
+/**
+ * @openapi
+ * /api/lease-agreements:
+ *   get:
+ *     summary: List lease agreements
+ *     description: Returns a paginated list of lease-to-own agreements for the current tenant, with optional filters by status, driver, truck, payment frequency, and MC.
+ *     tags:
+ *       - Lease & Financing
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           default: 25
+ *           minimum: 1
+ *           maximum: 200
+ *         description: Number of records to return
+ *       - in: query
+ *         name: offset
+ *         schema:
+ *           type: integer
+ *           default: 0
+ *         description: Number of records to skip
+ *       - in: query
+ *         name: status
+ *         schema:
+ *           type: string
+ *           enum: [draft, pending_signature, active, overdue, defaulted, terminated, completed]
+ *         description: Filter by agreement status
+ *       - in: query
+ *         name: active_only
+ *         schema:
+ *           type: string
+ *           enum: ['1', 'true']
+ *         description: If set, returns only active/overdue/pending_signature agreements
+ *       - in: query
+ *         name: driver_id
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Filter by driver ID
+ *       - in: query
+ *         name: truck_id
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Filter by truck/vehicle ID
+ *       - in: query
+ *         name: payment_frequency
+ *         schema:
+ *           type: string
+ *           enum: [weekly, biweekly, monthly]
+ *         description: Filter by payment frequency
+ *       - in: query
+ *         name: mc_id
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Filter by MC (motor carrier) ID
+ *     responses:
+ *       200:
+ *         description: Paginated list of lease agreements
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 rows:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                 total:
+ *                   type: integer
+ *                 limit:
+ *                   type: integer
+ *                 offset:
+ *                   type: integer
+ *       401:
+ *         description: Unauthorized — tenant context required
+ *       500:
+ *         description: Internal server error
+ */
 router.get('/lease-agreements', canView, async (req, res) => {
   try {
     const tid = requireTenant(req, res); if (!tid) return;
@@ -226,6 +339,30 @@ router.get('/lease-agreements', canView, async (req, res) => {
   }
 });
 
+/**
+ * @openapi
+ * /api/lease-financing/driver/me:
+ *   get:
+ *     summary: Get current driver's lease agreement
+ *     description: Returns the active or pending lease-to-own agreement for the authenticated driver. Prioritizes active over overdue over pending_signature.
+ *     tags:
+ *       - Lease & Financing
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: The driver's lease agreement
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *       404:
+ *         description: Driver lease agreement not found
+ *       401:
+ *         description: Unauthorized — tenant context required
+ *       500:
+ *         description: Internal server error
+ */
 router.get('/lease-financing/driver/me', canView, async (req, res) => {
   try {
     const tid = requireTenant(req, res); if (!tid) return;
@@ -255,6 +392,60 @@ router.get('/lease-financing/driver/me', canView, async (req, res) => {
   }
 });
 
+/**
+ * @openapi
+ * /api/lease-agreements/{id}:
+ *   get:
+ *     summary: Get lease agreement details
+ *     description: Returns full details for a single lease agreement including payment schedule, transaction history, risk snapshot, settlement deductions, and a signed contract download URL.
+ *     tags:
+ *       - Lease & Financing
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Lease agreement ID
+ *     responses:
+ *       200:
+ *         description: Full lease agreement with schedule, payments, risk, and deductions
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 id:
+ *                   type: string
+ *                   format: uuid
+ *                 document_download_url:
+ *                   type: string
+ *                   nullable: true
+ *                 schedule:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                 payments:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                 risk_snapshot:
+ *                   type: object
+ *                   nullable: true
+ *                 settlement_deductions:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *       404:
+ *         description: Lease agreement not found
+ *       401:
+ *         description: Unauthorized
+ *       500:
+ *         description: Internal server error
+ */
 router.get('/lease-agreements/:id', canView, async (req, res) => {
   try {
     const tid = requireTenant(req, res); if (!tid) return;
@@ -308,6 +499,114 @@ router.get('/lease-agreements/:id', canView, async (req, res) => {
   }
 });
 
+/**
+ * @openapi
+ * /api/lease-agreements:
+ *   post:
+ *     summary: Create a lease agreement
+ *     description: Creates a new lease-to-own agreement with auto-calculated amortization schedule. Validates driver and truck belong to the tenant and that the truck has no existing active lease.
+ *     tags:
+ *       - Lease & Financing
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - driver_id
+ *               - truck_id
+ *               - agreement_start_date
+ *             properties:
+ *               driver_id:
+ *                 type: string
+ *                 format: uuid
+ *               truck_id:
+ *                 type: string
+ *                 format: uuid
+ *               agreement_start_date:
+ *                 type: string
+ *                 format: date
+ *               purchase_price:
+ *                 type: number
+ *               down_payment:
+ *                 type: number
+ *               term_months:
+ *                 type: integer
+ *                 default: 12
+ *               payment_frequency:
+ *                 type: string
+ *                 enum: [weekly, biweekly, monthly]
+ *                 default: weekly
+ *               interest_rate:
+ *                 type: number
+ *                 default: 0
+ *               payment_amount:
+ *                 type: number
+ *                 description: Override calculated payment (requires allow_payment_override)
+ *               allow_payment_override:
+ *                 type: boolean
+ *               balloon_payment:
+ *                 type: number
+ *               auto_deduction_enabled:
+ *                 type: boolean
+ *                 default: true
+ *               grace_period_days:
+ *                 type: integer
+ *                 default: 3
+ *               late_fee_type:
+ *                 type: string
+ *                 nullable: true
+ *               late_fee_amount:
+ *                 type: number
+ *                 nullable: true
+ *               maintenance_responsibility:
+ *                 type: string
+ *                 nullable: true
+ *               insurance_responsibility:
+ *                 type: string
+ *                 nullable: true
+ *               default_rule_config:
+ *                 type: object
+ *                 nullable: true
+ *               agreement_end_date:
+ *                 type: string
+ *                 format: date
+ *                 nullable: true
+ *               status:
+ *                 type: string
+ *                 default: draft
+ *               notes:
+ *                 type: string
+ *                 nullable: true
+ *               agreement_number:
+ *                 type: string
+ *                 description: Auto-generated if omitted
+ *               company_id:
+ *                 type: string
+ *                 format: uuid
+ *               mc_id:
+ *                 type: string
+ *                 format: uuid
+ *                 nullable: true
+ *     responses:
+ *       201:
+ *         description: Lease agreement created successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *       400:
+ *         description: Validation error — missing required fields or invalid driver/truck
+ *       409:
+ *         description: Truck already has an active lease-to-own agreement
+ *       401:
+ *         description: Unauthorized
+ *       500:
+ *         description: Internal server error
+ */
 router.post('/lease-agreements', canCreate, async (req, res) => {
   const trx = await knex.transaction();
   try {
@@ -435,6 +734,71 @@ function addMonth(dateValue) {
   return toDateOnly(d);
 }
 
+/**
+ * @openapi
+ * /api/lease-agreements/{id}:
+ *   put:
+ *     summary: Update a lease agreement
+ *     description: Updates editable fields on an existing lease agreement. Cannot edit agreements with status completed, defaulted, or terminated.
+ *     tags:
+ *       - Lease & Financing
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Lease agreement ID
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               grace_period_days:
+ *                 type: integer
+ *               late_fee_type:
+ *                 type: string
+ *                 nullable: true
+ *               late_fee_amount:
+ *                 type: number
+ *                 nullable: true
+ *               maintenance_responsibility:
+ *                 type: string
+ *                 nullable: true
+ *               insurance_responsibility:
+ *                 type: string
+ *                 nullable: true
+ *               default_rule_config:
+ *                 type: object
+ *                 nullable: true
+ *               notes:
+ *                 type: string
+ *                 nullable: true
+ *               auto_deduction_enabled:
+ *                 type: boolean
+ *               status:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Updated lease agreement
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *       400:
+ *         description: Cannot edit completed/defaulted/terminated agreements
+ *       404:
+ *         description: Lease agreement not found
+ *       401:
+ *         description: Unauthorized
+ *       500:
+ *         description: Internal server error
+ */
 router.put('/lease-agreements/:id', canEdit, async (req, res) => {
   const trx = await knex.transaction();
   try {
@@ -470,6 +834,42 @@ router.put('/lease-agreements/:id', canEdit, async (req, res) => {
   }
 });
 
+/**
+ * @openapi
+ * /api/lease-agreements/{id}/activate:
+ *   post:
+ *     summary: Activate a lease agreement
+ *     description: Activates a signed lease agreement. The agreement must be signed first, and the truck must not have another active lease. Also updates the vehicle ownership metadata.
+ *     tags:
+ *       - Lease & Financing
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Lease agreement ID
+ *     responses:
+ *       200:
+ *         description: Activated lease agreement
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *       400:
+ *         description: Agreement must be signed before activation
+ *       404:
+ *         description: Lease agreement not found
+ *       409:
+ *         description: Truck already has another active lease agreement
+ *       401:
+ *         description: Unauthorized
+ *       500:
+ *         description: Internal server error
+ */
 router.post('/lease-agreements/:id/activate', canActivate, async (req, res) => {
   const trx = await knex.transaction();
   try {
@@ -514,6 +914,51 @@ router.post('/lease-agreements/:id/activate', canActivate, async (req, res) => {
   }
 });
 
+/**
+ * @openapi
+ * /api/lease-agreements/{id}/terminate:
+ *   post:
+ *     summary: Terminate a lease agreement
+ *     description: Terminates a lease agreement and reverts the associated vehicle ownership back to company-owned.
+ *     tags:
+ *       - Lease & Financing
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Lease agreement ID
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               reason:
+ *                 type: string
+ *                 nullable: true
+ *                 description: Reason for termination
+ *               notes:
+ *                 type: string
+ *                 nullable: true
+ *     responses:
+ *       200:
+ *         description: Terminated lease agreement
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *       404:
+ *         description: Lease agreement not found
+ *       401:
+ *         description: Unauthorized
+ *       500:
+ *         description: Internal server error
+ */
 router.post('/lease-agreements/:id/terminate', canTerminate, async (req, res) => {
   const trx = await knex.transaction();
   try {
@@ -548,6 +993,57 @@ router.post('/lease-agreements/:id/terminate', canTerminate, async (req, res) =>
   }
 });
 
+/**
+ * @openapi
+ * /api/lease-agreements/{id}/upload-contract:
+ *   post:
+ *     summary: Upload a contract document
+ *     description: Uploads a contract PDF (or other document) to R2 storage and attaches it to the lease agreement. Transitions draft agreements to pending_signature.
+ *     tags:
+ *       - Lease & Financing
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Lease agreement ID
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - file
+ *             properties:
+ *               file:
+ *                 type: string
+ *                 format: binary
+ *                 description: Contract file (max 20 MB)
+ *     responses:
+ *       200:
+ *         description: Agreement updated with contract download URL
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 document_download_url:
+ *                   type: string
+ *                   nullable: true
+ *       400:
+ *         description: Contract file is required
+ *       404:
+ *         description: Lease agreement not found
+ *       401:
+ *         description: Unauthorized
+ *       500:
+ *         description: Internal server error
+ */
 router.post('/lease-agreements/:id/upload-contract', canEdit, upload.single('file'), async (req, res) => {
   const trx = await knex.transaction();
   try {
@@ -589,6 +1085,58 @@ router.post('/lease-agreements/:id/upload-contract', canEdit, upload.single('fil
   }
 });
 
+/**
+ * @openapi
+ * /api/lease-agreements/{id}/payment-schedule:
+ *   get:
+ *     summary: Get payment schedule for a lease agreement
+ *     description: Returns the full amortization / payment schedule for a lease agreement. Automatically refreshes overdue statuses and recalculates balances before returning.
+ *     tags:
+ *       - Lease & Financing
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Lease agreement ID
+ *     responses:
+ *       200:
+ *         description: Array of payment schedule rows ordered by installment number
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 type: object
+ *                 properties:
+ *                   id:
+ *                     type: string
+ *                     format: uuid
+ *                   installment_number:
+ *                     type: integer
+ *                   due_date:
+ *                     type: string
+ *                     format: date
+ *                   amount_due:
+ *                     type: number
+ *                   amount_paid:
+ *                     type: number
+ *                   remaining_due:
+ *                     type: number
+ *                   status:
+ *                     type: string
+ *                     enum: [pending, partial, paid, overdue]
+ *       404:
+ *         description: Lease agreement not found
+ *       401:
+ *         description: Unauthorized
+ *       500:
+ *         description: Internal server error
+ */
 router.get('/lease-agreements/:id/payment-schedule', canView, async (req, res) => {
   try {
     const tid = requireTenant(req, res); if (!tid) return;
@@ -608,6 +1156,73 @@ router.get('/lease-agreements/:id/payment-schedule', canView, async (req, res) =
   }
 });
 
+/**
+ * @openapi
+ * /api/lease-agreements/{id}/manual-payment:
+ *   post:
+ *     summary: Record a manual payment
+ *     description: Records a manual payment against a specific schedule row or the next due installment. Validates that the agreement is payable and prevents overpayment on a single schedule row.
+ *     tags:
+ *       - Lease & Financing
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Lease agreement ID
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - amount_paid
+ *             properties:
+ *               amount_paid:
+ *                 type: number
+ *                 description: Payment amount (must be > 0)
+ *               payment_schedule_id:
+ *                 type: string
+ *                 format: uuid
+ *                 description: Target a specific schedule row; auto-selects next due if omitted
+ *               payment_date:
+ *                 type: string
+ *                 format: date
+ *                 description: Date of payment (defaults to today)
+ *               payment_method:
+ *                 type: string
+ *                 default: manual
+ *               settlement_id:
+ *                 type: string
+ *                 format: uuid
+ *                 nullable: true
+ *               notes:
+ *                 type: string
+ *                 nullable: true
+ *               reference_number:
+ *                 type: string
+ *                 nullable: true
+ *     responses:
+ *       201:
+ *         description: Payment transaction recorded
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *       400:
+ *         description: Validation error — amount must be positive, no schedule row available, or overpayment
+ *       404:
+ *         description: Lease agreement not found
+ *       401:
+ *         description: Unauthorized
+ *       500:
+ *         description: Internal server error
+ */
 router.post('/lease-agreements/:id/manual-payment', canPay, async (req, res) => {
   const trx = await knex.transaction();
   try {
@@ -669,6 +1284,52 @@ router.post('/lease-agreements/:id/manual-payment', canPay, async (req, res) => 
   }
 });
 
+/**
+ * @openapi
+ * /api/lease-agreements/{id}/sign:
+ *   post:
+ *     summary: Sign a lease agreement
+ *     description: Records driver and/or company signature metadata on the agreement. Transitions draft agreements to pending_signature.
+ *     tags:
+ *       - Lease & Financing
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Lease agreement ID
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               driver_signature_meta:
+ *                 type: object
+ *                 nullable: true
+ *                 description: Driver signature metadata (e.g. timestamp, IP, canvas data)
+ *               company_signature_meta:
+ *                 type: object
+ *                 nullable: true
+ *                 description: Company signature metadata
+ *     responses:
+ *       200:
+ *         description: Signed lease agreement
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *       404:
+ *         description: Lease agreement not found
+ *       401:
+ *         description: Unauthorized
+ *       500:
+ *         description: Internal server error
+ */
 router.post('/lease-agreements/:id/sign', canEdit, async (req, res) => {
   const trx = await knex.transaction();
   try {
@@ -699,6 +1360,47 @@ router.post('/lease-agreements/:id/sign', canEdit, async (req, res) => {
   }
 });
 
+/**
+ * @openapi
+ * /api/lease-financing/dashboard/summary:
+ *   get:
+ *     summary: Financing dashboard summary
+ *     description: Returns aggregated portfolio metrics including total financed amount, outstanding principal, payments collected, overdue amount, and agreement counts by status.
+ *     tags:
+ *       - Lease & Financing
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Portfolio summary metrics
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 total_financed_amount:
+ *                   type: number
+ *                 current_outstanding_principal:
+ *                   type: number
+ *                 payments_collected_to_date:
+ *                   type: number
+ *                 overdue_amount:
+ *                   type: number
+ *                 active_agreements:
+ *                   type: integer
+ *                 overdue_agreements:
+ *                   type: integer
+ *                 defaulted_agreements:
+ *                   type: integer
+ *                 completed_agreements:
+ *                   type: integer
+ *                 portfolio_size:
+ *                   type: integer
+ *       401:
+ *         description: Unauthorized
+ *       500:
+ *         description: Internal server error
+ */
 router.get('/lease-financing/dashboard/summary', canDashboard, async (req, res) => {
   try {
     const tid = requireTenant(req, res); if (!tid) return;
@@ -747,6 +1449,68 @@ router.get('/lease-financing/dashboard/summary', canDashboard, async (req, res) 
   }
 });
 
+/**
+ * @openapi
+ * /api/lease-financing/dashboard/cashflow:
+ *   get:
+ *     summary: Financing cashflow dashboard
+ *     description: Returns monthly cashflow data including scheduled payments, collected payments, overdue amounts, late fees, and net financing inflow over a date range.
+ *     tags:
+ *       - Lease & Financing
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: startDate
+ *         schema:
+ *           type: string
+ *           format: date
+ *         description: Start of date range (defaults to 180 days ago)
+ *       - in: query
+ *         name: endDate
+ *         schema:
+ *           type: string
+ *           format: date
+ *         description: End of date range (defaults to today)
+ *     responses:
+ *       200:
+ *         description: Monthly cashflow rows
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 rows:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       month:
+ *                         type: string
+ *                         format: date
+ *                       scheduled_payments:
+ *                         type: number
+ *                       collected_payments:
+ *                         type: number
+ *                       overdue_unpaid_amount:
+ *                         type: number
+ *                       late_fees_collected:
+ *                         type: number
+ *                       expected_vs_actual:
+ *                         type: number
+ *                       net_financing_inflow:
+ *                         type: number
+ *                 startDate:
+ *                   type: string
+ *                   format: date
+ *                 endDate:
+ *                   type: string
+ *                   format: date
+ *       401:
+ *         description: Unauthorized
+ *       500:
+ *         description: Internal server error
+ */
 router.get('/lease-financing/dashboard/cashflow', canDashboard, async (req, res) => {
   try {
     const tid = requireTenant(req, res); if (!tid) return;
@@ -819,6 +1583,67 @@ router.get('/lease-financing/dashboard/cashflow', canDashboard, async (req, res)
   }
 });
 
+/**
+ * @openapi
+ * /api/lease-financing/dashboard/exposure:
+ *   get:
+ *     summary: Financing exposure dashboard
+ *     description: Returns portfolio exposure data including total financed and remaining exposure, top drivers and trucks by remaining balance, agreements nearing completion, and high-risk agreements.
+ *     tags:
+ *       - Lease & Financing
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Portfolio exposure breakdown
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 total_amount_financed:
+ *                   type: number
+ *                 remaining_exposure:
+ *                   type: number
+ *                 top_drivers_by_remaining_balance:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       driver_id:
+ *                         type: string
+ *                         format: uuid
+ *                       driver_name:
+ *                         type: string
+ *                         nullable: true
+ *                       remaining_balance:
+ *                         type: number
+ *                 top_trucks_by_remaining_balance:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       truck_id:
+ *                         type: string
+ *                         format: uuid
+ *                       truck_label:
+ *                         type: string
+ *                         nullable: true
+ *                       remaining_balance:
+ *                         type: number
+ *                 agreements_nearing_completion:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                 agreements_at_risk:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *       401:
+ *         description: Unauthorized
+ *       500:
+ *         description: Internal server error
+ */
 router.get('/lease-financing/dashboard/exposure', canDashboard, async (req, res) => {
   try {
     const tid = requireTenant(req, res); if (!tid) return;
@@ -887,6 +1712,53 @@ router.get('/lease-financing/dashboard/exposure', canDashboard, async (req, res)
   }
 });
 
+/**
+ * @openapi
+ * /api/lease-financing/dashboard/risk:
+ *   get:
+ *     summary: Financing risk dashboard
+ *     description: Returns the latest risk snapshot for every agreement, with counts by risk level, full details for high-risk agreements, and optional filtering by risk level.
+ *     tags:
+ *       - Lease & Financing
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: risk_level
+ *         schema:
+ *           type: string
+ *           enum: [low, medium, high]
+ *         description: Filter by risk level
+ *     responses:
+ *       200:
+ *         description: Risk snapshot data
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 counts:
+ *                   type: object
+ *                   properties:
+ *                     low:
+ *                       type: integer
+ *                     medium:
+ *                       type: integer
+ *                     high:
+ *                       type: integer
+ *                 high_risk_agreements:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                 rows:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *       401:
+ *         description: Unauthorized
+ *       500:
+ *         description: Internal server error
+ */
 router.get('/lease-financing/dashboard/risk', canDashboard, async (req, res) => {
   try {
     const tid = requireTenant(req, res); if (!tid) return;
@@ -926,6 +1798,34 @@ router.get('/lease-financing/dashboard/risk', canDashboard, async (req, res) => 
   }
 });
 
+/**
+ * @openapi
+ * /api/lease-financing/refresh-risk:
+ *   post:
+ *     summary: Refresh risk snapshots
+ *     description: Recalculates overdue statuses, remaining balances, and risk snapshots for all active and overdue lease agreements in the tenant.
+ *     tags:
+ *       - Lease & Financing
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Risk refresh completed
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 refreshed:
+ *                   type: integer
+ *                   description: Number of agreements refreshed
+ *       401:
+ *         description: Unauthorized
+ *       500:
+ *         description: Internal server error
+ */
 router.post('/lease-financing/refresh-risk', canDashboard, async (req, res) => {
   const trx = await knex.transaction();
   try {

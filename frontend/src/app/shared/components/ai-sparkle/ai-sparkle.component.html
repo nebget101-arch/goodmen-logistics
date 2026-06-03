@@ -1,0 +1,15 @@
+<button
+  type="button"
+  class="ai-sparkle"
+  [class.ai-sparkle--sm]="size === 'sm'"
+  [class.ai-sparkle--md]="size === 'md'"
+  [class.ai-sparkle--high]="tier === 'high'"
+  [class.ai-sparkle--medium]="tier === 'medium'"
+  [class.ai-sparkle--low]="tier === 'low'"
+  [class.ai-sparkle--hidden]="!visible"
+  [attr.title]="tooltip || null"
+  [attr.aria-label]="tooltip || 'AI-extracted'"
+  (click)="onClick($event)"
+>
+  <span class="ai-sparkle__glyph" aria-hidden="true">&#x2726;</span>
+</button>

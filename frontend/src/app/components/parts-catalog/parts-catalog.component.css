@@ -736,6 +736,25 @@
   margin-top: 8px;
 }
 
+/* FN-1111: SKU input + Generate-SKU button row */
+.parts-dashboard .sku-field {
+  display: flex;
+  gap: 8px;
+  align-items: stretch;
+}
+
+.parts-dashboard .sku-field .form-control {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.parts-dashboard .btn-generate-sku {
+  flex: 0 0 auto;
+  white-space: nowrap;
+  padding: 6px 10px;
+  font-size: 12px;
+}
+
 @media (max-width: 768px) {
   .parts-dashboard .header {
     flex-direction: column;
@@ -751,3 +770,347 @@
   }
 }
 
+
+/* FN-708 — Stock breakdown expand rows */
+
+.th-expand { width: 32px; }
+
+.cell-expand { width: 32px; padding: 0 4px; text-align: center; }
+
+.btn-expand-stock {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 4px;
+  color: #64748b;
+  transition: color 0.15s, background 0.15s;
+}
+.btn-expand-stock:hover { color: #38bdf8; background: rgba(56,189,248,0.08); }
+
+.expand-chevron {
+  display: inline-block;
+  font-size: 0.6rem;
+  transition: transform 0.18s ease;
+}
+.expand-chevron.open { transform: rotate(90deg); }
+
+.row-expanded td { background: rgba(56,189,248,0.04); }
+
+/* Stock breakdown row */
+.stock-breakdown-row td { padding: 0; border-top: none; }
+
+.stock-breakdown-cell {
+  padding: 10px 20px 16px 40px !important;
+  background: rgba(15, 23, 42, 0.5);
+  border-bottom: 1px solid rgba(148, 163, 184, 0.12);
+}
+
+/* Loading */
+.sb-loading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #64748b;
+  font-size: 13px;
+  padding: 8px 0;
+}
+
+.sb-spinner {
+  display: inline-block;
+  width: 13px;
+  height: 13px;
+  border: 2px solid rgba(56,189,248,0.2);
+  border-top-color: #38bdf8;
+  border-radius: 50%;
+  animation: sb-spin 0.65s linear infinite;
+}
+@keyframes sb-spin { to { transform: rotate(360deg); } }
+
+/* Error */
+.sb-error {
+  color: #fca5a5;
+  font-size: 13px;
+  padding: 6px 0;
+}
+
+/* Empty */
+.sb-empty { color: #64748b; font-size: 13px; padding: 6px 0; }
+
+/* Content */
+.sb-content { display: flex; flex-direction: column; gap: 8px; }
+
+.sb-heading {
+  font-size: 12px;
+  color: #94a3b8;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.sb-heading strong { color: #e2e8f0; }
+
+.sb-summary-inline {
+  color: #7dd3fc;
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+/* Cards grid */
+.sb-cards {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.sb-card {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  background: rgba(30, 41, 59, 0.7);
+  border: 1px solid rgba(148, 163, 184, 0.15);
+  border-radius: 8px;
+  padding: 10px 14px;
+  min-width: 150px;
+  max-width: 220px;
+  transition: border-color 0.15s;
+}
+.sb-card:hover { border-color: rgba(56, 189, 248, 0.3); }
+
+.sb-card.sb-card-low {
+  border-color: rgba(234, 179, 8, 0.35);
+  background: rgba(234, 179, 8, 0.05);
+}
+.sb-card.sb-card-zero {
+  border-color: rgba(239, 68, 68, 0.25);
+  background: rgba(239, 68, 68, 0.04);
+}
+
+.sb-loc-name {
+  font-size: 12px;
+  font-weight: 600;
+  color: #e2e8f0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sb-bin-row { display: flex; align-items: center; gap: 5px; }
+
+.sb-bin-badge {
+  display: inline-block;
+  padding: 1px 6px;
+  border-radius: 3px;
+  background: rgba(56, 189, 248, 0.12);
+  border: 1px solid rgba(56, 189, 248, 0.22);
+  color: #7dd3fc;
+  font-size: 11px;
+  font-weight: 600;
+  font-family: monospace;
+}
+
+.sb-bin-name { font-size: 11px; color: #64748b; }
+.sb-bin-legacy { font-size: 11px; color: #64748b; font-style: italic; }
+
+.sb-qty { display: flex; align-items: baseline; gap: 4px; margin-top: 4px; }
+
+.sb-qty-num {
+  font-size: 18px;
+  font-weight: 700;
+  color: #f1f5f9;
+  line-height: 1;
+}
+.sb-qty-label { font-size: 11px; color: #64748b; }
+
+.sb-link {
+  margin-top: 6px;
+  font-size: 11px;
+  color: #38bdf8;
+  text-decoration: none;
+  font-weight: 600;
+}
+.sb-link:hover { color: #7dd3fc; text-decoration: underline; }
+
+/* ── FN-1099: Quick Add → Snap Photo ────────────────────────────────────── */
+
+.quick-add-wrap {
+  position: relative;
+  display: inline-block;
+}
+
+.quick-add-toggle {
+  /* inherits .btn-primary; just gives the caret a little breathing room */
+  padding-right: 12px;
+}
+.quick-add-caret {
+  margin-left: 4px;
+  font-size: 10px;
+  opacity: 0.85;
+}
+
+.quick-add-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  min-width: 240px;
+  background: #0f172a;
+  border: 1px solid rgba(148, 163, 184, 0.25);
+  border-radius: 10px;
+  box-shadow: 0 18px 40px rgba(2, 6, 23, 0.55);
+  padding: 6px;
+  z-index: 30;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.quick-add-item {
+  display: grid;
+  grid-template-columns: 28px 1fr;
+  grid-template-rows: auto auto;
+  align-items: center;
+  column-gap: 10px;
+  padding: 8px 10px;
+  background: transparent;
+  border: 0;
+  border-radius: 8px;
+  text-align: left;
+  color: #e2e8f0;
+  cursor: pointer;
+  font: inherit;
+}
+.quick-add-item:hover:not(:disabled) {
+  background: rgba(59, 130, 246, 0.12);
+}
+.quick-add-item:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+.quick-add-icon {
+  grid-row: 1 / span 2;
+  font-size: 18px;
+  text-align: center;
+}
+.quick-add-label {
+  font-weight: 600;
+  font-size: 13px;
+}
+.quick-add-hint {
+  font-size: 11px;
+  color: #94a3b8;
+}
+
+/* Loading overlay shown while the AI photo intake is in flight */
+.ai-photo-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(2, 6, 23, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+.ai-photo-overlay-card {
+  background: #0f172a;
+  border: 1px solid rgba(148, 163, 184, 0.3);
+  border-radius: 12px;
+  padding: 24px 28px;
+  min-width: 280px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  box-shadow: 0 24px 50px rgba(2, 6, 23, 0.55);
+}
+.ai-photo-spinner {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: 3px solid rgba(148, 163, 184, 0.25);
+  border-top-color: #38bdf8;
+  animation: ai-photo-spin 0.9s linear infinite;
+}
+@keyframes ai-photo-spin {
+  to { transform: rotate(360deg); }
+}
+.ai-photo-msg {
+  margin: 0;
+  color: #e2e8f0;
+  font-size: 14px;
+}
+
+/* Surface AI warnings inside the modal body */
+.ai-warnings {
+  background: rgba(245, 158, 11, 0.08);
+  border: 1px solid rgba(245, 158, 11, 0.35);
+  border-radius: 8px;
+  padding: 8px 12px;
+  color: #fde68a;
+  font-size: 12px;
+}
+.ai-warnings ul { margin: 4px 0 0; padding-left: 18px; }
+.ai-warnings li { margin: 2px 0; }
+
+/* Inline confidence badge slightly nudges down so it sits with the label baseline */
+label app-confidence-badge {
+  margin-left: 8px;
+  vertical-align: middle;
+}
+
+/* ── FN-1399: Print Label flow ─────────────────────────────────────────────── */
+
+/* Vendor-barcode opt-in toggle below the read-only barcode field. */
+.parts-dashboard .barcode-override-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-light);
+  text-transform: none;
+  letter-spacing: 0;
+  cursor: pointer;
+}
+
+.parts-dashboard .barcode-override-toggle input[type="checkbox"] {
+  margin: 0;
+}
+
+/* Post-create confirmation modal — narrower than the main edit modal. */
+.parts-dashboard .modal.print-confirm-modal {
+  max-width: 480px;
+}
+
+.parts-dashboard .print-confirm-msg {
+  margin: 0 0 10px;
+  color: #e2e8f0;
+  font-size: 14px;
+  line-height: 1.4;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+  align-items: baseline;
+}
+
+.parts-dashboard .print-confirm-sku {
+  color: var(--text-light);
+  font-size: 12px;
+}
+
+.parts-dashboard .print-confirm-code {
+  font-family: "SFMono-Regular", Menlo, Consolas, "Liberation Mono", monospace;
+  font-size: 13px;
+  background: rgba(56, 189, 248, 0.12);
+  border: 1px solid rgba(56, 189, 248, 0.35);
+  border-radius: 4px;
+  padding: 2px 8px;
+  color: #bae6fd;
+}
+
+/* FN-1568: print-label CSS lives in `frontend/src/styles.css` (global scope).
+   It cannot live here — Angular's ViewEncapsulation.Emulated rewrites
+   `body *` to a scoped attribute selector that matches nothing, so the
+   `visibility: hidden` rule is silently dropped and app chrome leaks into
+   the printed PDF (FN-1567 regression). The off-screen positioning rule
+   also moves with it so the screen/print specificity pair stays balanced. */

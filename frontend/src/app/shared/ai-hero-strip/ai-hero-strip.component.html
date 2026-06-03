@@ -1,0 +1,30 @@
+<!-- FN-1636 ai-hero-strip — built on the .ai-panel-flat utility. -->
+<div class="ai-panel-flat hero-strip" [attr.data-severity]="dominant" role="region" aria-label="Needs attention">
+  <ng-container *ngIf="isEmpty; else chips">
+    <span class="hero-nominal">
+      <span class="material-symbols-outlined hero-nominal-icon" aria-hidden="true">check_circle</span>
+      All systems nominal
+    </span>
+  </ng-container>
+
+  <ng-template #chips>
+    <div class="hero-chips">
+      <a
+        *ngFor="let item of visibleItems; trackBy: trackByLabel"
+        class="hero-chip"
+        [attr.data-severity]="item.severity"
+        [routerLink]="item.routerLink"
+        [queryParams]="item.queryParams || null"
+        [attr.aria-label]="item.count + ' ' + item.label"
+      >
+        <span class="hero-chip-pip" aria-hidden="true"></span>
+        <span class="hero-chip-count">{{ item.count }}</span>
+        <span class="hero-chip-label">{{ item.label }}</span>
+      </a>
+    </div>
+  </ng-template>
+
+  <div class="hero-action">
+    <ng-content select="[heroAction]"></ng-content>
+  </div>
+</div>

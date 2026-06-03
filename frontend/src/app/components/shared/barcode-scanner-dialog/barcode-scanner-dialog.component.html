@@ -1,0 +1,74 @@
+<div class="bsd-backdrop" (click)="onBackdrop($event)" role="dialog" aria-modal="true" aria-labelledby="bsd-title">
+  <div class="bsd-modal">
+    <div class="bsd-header">
+      <h5 id="bsd-title">Scan Barcode</h5>
+      <button type="button" class="btn-close" aria-label="Close" (click)="close()"></button>
+    </div>
+
+    <div class="bsd-body">
+      <div *ngIf="busy" class="bsd-status" role="status" aria-live="polite">Looking up barcode…</div>
+
+      <div *ngIf="externalError" class="bsd-toast bsd-toast-error" role="alert">{{ externalError }}</div>
+      <div *ngIf="toast && !externalError" class="bsd-toast" role="alert">{{ toast }}</div>
+
+      <section class="bsd-section">
+        <h6 class="bsd-section-title">Upload or capture an image</h6>
+        <p class="bsd-section-hint">Use your device camera or a saved photo.</p>
+        <button
+          type="button"
+          class="btn-primary"
+          (click)="triggerDecodeImage()"
+          [disabled]="busy || decoding"
+        >
+          {{ decoding ? 'Decoding…' : 'Choose / Take Photo' }}
+        </button>
+        <input
+          #decodeFileInput
+          type="file"
+          accept="image/*"
+          capture="environment"
+          (change)="onDecodeImage($event)"
+          class="bsd-hidden-input"
+        />
+      </section>
+
+      <section class="bsd-section">
+        <h6 class="bsd-section-title">Use your phone as a scanner</h6>
+        <p class="bsd-section-hint">Open the QR code with your phone camera and scan from there.</p>
+        <button
+          type="button"
+          class="btn-outline"
+          (click)="startPhoneBridge()"
+          [disabled]="busy || !!bridgeSessionId"
+        >
+          {{ bridgeSessionId ? (bridgeConnected ? 'Phone connected' : 'Waiting for phone…') : 'Start Phone Scanner' }}
+        </button>
+        <div *ngIf="qrCodeDataUrl" class="bsd-qr-wrap">
+          <img [src]="qrCodeDataUrl" alt="QR code to open phone scanner" />
+          <button type="button" class="btn-link" (click)="stopPhoneBridge()">Stop</button>
+        </div>
+      </section>
+
+      <section class="bsd-section">
+        <h6 class="bsd-section-title">Or enter manually</h6>
+        <div class="bsd-manual-row">
+          <input
+            type="text"
+            class="form-control"
+            [(ngModel)]="manualValue"
+            (keydown.enter)="submitManual()"
+            placeholder="Type or paste a barcode value"
+            [disabled]="busy"
+          />
+          <button type="button" class="btn-secondary" (click)="submitManual()" [disabled]="busy">
+            Submit
+          </button>
+        </div>
+      </section>
+    </div>
+
+    <div class="bsd-footer">
+      <button type="button" class="btn-outline" (click)="close()" [disabled]="busy">Cancel</button>
+    </div>
+  </div>
+</div>

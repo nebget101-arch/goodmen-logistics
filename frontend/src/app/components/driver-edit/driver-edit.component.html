@@ -1,0 +1,778 @@
+<div class="driver-edit-page">
+  <!-- Loading state -->
+  <div class="page-loading" *ngIf="loadingDriver">
+    <div class="spinner"></div>
+    <p class="muted">Loading driver…</p>
+  </div>
+
+  <!-- 404 / not-found state -->
+  <div class="page-notfound" *ngIf="!loadingDriver && notFound">
+    <span class="material-symbols-outlined">person_off</span>
+    <h2>Driver not found</h2>
+    <p>The driver you’re trying to edit doesn’t exist or was removed.</p>
+    <button type="button" class="btn btn-secondary" (click)="cancel()">Back to Drivers</button>
+  </div>
+
+  <!-- Edit form -->
+  <ng-container *ngIf="!loadingDriver && !notFound">
+    <div class="header">
+      <div>
+        <p class="breadcrumb">
+          <a routerLink="/drivers">Drivers</a> <span class="sep">/</span> Edit
+        </p>
+        <h1>{{ driver.firstName || '—' }} {{ driver.lastName || '' }}</h1>
+        <p class="subtitle">CDL {{ driver.cdlClass || 'A' }} · {{ driver.cdlState || '—' }} {{ driver.cdlNumber || '—' }}</p>
+      </div>
+    </div>
+
+    <div class="dispatch-card edit-card">
+      <div class="card-body">
+        <div class="driver-layout">
+          <div class="driver-left">
+            <div class="avatar-circle">
+              <span class="avatar-initials">DR</span>
+            </div>
+            <button class="btn btn-secondary btn-xs" type="button">Update photo</button>
+          </div>
+          <div class="driver-main">
+            <div class="grid-3">
+              <div class="field">
+                <label for="firstName">First Name *</label>
+                <input id="firstName" class="form-input" [(ngModel)]="driver.firstName" />
+              </div>
+              <div class="field">
+                <label for="lastName">Last Name *</label>
+                <input id="lastName" class="form-input" [(ngModel)]="driver.lastName" />
+              </div>
+              <div class="field">
+                <label for="status">Status</label>
+                <input id="status" class="form-input" [(ngModel)]="driver.status" placeholder="Applicant" />
+              </div>
+              <div class="field">
+                <label for="dob">Date of Birth</label>
+                <app-ai-date-picker
+                  inputId="dob"
+                  label=""
+                  [(ngModel)]="driver.dateOfBirth"
+                  name="driverEditDob"
+                  placeholder="MM/DD/YYYY"
+                ></app-ai-date-picker>
+              </div>
+              <div class="field">
+                <label for="applicationDate">Application Date</label>
+                <app-ai-date-picker
+                  inputId="applicationDate"
+                  label=""
+                  [(ngModel)]="driver.applicationDate"
+                  name="driverEditAppDate"
+                  placeholder="MM/DD/YYYY"
+                ></app-ai-date-picker>
+              </div>
+              <div class="field">
+                <label for="hireDate">Hire Date</label>
+                <app-ai-date-picker
+                  inputId="hireDate"
+                  label=""
+                  [(ngModel)]="driver.hireDate"
+                  name="driverEditHireDate"
+                  placeholder="MM/DD/YYYY"
+                ></app-ai-date-picker>
+              </div>
+              <div class="field">
+                <label for="phone">Phone</label>
+                <input id="phone" class="form-input" [(ngModel)]="driver.phone" />
+              </div>
+              <div class="field">
+                <label for="email">Email</label>
+                <input id="email" type="email" class="form-input" [(ngModel)]="driver.email" />
+              </div>
+              <div class="field">
+                <label for="payableTo">Payable to</label>
+                <input
+                  id="payableTo"
+                  class="form-input form-input-readonly"
+                  type="text"
+                  [value]="(driver.firstName || '') + ' ' + (driver.lastName || '')"
+                  readonly
+                  placeholder="Driver name"
+                />
+              </div>
+              <div class="field field-wide">
+                <label for="address">Address</label>
+                <input id="address" class="form-input" [(ngModel)]="driver.address" />
+              </div>
+              <div class="field field-wide">
+                <label for="address2">Address line 2</label>
+                <input id="address2" class="form-input" [(ngModel)]="driver.address2" />
+              </div>
+              <div class="field">
+                <label for="city">City</label>
+                <input id="city" class="form-input" [(ngModel)]="driver.city" />
+              </div>
+              <div class="field">
+                <label for="state">State</label>
+                <app-ai-select
+                  inputId="state"
+                  [options]="stateOptions"
+                  [(ngModel)]="driver.state"
+                  [allowEmpty]="true"
+                  emptyLabel="-- Select state --"
+                  placeholder="Select state"
+                ></app-ai-select>
+              </div>
+              <div class="field">
+                <label for="zip">Zip</label>
+                <input id="zip" class="form-input" [(ngModel)]="driver.zip" (blur)="onZipBlur()" />
+              </div>
+              <div class="field">
+                <label for="coDriver">Co-Driver</label>
+                <input id="coDriver" class="form-input" [(ngModel)]="driver.coDriverId" />
+              </div>
+              <div class="field">
+                <label for="truck">Truck</label>
+                <app-ai-select
+                  inputId="truck"
+                  [options]="truckSelectOptions"
+                  [(ngModel)]="driver.truckId"
+                  (ngModelChange)="onTruckSelected($event)"
+                  [allowEmpty]="true"
+                  emptyLabel="-- Select truck --"
+                  placeholder="Select truck"
+                ></app-ai-select>
+              </div>
+              <div class="field">
+                <label for="trailer">Trailer</label>
+                <app-ai-select
+                  inputId="trailer"
+                  [options]="trailerSelectOptions"
+                  [(ngModel)]="driver.trailerId"
+                  (ngModelChange)="onTrailerSelected($event)"
+                  [allowEmpty]="true"
+                  emptyLabel="-- Select trailer --"
+                  placeholder="Select trailer"
+                ></app-ai-select>
+              </div>
+              <div class="field field-wide">
+                <label for="fuelCard">Fuel card #</label>
+                <input id="fuelCard" class="form-input" [(ngModel)]="driver.fuelCardNumber" />
+              </div>
+              <div class="field">
+                <label for="cdlNumber">CDL Number *</label>
+                <input id="cdlNumber" class="form-input" [(ngModel)]="driver.cdlNumber" />
+              </div>
+              <div class="field">
+                <label for="cdlState">CDL State *</label>
+                <app-ai-select
+                  inputId="cdlState"
+                  [options]="stateOptions"
+                  [(ngModel)]="driver.cdlState"
+                  [allowEmpty]="true"
+                  emptyLabel="-- Select CDL state --"
+                  placeholder="Select CDL state"
+                ></app-ai-select>
+              </div>
+              <div class="field">
+                <label for="cdlClass">CDL Class</label>
+                <app-ai-select
+                  inputId="cdlClass"
+                  [options]="cdlClassOptions"
+                  [(ngModel)]="driver.cdlClass"
+                  placeholder="Select CDL class"
+                ></app-ai-select>
+              </div>
+              <div class="field">
+                <label for="cdlExpiry">CDL Expiry</label>
+                <app-ai-date-picker
+                  inputId="cdlExpiry"
+                  label=""
+                  [(ngModel)]="driver.cdlExpiry"
+                  name="driverEditCdlExpiry"
+                  placeholder="MM/DD/YYYY"
+                ></app-ai-date-picker>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Compensation / Pay section (AI template) -->
+        <div class="pay-section comp-section-card">
+          <div class="comp-tabs" role="tablist">
+            <button type="button" role="tab" class="pay-tab chip-tab" [class.active]="payTab === 'rates'" (click)="setPayTab('rates')">
+              <span class="material-symbols-outlined">payments</span> Pay rates
+            </button>
+            <button type="button" role="tab" class="pay-tab chip-tab" [class.active]="payTab === 'deductions'" (click)="setPayTab('deductions')">
+              <span class="material-symbols-outlined">receipt_long</span> Recurring deductions
+            </button>
+            <button type="button" role="tab" class="pay-tab chip-tab" [class.active]="payTab === 'payee'" (click)="setPayTab('payee')">
+              <span class="material-symbols-outlined">business_center</span> Equipment Owner
+            </button>
+            <button type="button" role="tab" class="pay-tab chip-tab" [class.active]="payTab === 'notes'" (click)="setPayTab('notes')">
+              <span class="material-symbols-outlined">note</span> Notes
+            </button>
+          </div>
+
+          <!-- Tab: Pay rates -->
+          <div class="pay-content" *ngIf="payTab === 'rates'">
+            <div class="comp-block">
+              <h4 class="comp-section-title"><span class="material-symbols-outlined">badge</span> Compensation type</h4>
+              <div class="chip-group">
+                <button type="button" class="chip" [class.active]="driver.driverType === 'driver'" (click)="driver.driverType = 'driver'; onDriverTypeChange()">Driver</button>
+                <button type="button" class="chip" [class.active]="driver.driverType === 'owner_operator'" (click)="driver.driverType = 'owner_operator'; onDriverTypeChange()">Owner Operator</button>
+              </div>
+            </div>
+
+            <div class="comp-block">
+              <h4 class="comp-section-title"><span class="material-symbols-outlined">trending_up</span> Pay model</h4>
+              <div class="chip-group">
+                <button type="button" class="chip" [class.active]="driver.payModel === 'per_mile'" [disabled]="driver.driverType === 'owner_operator'" (click)="setPayModel('per_mile')">Per mile</button>
+                <button type="button" class="chip" [class.active]="driver.payModel === 'percentage'" (click)="setPayModel('percentage')">Percentage</button>
+                <button type="button" class="chip" [class.active]="driver.payModel === 'flat_weekly'" (click)="setPayModel('flat_weekly')">Flat weekly</button>
+                <button type="button" class="chip" [class.active]="driver.payModel === 'flat_per_load'" (click)="setPayModel('flat_per_load')">Flat per load</button>
+              </div>
+            </div>
+
+            <div class="comp-block">
+              <h4 class="comp-section-title"><span class="material-symbols-outlined">attach_money</span> Compensation value</h4>
+              <div class="comp-value-row">
+                <div class="comp-value-field" *ngIf="driver.payModel === 'per_mile'">
+                  <label for="perMile">CPM ($/mile)</label>
+                  <input id="perMile" type="number" step="0.01" class="form-input" placeholder="0.00" [(ngModel)]="driver.payRate" />
+                </div>
+                <div class="comp-value-field" *ngIf="driver.payModel === 'percentage'">
+                  <label for="payPercentage">Driver %</label>
+                  <input id="payPercentage" type="number" step="0.01" min="0" max="100" class="form-input" placeholder="0" [(ngModel)]="driver.payPercentage" />
+                </div>
+                <div class="comp-value-field" *ngIf="driver.payModel === 'percentage' && driver.driverType !== 'owner_operator'">
+                  <label for="eoPercentage">Equipment Owner %</label>
+                  <input id="eoPercentage" type="number" step="0.01" min="0" max="100" class="form-input" placeholder="0" [(ngModel)]="driver.equipmentOwnerPercentage" />
+                </div>
+                <div class="comp-value-field comp-value-readonly" *ngIf="driver.payModel === 'percentage'">
+                  <label>Company Retains</label>
+                  <span class="comp-calculated-value" [class.error]="percentageSumExceeds100">{{ companyRetainsPercentage }}%</span>
+                  <span class="comp-validation-error" *ngIf="percentageSumExceeds100">Driver % + EO % cannot exceed 100%</span>
+                </div>
+                <div class="comp-value-field" *ngIf="driver.payModel === 'flat_weekly'">
+                  <label for="flatWeekly">Weekly amount ($)</label>
+                  <input id="flatWeekly" type="number" step="0.01" class="form-input" placeholder="0.00" [(ngModel)]="driver.flatWeeklyAmount" />
+                </div>
+                <div class="comp-value-field" *ngIf="driver.payModel === 'flat_per_load'">
+                  <label for="flatPerLoad">Per load amount ($)</label>
+                  <input id="flatPerLoad" type="number" step="0.01" class="form-input" placeholder="0.00" [(ngModel)]="driver.flatPerLoadAmount" />
+                </div>
+              </div>
+            </div>
+
+            <div class="comp-block" *ngIf="showExpenseSection">
+              <h4 class="comp-section-title"><span class="material-symbols-outlined">account_balance</span> Expense responsibility</h4>
+
+              <p class="comp-hint" *ngIf="driver.driverType === 'owner_operator'">
+                Owner Operator: all expenses deducted at 100% from the Owner Operator.
+              </p>
+
+              <ng-container *ngIf="driver.driverType !== 'owner_operator'">
+                <p class="comp-hint">Who bears each expense category.</p>
+                <div class="chip-group" style="margin-bottom: 14px;">
+                  <button type="button" class="chip" [class.active]="expenseSplitType === 'driver'" (click)="onExpenseSplitTypeChange('driver')">Driver</button>
+                  <button type="button" class="chip" [class.active]="expenseSplitType === 'equipment_owner'" (click)="onExpenseSplitTypeChange('equipment_owner')">Equipment Owner</button>
+                  <button type="button" class="chip" [class.active]="expenseSplitType === 'shared'" (click)="onExpenseSplitTypeChange('shared')">Shared</button>
+                </div>
+
+                <div class="shared-expense-config" *ngIf="expenseSplitType === 'shared'">
+                  <div class="shared-config-section">
+                    <h5 class="shared-config-heading">Variable expenses (percentage split)</h5>
+                    <div class="shared-config-grid">
+                      <div class="shared-config-row" *ngFor="let e of variableExpenseKeys">
+                        <span class="expense-label">{{ e.label }}</span>
+                        <div class="slider-wrapper">
+                          <input
+                            type="range" min="0" max="100" step="5" class="expense-slider"
+                            [ngModel]="sharedExpensePercentages[e.key]"
+                            (ngModelChange)="sharedExpensePercentages[e.key] = $event"
+                            [name]="'shared-pct-' + e.key"
+                          />
+                          <span class="slider-value">Driver {{ sharedExpensePercentages[e.key] }}% / Owner {{ 100 - sharedExpensePercentages[e.key] }}%</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="shared-config-section">
+                    <h5 class="shared-config-heading">Fixed expenses (dollar amounts)</h5>
+                    <div class="shared-config-grid">
+                      <div class="shared-config-row" *ngFor="let e of fixedExpenseKeys">
+                        <span class="expense-label">{{ e.label }}</span>
+                        <div class="fixed-inputs-wrapper">
+                          <div class="fixed-input-group">
+                            <label class="fixed-input-label">Driver $</label>
+                            <input
+                              type="number" step="0.01" min="0" class="form-input fixed-dollar-input"
+                              [ngModel]="sharedExpenseFixedAmounts[e.key].driver"
+                              (ngModelChange)="sharedExpenseFixedAmounts[e.key] = { driver: $event, owner: sharedExpenseFixedAmounts[e.key].owner }"
+                              [name]="'shared-driver-fixed-' + e.key"
+                              placeholder="0.00"
+                            />
+                          </div>
+                          <div class="fixed-input-group">
+                            <label class="fixed-input-label">Owner $</label>
+                            <input
+                              type="number" step="0.01" min="0" class="form-input fixed-dollar-input"
+                              [ngModel]="sharedExpenseFixedAmounts[e.key].owner"
+                              (ngModelChange)="sharedExpenseFixedAmounts[e.key] = { driver: sharedExpenseFixedAmounts[e.key].driver, owner: $event }"
+                              [name]="'shared-owner-fixed-' + e.key"
+                              placeholder="0.00"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="expense-matrix" *ngIf="expenseSplitType && expenseSplitType !== 'shared'">
+                  <div class="expense-row" *ngFor="let e of expenseKeys">
+                    <span class="expense-label">{{ e.label }}</span>
+                    <span class="expense-assigned-label">{{ expenseSplitType === 'driver' ? 'Driver' : 'Equipment Owner' }}</span>
+                  </div>
+                </div>
+              </ng-container>
+            </div>
+
+            <div class="comp-block">
+              <h4 class="comp-section-title"><span class="material-symbols-outlined">send_money</span> Pay routing</h4>
+              <div class="comp-fields-grid">
+                <div class="field">
+                  <label for="payableToPrimary">Primary payable to</label>
+                  <input
+                    id="payableToPrimary"
+                    class="form-input form-input-readonly"
+                    type="text"
+                    [value]="(driver.firstName || '') + ' ' + (driver.lastName || '')"
+                    readonly
+                    placeholder="Driver name"
+                  />
+                </div>
+                <div class="field">
+                  <label for="additionalPayeeRates">
+                    Equipment Owner
+                    <span *ngIf="equipmentOwnerAutoPopulated" class="auto-populated-badge" title="Auto-populated from assigned truck">auto</span>
+                  </label>
+                  <div class="payee-search-wrapper">
+                    <div class="payee-search-input-wrapper">
+                      <input
+                        id="additionalPayeeRates"
+                        class="form-input payee-search-input"
+                        type="text"
+                        placeholder="Search equipment owner..."
+                        [(ngModel)]="additionalPayeeSearch"
+                        (focus)="onAdditionalPayeeSearchFocus()"
+                        (blur)="onAdditionalPayeeSearchBlur()"
+                        (input)="onAdditionalPayeeSearchInput()"
+                        [disabled]="isCreatingEquipmentOwner || equipmentOwnerAutoPopulated"
+                      />
+                      <button
+                        type="button"
+                        class="clear-payee-btn"
+                        *ngIf="(selectedAdditionalPayeeId || equipmentOwnerAutoPopulated) && !isCreatingEquipmentOwner"
+                        (click)="clearAdditionalPayeeSelection()"
+                      >
+                        <span class="material-symbols-outlined">close</span>
+                      </button>
+                    </div>
+
+                    <div class="payee-dropdown" *ngIf="showAdditionalPayeeDropdown && !isCreatingEquipmentOwner && !equipmentOwnerAutoPopulated">
+                      <div class="payee-dropdown-item"
+                           *ngFor="let payee of filteredAdditionalPayees"
+                           (mousedown)="selectAdditionalPayee(payee)">
+                        <span class="payee-name">{{ payee.name }}</span>
+                      </div>
+                      <div class="payee-dropdown-item create-new"
+                           *ngIf="showCreateAdditionalPayee()"
+                           (mousedown)="startCreatingEquipmentOwner()">
+                        <span class="material-symbols-outlined">psychology_alt</span>
+                        <span>Open AI Equipment Owner Form</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <div class="field field-wide">
+                  <label for="payeeReason">Reason / scenario</label>
+                  <input id="payeeReason" class="form-input" placeholder="e.g. Owner truck with hired driver" [(ngModel)]="driver.payeeReason" />
+                </div>
+              </div>
+            </div>
+
+            <div class="comp-block">
+              <h4 class="comp-section-title"><span class="material-symbols-outlined">event</span> Effective dates</h4>
+              <div class="comp-fields-grid comp-dates">
+                <div class="field">
+                  <label for="effectiveStart">Start</label>
+                  <app-ai-date-picker
+                    inputId="effectiveStart"
+                    label=""
+                    [(ngModel)]="driver.effectiveStart"
+                    name="driverEditEffectiveStart"
+                    placeholder="MM/DD/YYYY"
+                  ></app-ai-date-picker>
+                </div>
+                <div class="field">
+                  <label for="effectiveEnd">End</label>
+                  <app-ai-date-picker
+                    inputId="effectiveEnd"
+                    label=""
+                    [(ngModel)]="driver.effectiveEnd"
+                    name="driverEditEffectiveEnd"
+                    placeholder="MM/DD/YYYY"
+                  ></app-ai-date-picker>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Tab: Recurring deductions -->
+          <div class="pay-content" *ngIf="payTab === 'deductions'">
+            <div class="comp-block">
+              <h4 class="comp-section-title"><span class="material-symbols-outlined">receipt_long</span> Scheduled deductions</h4>
+              <p class="comp-hint">Create recurring deductions for this driver. These rules are applied during settlement processing.</p>
+
+              <div class="deduction-create-card">
+                <div class="deduction-create-actions">
+                  <button type="button" class="btn btn-primary btn-sm deduction-ai-chip" (click)="openRecurringDeductionModal()">
+                    <span class="material-symbols-outlined">psychology_alt</span> Add Scheduled deduction
+                  </button>
+                </div>
+              </div>
+
+              <div class="deductions-empty" *ngIf="!loadingRecurringDeductions && recurringDeductions.length === 0">
+                <span class="material-symbols-outlined">inbox</span>
+                <p>No recurring deductions yet.</p>
+              </div>
+
+              <div class="deductions-empty" *ngIf="loadingRecurringDeductions">
+                <span class="material-symbols-outlined">hourglass_top</span>
+                <p>Loading recurring deductions…</p>
+              </div>
+
+              <div class="deductions-list" *ngIf="!loadingRecurringDeductions && recurringDeductions.length > 0">
+                <div class="deduction-item" *ngFor="let d of recurringDeductions">
+                  <span class="deduction-desc">{{ d.description }}</span>
+                  <span class="badge badge-target">{{ getRecurringDeductionTargetLabel(d) }}</span>
+                  <span class="deduction-date">Start: {{ getRecurringDeductionStartDateLabel(d) }}</span>
+                  <span class="deduction-date">End: {{ getRecurringDeductionEndDateLabel(d) }}</span>
+                  <span class="deduction-amount">{{ formatRecurringDeductionAmount(d) }} · {{ getDeductionFrequencyLabel(d.frequency) }}</span>
+                  <span class="badge" [class.badge-success]="d.enabled" [class.badge-muted]="!d.enabled">{{ d.enabled ? 'Active' : 'Inactive' }}</span>
+
+                  <div class="deduction-inline-editor" *ngIf="editingRecurringDeductionId === d.id">
+                    <input type="text" class="form-input" placeholder="Description" [(ngModel)]="editingRecurringDeductionDraft.description" />
+                    <input type="number" min="0" step="0.01" class="form-input" placeholder="Amount" [(ngModel)]="editingRecurringDeductionDraft.amount" />
+                    <app-ai-date-picker
+                      [inline]="true"
+                      [(ngModel)]="editingRecurringDeductionDraft.start_date"
+                      [name]="'edRdStart' + d.id"
+                      [inputId]="'edRdStart' + d.id"
+                      ariaLabel="Deduction start date"
+                      placeholder="Start"
+                    ></app-ai-date-picker>
+                    <app-ai-date-picker
+                      [inline]="true"
+                      [(ngModel)]="editingRecurringDeductionDraft.end_date"
+                      [name]="'edRdEnd' + d.id"
+                      [inputId]="'edRdEnd' + d.id"
+                      ariaLabel="Deduction end date"
+                      placeholder="End"
+                    ></app-ai-date-picker>
+                    <button type="button" class="btn btn-primary btn-sm" (click)="saveRecurringDeductionInlineEdit(d)" [disabled]="savingRecurringDeductionEdit || driverBackfilling">
+                      {{ savingRecurringDeductionEdit ? 'Saving...' : 'Save' }}
+                    </button>
+                    <button type="button" class="btn btn-primary btn-sm" (click)="saveRecurringDeductionInlineEditAndBackfill(d)" [disabled]="savingRecurringDeductionEdit || driverBackfilling">
+                      {{ (savingRecurringDeductionEdit || driverBackfilling) ? 'Working...' : 'Save + Backfill' }}
+                    </button>
+                    <button type="button" class="btn btn-secondary btn-sm" (click)="cancelRecurringDeductionInlineEdit()" [disabled]="savingRecurringDeductionEdit">Cancel</button>
+                  </div>
+
+                  <div class="deduction-actions" *ngIf="editingRecurringDeductionId !== d.id">
+                    <button type="button" class="btn btn-secondary btn-sm deduction-ai-chip" (click)="startRecurringDeductionInlineEdit(d)">
+                      <span class="material-symbols-outlined">auto_fix_high</span> Edit deduction
+                    </button>
+                    <button type="button" class="btn btn-secondary btn-sm" (click)="toggleRecurringDeduction(d)">
+                      {{ d.enabled ? 'Disable' : 'Enable' }}
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <div class="deduction-backfill-card">
+                <h5 class="comp-section-title"><span class="material-symbols-outlined">history</span> Backfill past settlements</h5>
+                <p class="comp-hint">Recalculate this driver’s past settlements so scheduled deductions are applied retroactively.</p>
+                <div class="deduction-backfill-grid">
+                  <div class="field">
+                    <app-ai-date-picker
+                      inputId="driverBackfillStart"
+                      label="Start date"
+                      [(ngModel)]="driverBackfill.start_date"
+                      (ngModelChange)="onDriverBackfillDateChange()"
+                      name="driverBackfillStart"
+                      placeholder="MM/DD/YYYY"
+                    ></app-ai-date-picker>
+                  </div>
+                  <div class="field">
+                    <app-ai-date-picker
+                      inputId="driverBackfillEnd"
+                      label="End date"
+                      [(ngModel)]="driverBackfill.end_date"
+                      (ngModelChange)="onDriverBackfillDateChange()"
+                      name="driverBackfillEnd"
+                      placeholder="MM/DD/YYYY"
+                    ></app-ai-date-picker>
+                  </div>
+                  <div class="field">
+                    <label for="driverBackfillLimit">Max settlements</label>
+                    <input id="driverBackfillLimit" type="number" min="1" max="2000" class="form-input" [(ngModel)]="driverBackfill.limit" />
+                  </div>
+                </div>
+                <div class="deduction-backfill-options">
+                  <label class="checkbox-label">
+                    <input type="checkbox" [(ngModel)]="driverBackfill.include_locked" />
+                    <span>Include approved/paid/void</span>
+                  </label>
+                  <label class="checkbox-label">
+                    <input type="checkbox" [(ngModel)]="driverBackfill.dry_run" />
+                    <span>Preview only (does not save changes)</span>
+                  </label>
+                  <button type="button" class="btn btn-secondary btn-sm" (click)="runDriverBackfill()" [disabled]="driverBackfilling">
+                    <span class="material-symbols-outlined">sync</span>
+                    {{ driverBackfilling ? 'Processing...' : (driverBackfill.dry_run ? 'Preview backfill' : 'Run backfill') }}
+                  </button>
+                </div>
+                <div class="deduction-backfill-warning" *ngIf="driverBackfillWarning">
+                  <span class="material-symbols-outlined">warning</span>
+                  <span>{{ driverBackfillWarning }}</span>
+                </div>
+                <div class="deduction-backfill-result" *ngIf="driverBackfillResult">
+                  <span *ngIf="driverBackfillResult.mode === 'dry_run'">Matched {{ driverBackfillResult.matched_count || 0 }} settlements. No changes were saved.</span>
+                  <span *ngIf="driverBackfillResult.mode !== 'dry_run'">
+                    Updated {{ driverBackfillResult.updated_count || 0 }} of {{ driverBackfillResult.matched_count || 0 }} settlements.
+                    <ng-container *ngIf="(driverBackfillResult.scheduled_deduction_row_count || 0) > 0; else noDriverScheduledApplied">
+                      Applied {{ driverBackfillResult.scheduled_deduction_row_count || 0 }} scheduled deduction row(s) across {{ driverBackfillResult.settlements_with_scheduled_deductions || 0 }} settlement(s).
+                    </ng-container>
+                    <ng-template #noDriverScheduledApplied>No scheduled deductions were applied to the recalculated settlements.</ng-template>
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Add deduction modal -->
+            <div class="deduction-modal-backdrop" *ngIf="showRecurringDeductionModal" (click)="closeRecurringDeductionModal()">
+              <div class="deduction-modal" (click)="$event.stopPropagation()">
+                <div class="deduction-modal-header">
+                  <h4><span class="material-symbols-outlined">psychology_alt</span> New scheduled deduction</h4>
+                  <button type="button" class="close-btn" (click)="closeRecurringDeductionModal()">×</button>
+                </div>
+                <div class="deduction-modal-body">
+                  <div class="deduction-form-grid">
+                    <div class="field">
+                      <label for="rdExpenseCategory">Expense category (from responsibility)</label>
+                      <app-ai-select
+                        inputId="rdExpenseCategory"
+                        [options]="expenseCategoryOptions"
+                        [(ngModel)]="newRecurringDeduction.expense_category"
+                        (ngModelChange)="onRecurringExpenseCategoryChange()"
+                        placeholder="Select category"
+                      ></app-ai-select>
+                    </div>
+
+                    <div class="field" *ngIf="newRecurringDeduction.expense_category">
+                      <div class="field-label">Expense responsibility value</div>
+                      <div class="deduction-info-chip">{{ getExpenseResponsibilityForCategory(newRecurringDeduction.expense_category) | titlecase }}</div>
+                    </div>
+
+                    <div class="field field-wide" *ngIf="newRecurringDeduction.expense_category">
+                      <div class="field-label">Will apply to</div>
+                      <div class="deduction-info-chip">{{ getSuggestedTargetsLabel() }}</div>
+                    </div>
+
+                    <div class="field">
+                      <label for="rdTarget">Apply to</label>
+                      <app-ai-select
+                        inputId="rdTarget"
+                        [options]="deductionTargetOptions"
+                        [(ngModel)]="newRecurringDeduction.target"
+                        (ngModelChange)="onDeductionTargetChange()"
+                        placeholder="Select target"
+                      ></app-ai-select>
+                    </div>
+
+                    <div class="field field-wide">
+                      <label for="rdDescription">Description</label>
+                      <input id="rdDescription" class="form-input" placeholder="e.g. Insurance premium" [(ngModel)]="newRecurringDeduction.description" />
+                    </div>
+
+                    <div class="field">
+                      <label for="rdAmountType">Amount type</label>
+                      <app-ai-select
+                        inputId="rdAmountType"
+                        [options]="deductionAmountTypeOptions"
+                        [(ngModel)]="newRecurringDeduction.amount_type"
+                        placeholder="Select type"
+                      ></app-ai-select>
+                    </div>
+
+                    <div class="field">
+                      <label for="rdAmount">{{ newRecurringDeduction.amount_type === 'percentage' ? 'Split %' : 'Amount' }}</label>
+                      <input id="rdAmount" type="number" min="0" step="0.01" class="form-input" [(ngModel)]="newRecurringDeduction.amount" (input)="onDeductionAmountInput()" placeholder="0.00" />
+                    </div>
+
+                    <div class="field">
+                      <label for="rdFrequency">Frequency</label>
+                      <app-ai-select
+                        inputId="rdFrequency"
+                        [options]="deductionFrequencyOptions"
+                        [(ngModel)]="newRecurringDeduction.frequency"
+                        placeholder="Select frequency"
+                      ></app-ai-select>
+                    </div>
+
+                    <div class="field">
+                      <app-ai-date-picker
+                        inputId="rdStartDate"
+                        label="Start date"
+                        [(ngModel)]="newRecurringDeduction.start_date"
+                        name="newRecurringDeductionStart"
+                        placeholder="MM/DD/YYYY"
+                      ></app-ai-date-picker>
+                    </div>
+
+                    <div class="field">
+                      <label for="rdAppliesWhen">Applies when</label>
+                      <app-ai-select
+                        inputId="rdAppliesWhen"
+                        [options]="deductionAppliesWhenOptions"
+                        [(ngModel)]="newRecurringDeduction.applies_when"
+                        placeholder="Select condition"
+                      ></app-ai-select>
+                    </div>
+
+                    <div class="field" *ngIf="newRecurringDeduction.applies_when === 'specific_expense'">
+                      <label for="rdSourceType">Expense type</label>
+                      <app-ai-select
+                        inputId="rdSourceType"
+                        [options]="sourceTypeOptions"
+                        [(ngModel)]="newRecurringDeduction.source_type"
+                        placeholder="Select expense"
+                      ></app-ai-select>
+                    </div>
+                  </div>
+                </div>
+                <div class="deduction-modal-footer">
+                  <button type="button" class="btn btn-secondary btn-sm" (click)="closeRecurringDeductionModal()" [disabled]="addingRecurringDeduction">Cancel</button>
+                  <button type="button" class="btn btn-primary btn-sm deduction-ai-chip" (click)="addRecurringDeduction()" [disabled]="addingRecurringDeduction">
+                    <span class="material-symbols-outlined">psychology_alt</span>
+                    {{ addingRecurringDeduction ? 'Adding...' : 'Add Scheduled deduction' }}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Tab: Equipment Owner -->
+          <div class="pay-content" *ngIf="payTab === 'payee'">
+            <div class="comp-block">
+              <h4 class="comp-section-title"><span class="material-symbols-outlined">business_center</span> Equipment Owner</h4>
+              <p class="comp-hint">When the assigned truck is owned by an external party who is also paid on the same settlement.</p>
+              <div class="comp-fields-grid">
+                <div class="field">
+                  <label for="payableToPayee">Driver</label>
+                  <input
+                    id="payableToPayee"
+                    class="form-input form-input-readonly"
+                    type="text"
+                    [value]="(driver.firstName || '') + ' ' + (driver.lastName || '')"
+                    readonly
+                    placeholder="Driver name"
+                  />
+                </div>
+                <div class="field">
+                  <label for="additionalPayee">
+                    Equipment Owner
+                    <span *ngIf="equipmentOwnerAutoPopulated" class="auto-populated-badge" title="Auto-populated from assigned truck">auto</span>
+                  </label>
+                  <div class="payee-search-wrapper">
+                    <div class="payee-search-input-wrapper">
+                      <input
+                        id="additionalPayee"
+                        class="form-input payee-search-input"
+                        type="text"
+                        placeholder="Search equipment owner..."
+                        [(ngModel)]="additionalPayeeSearch"
+                        (focus)="onAdditionalPayeeSearchFocus()"
+                        (blur)="onAdditionalPayeeSearchBlur()"
+                        (input)="onAdditionalPayeeSearchInput()"
+                        [disabled]="isCreatingEquipmentOwner || equipmentOwnerAutoPopulated"
+                      />
+                      <button
+                        type="button"
+                        class="clear-payee-btn"
+                        *ngIf="(selectedAdditionalPayeeId || equipmentOwnerAutoPopulated) && !isCreatingEquipmentOwner"
+                        (click)="clearAdditionalPayeeSelection()"
+                      >
+                        <span class="material-symbols-outlined">close</span>
+                      </button>
+                    </div>
+
+                    <div class="payee-dropdown" *ngIf="showAdditionalPayeeDropdown && !isCreatingEquipmentOwner && !equipmentOwnerAutoPopulated">
+                      <div class="payee-dropdown-item"
+                           *ngFor="let payee of filteredAdditionalPayees"
+                           (mousedown)="selectAdditionalPayee(payee)">
+                        <span class="payee-name">{{ payee.name }}</span>
+                      </div>
+                      <div class="payee-dropdown-item create-new"
+                           *ngIf="showCreateAdditionalPayee()"
+                           (mousedown)="startCreatingEquipmentOwner()">
+                        <span class="material-symbols-outlined">psychology_alt</span>
+                        <span>Open AI Equipment Owner Form</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <div class="field field-wide">
+                  <label for="payeeReasonTab">Reason</label>
+                  <input id="payeeReasonTab" class="form-input" placeholder="e.g. Owner truck, hired driver" [(ngModel)]="driver.payeeReason" />
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Tab: Notes -->
+          <div class="pay-content" *ngIf="payTab === 'notes'">
+            <div class="comp-block">
+              <h4 class="comp-section-title"><span class="material-symbols-outlined">note</span> Compensation notes</h4>
+              <textarea class="form-input comp-notes" rows="6" placeholder="Audit notes, change history, or special terms…" [(ngModel)]="driver.compensationNotes"></textarea>
+            </div>
+          </div>
+        </div>
+
+        <!-- Equipment Owner change confirmation -->
+        <div class="owner-change-dialog" *ngIf="pendingOwnerChange">
+          <div class="owner-change-dialog-body">
+            <span class="material-symbols-outlined owner-change-icon">swap_horiz</span>
+            <div class="owner-change-text">
+              <strong>Equipment Owner will change</strong>
+              <p>The selected truck is owned by <strong>{{ pendingOwnerChange.ownerName }}</strong>, which differs from the current Equipment Owner. Update the pay configuration?</p>
+            </div>
+            <div class="owner-change-actions">
+              <button type="button" class="btn-confirm-owner" (click)="confirmOwnerChange()">Update Owner</button>
+              <button type="button" class="btn-cancel-owner" (click)="cancelOwnerChange()">Keep Current</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Sticky footer -->
+    <div class="sticky-footer">
+      <button class="btn btn-secondary" type="button" (click)="cancel()" [disabled]="saving">Cancel</button>
+      <button class="btn btn-primary" type="button" (click)="saveDriver()" [disabled]="saving">
+        {{ saving ? 'Saving...' : 'Save Driver' }}
+      </button>
+    </div>
+  </ng-container>
+</div>

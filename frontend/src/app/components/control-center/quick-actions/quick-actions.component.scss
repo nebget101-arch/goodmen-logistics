@@ -1,0 +1,63 @@
+:host {
+  display: contents;
+}
+
+.quick-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.quick-actions__btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(148, 163, 184, 0.32);
+  background: rgba(15, 23, 42, 0.55);
+  color: #e2e8f0;
+  font: 600 12px/1 system-ui, -apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif;
+  text-decoration: none;
+  cursor: pointer;
+  transition: background 120ms ease, border-color 120ms ease, color 120ms ease, transform 120ms ease;
+  white-space: nowrap;
+
+  &:hover,
+  &:focus-visible {
+    background: rgba(45, 212, 191, 0.16);
+    border-color: rgba(45, 212, 191, 0.55);
+    color: #99f6e4;
+  }
+
+  &:focus-visible {
+    outline: 2px solid rgba(45, 212, 191, 0.7);
+    outline-offset: 2px;
+  }
+
+  &:active {
+    transform: translateY(1px);
+  }
+}
+
+.quick-actions__btn--primary {
+  background: rgba(45, 212, 191, 0.22);
+  border-color: rgba(45, 212, 191, 0.6);
+  color: #ccfbf1;
+
+  &:hover,
+  &:focus-visible {
+    background: rgba(45, 212, 191, 0.32);
+    color: #f0fdfa;
+  }
+}
+
+.quick-actions__icon {
+  font-size: 14px;
+  line-height: 1;
+}
+
+.quick-actions__label {
+  letter-spacing: 0.01em;
+}

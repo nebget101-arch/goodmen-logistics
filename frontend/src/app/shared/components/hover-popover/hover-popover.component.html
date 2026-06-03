@@ -1,0 +1,25 @@
+<span
+  #trigger
+  class="hp-trigger"
+  (mouseenter)="onTriggerEnter()"
+  (mouseleave)="onTriggerLeave()"
+  (focusin)="onTriggerEnter()"
+  (focusout)="onTriggerLeave()">
+  <ng-content></ng-content>
+</span>
+
+<div
+  *ngIf="mounted"
+  #popover
+  class="hp-popover"
+  [class.hp-popover--visible]="visible"
+  [style.top.px]="top"
+  [style.left.px]="left"
+  [style.max-width.px]="maxWidth"
+  [attr.data-placement]="resolvedPlacement"
+  role="tooltip"
+  (mouseenter)="onPopoverEnter()"
+  (mouseleave)="onPopoverLeave()">
+  <ng-container *ngIf="content; else textTpl" [ngTemplateOutlet]="content"></ng-container>
+  <ng-template #textTpl>{{ text }}</ng-template>
+</div>

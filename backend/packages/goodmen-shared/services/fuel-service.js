@@ -94,6 +94,66 @@ async function findFuelCard(tenantId, cardMasked, providerName) {
   return row?.id || null;
 }
 
+/**
+ * Active driver assignment for import matching, scoped to physical card when possible (FN-673).
+ * @param {string} tenantId
+ * @param {string} accountId fuel_card_accounts.id
+ * @param {string|null|undefined} cardMasked transaction card number / mask (digits extracted for last4)
+ */
+async function findActiveCardDriverAssignment(tenantId, accountId, cardMasked) {
+  const digits = cardMasked ? String(cardMasked).replace(/\D/g, '') : '';
+  const last4 = digits.length >= 4 ? digits.slice(-4) : null;
+
+  let physicalCardId = null;
+  if (last4) {
+    const matches = await knex('fuel_cards')
+      .where({
+        fuel_card_account_id: accountId,
+        tenant_id: tenantId,
+        card_number_last4: last4
+      })
+      .select('id');
+    if (matches.length === 1) physicalCardId = matches[0].id;
+  }
+
+  const base = () => knex('fuel_card_driver_assignments')
+    .where({ fuel_card_account_id: accountId, tenant_id: tenantId, status: 'active' });
+
+  if (physicalCardId) {
+    const row = await base()
+      .where(function scoped() {
+        this.where('fuel_card_id', physicalCardId);
+        if (last4) {
+          this.orWhere(function legacyLast4() {
+            this.whereNull('fuel_card_id').where('card_number_last4', last4);
+          });
+        }
+      })
+      .first('driver_id');
+    if (row) return row;
+  }
+
+  if (last4) {
+    const row = await base()
+      .whereNull('fuel_card_id')
+      .where('card_number_last4', last4)
+      .first('driver_id');
+    if (row) return row;
+  }
+
+  const cntRow = await knex('fuel_cards')
+    .where({ fuel_card_account_id: accountId, tenant_id: tenantId })
+    .count('* as c')
+    .first();
+  const physicalCount = parseInt(cntRow?.c, 10) || 0;
+  if (physicalCount > 1) return null;
+
+  return base()
+    .whereNull('fuel_card_id')
+    .whereNull('card_number_last4')
+    .first('driver_id');
+}
+
 // ─── Duplicate detection ──────────────────────────────────────────────────────
 
 /**
@@ -356,9 +416,11 @@ async function commitBatch({ batchId, tenantId, operatingEntityId = null, import
     // ─── Card-driver assignment lookup (FN-461) ──────────────────────────────
     let driverCardMismatch = false;
     if (cardId) {
-      const activeAssignment = await knex('fuel_card_driver_assignments')
-        .where({ fuel_card_account_id: cardId, tenant_id: tenantId, status: 'active' })
-        .first('driver_id');
+      const activeAssignment = await findActiveCardDriverAssignment(
+        tenantId,
+        cardId,
+        normalized.card_number_masked
+      );
 
       if (activeAssignment) {
         // If CSV driver name matched a different driver, flag mismatch

@@ -62,6 +62,32 @@ async function validatePastEmployerAccess(pastEmployerId, req) {
 // Routes
 // ---------------------------------------------------------------------------
 
+/**
+ * @openapi
+ * /api/employer-investigations/overdue:
+ *   get:
+ *     summary: List overdue employer investigations
+ *     description: Retrieves employer investigations that are past their response deadline. Per 49 CFR 391.23 — Investigation and inquiries into driving record.
+ *     tags:
+ *       - Employment
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Array of overdue investigation records
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 type: object
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Tenant context is required
+ *       500:
+ *         description: Server error
+ */
 // GET /api/employer-investigations/overdue
 router.get('/overdue', async (req, res) => {
   const start = Date.now();
@@ -92,6 +118,37 @@ router.get('/overdue', async (req, res) => {
   }
 });
 
+/**
+ * @openapi
+ * /api/employer-investigations/driver/{driverId}:
+ *   get:
+ *     summary: Get investigation status for a driver
+ *     description: Retrieves the current employer investigation status for a specific driver. Per 49 CFR 391.23 — Investigation and inquiries into driving record.
+ *     tags:
+ *       - Employment
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: driverId
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: The driver ID
+ *     responses:
+ *       200:
+ *         description: Investigation status for the driver
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *       401:
+ *         description: Unauthorized
+ *       404:
+ *         description: Driver not found
+ *       500:
+ *         description: Server error
+ */
 // GET /api/employer-investigations/driver/:driverId
 router.get('/driver/:driverId', async (req, res) => {
   const start = Date.now();
@@ -119,6 +176,39 @@ router.get('/driver/:driverId', async (req, res) => {
   }
 });
 
+/**
+ * @openapi
+ * /api/employer-investigations/driver/{driverId}/initiate:
+ *   post:
+ *     summary: Initiate employer investigation for a driver
+ *     description: Begins the previous employer investigation process for a driver. Requires driver hire_date to be set. Per 49 CFR 391.23 — Investigation and inquiries into driving record.
+ *     tags:
+ *       - Employment
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: driverId
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: The driver ID
+ *     responses:
+ *       200:
+ *         description: Investigation initiated successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *       400:
+ *         description: Driver hire_date is required
+ *       401:
+ *         description: Unauthorized
+ *       404:
+ *         description: Driver not found
+ *       500:
+ *         description: Server error
+ */
 // POST /api/employer-investigations/driver/:driverId/initiate
 router.post('/driver/:driverId/initiate', async (req, res) => {
   const start = Date.now();
@@ -145,6 +235,37 @@ router.post('/driver/:driverId/initiate', async (req, res) => {
   }
 });
 
+/**
+ * @openapi
+ * /api/employer-investigations/{pastEmployerId}/send-inquiry:
+ *   post:
+ *     summary: Send inquiry to a past employer
+ *     description: Sends an initial investigation inquiry to a specific past employer. Per 49 CFR 391.23 — Investigation and inquiries into driving record.
+ *     tags:
+ *       - Employment
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: pastEmployerId
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: The past employer record ID
+ *     responses:
+ *       200:
+ *         description: Inquiry sent successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *       401:
+ *         description: Unauthorized
+ *       404:
+ *         description: Past employer not found
+ *       500:
+ *         description: Server error
+ */
 // POST /api/employer-investigations/:pastEmployerId/send-inquiry
 router.post('/:pastEmployerId/send-inquiry', async (req, res) => {
   const start = Date.now();
@@ -170,6 +291,37 @@ router.post('/:pastEmployerId/send-inquiry', async (req, res) => {
   }
 });
 
+/**
+ * @openapi
+ * /api/employer-investigations/{pastEmployerId}/send-follow-up:
+ *   post:
+ *     summary: Send follow-up to a past employer
+ *     description: Sends a follow-up inquiry to a past employer that has not yet responded. Per 49 CFR 391.23 — Investigation and inquiries into driving record.
+ *     tags:
+ *       - Employment
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: pastEmployerId
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: The past employer record ID
+ *     responses:
+ *       200:
+ *         description: Follow-up sent successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *       401:
+ *         description: Unauthorized
+ *       404:
+ *         description: Past employer not found
+ *       500:
+ *         description: Server error
+ */
 // POST /api/employer-investigations/:pastEmployerId/send-follow-up
 router.post('/:pastEmployerId/send-follow-up', async (req, res) => {
   const start = Date.now();
@@ -195,6 +347,60 @@ router.post('/:pastEmployerId/send-follow-up', async (req, res) => {
   }
 });
 
+/**
+ * @openapi
+ * /api/employer-investigations/{pastEmployerId}/record-response:
+ *   post:
+ *     summary: Record a response from a past employer
+ *     description: Records the investigation response received from a past employer. Per 49 CFR 391.23 — Investigation and inquiries into driving record.
+ *     tags:
+ *       - Employment
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: pastEmployerId
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: The past employer record ID
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - responseType
+ *             properties:
+ *               responseType:
+ *                 type: string
+ *                 description: Type of response received
+ *               responseData:
+ *                 type: object
+ *                 description: Response payload data
+ *               receivedVia:
+ *                 type: string
+ *                 description: Channel through which response was received (e.g. email, fax, mail)
+ *               documentId:
+ *                 type: string
+ *                 description: Associated document ID if applicable
+ *     responses:
+ *       200:
+ *         description: Response recorded successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *       400:
+ *         description: responseType is required
+ *       401:
+ *         description: Unauthorized
+ *       404:
+ *         description: Past employer not found
+ *       500:
+ *         description: Server error
+ */
 // POST /api/employer-investigations/:pastEmployerId/record-response
 router.post('/:pastEmployerId/record-response', async (req, res) => {
   const start = Date.now();
@@ -231,6 +437,46 @@ router.post('/:pastEmployerId/record-response', async (req, res) => {
   }
 });
 
+/**
+ * @openapi
+ * /api/employer-investigations/{pastEmployerId}/document-no-response:
+ *   post:
+ *     summary: Document no response from a past employer
+ *     description: Documents that a past employer failed to respond to the investigation inquiry within the required timeframe. Per 49 CFR 391.23 — Investigation and inquiries into driving record.
+ *     tags:
+ *       - Employment
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: pastEmployerId
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: The past employer record ID
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               notes:
+ *                 type: string
+ *                 description: Additional notes about the non-response
+ *     responses:
+ *       200:
+ *         description: No-response documented successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *       401:
+ *         description: Unauthorized
+ *       404:
+ *         description: Past employer not found
+ *       500:
+ *         description: Server error
+ */
 // POST /api/employer-investigations/:pastEmployerId/document-no-response
 router.post('/:pastEmployerId/document-no-response', async (req, res) => {
   const start = Date.now();
@@ -257,6 +503,39 @@ router.post('/:pastEmployerId/document-no-response', async (req, res) => {
   }
 });
 
+/**
+ * @openapi
+ * /api/employer-investigations/driver/{driverId}/history-file:
+ *   get:
+ *     summary: Get investigation history file for a driver
+ *     description: Retrieves the complete investigation history file for a driver, including all past employer inquiry records. Per 49 CFR 391.23 — Investigation and inquiries into driving record.
+ *     tags:
+ *       - Employment
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: driverId
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: The driver ID
+ *     responses:
+ *       200:
+ *         description: Array of investigation history records
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 type: object
+ *       401:
+ *         description: Unauthorized
+ *       404:
+ *         description: Driver not found
+ *       500:
+ *         description: Server error
+ */
 // GET /api/employer-investigations/driver/:driverId/history-file
 router.get('/driver/:driverId/history-file', async (req, res) => {
   const start = Date.now();

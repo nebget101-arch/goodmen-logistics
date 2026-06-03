@@ -1,3 +1,4 @@
+require('./tracing');
 require('dotenv').config();
 
 const express = require('express');
@@ -23,68 +24,128 @@ setDatabase({ knex });
 // ─── Auth middleware (needed for FMCSA safety routes) ────────────────────────
 const authMiddleware = require('@goodmen/shared/middleware/auth-middleware');
 const tenantContextMiddleware = require('@goodmen/shared/middleware/tenant-context-middleware');
+const requireInternalTenant = require('@goodmen/shared/middleware/require-internal-tenant');
+const { loadUserRbac, requirePermission } = require('@goodmen/shared/middleware/rbac-middleware');
 
-const swaggerOptions = {
-  definition: {
-    openapi: '3.0.0',
-    info: {
-      title: 'Integrations Service API',
-      version: '1.0.0',
-      description: 'API documentation for the Integrations microservice.'
-    },
-    components: {
-      securitySchemes: {
-        bearerAuth: {
-          type: 'http',
-          scheme: 'bearer',
-          bearerFormat: 'JWT'
-        }
-      }
-    },
-    security: [
-      {
-        bearerAuth: []
-      }
-    ]
-  },
+const { buildSwaggerOptions } = require('@goodmen/shared/config/swagger');
+const swaggerOptions = buildSwaggerOptions({
+  title: 'Integrations Service API',
+  description: 'API documentation for the Integrations microservice.',
   apis: [
     path.join(__dirname, '../../packages/goodmen-shared/routes/*.js'),
     __filename
   ]
-};
+});
 
 const swaggerSpec = swaggerJsdoc(swaggerOptions);
 
 const scanBridgeRouter = require('@goodmen/shared/routes/scan-bridge');
 const fmcsaRouter = require('@goodmen/shared/routes/fmcsa');
 const fmcsaSafetyRouter = require('@goodmen/shared/routes/fmcsa-safety');
+const { createImportsRouter } = require('@goodmen/shared/routes/fmcsa-imports');
+const inboundEmailWebhookRouter = require('./routes/inbound-email-webhook');
+const inboundEmailRouter = require('@goodmen/shared/routes/inbound-email');
 
 app.use('/api/scan-bridge', scanBridgeRouter);
 app.use('/api/fmcsa', fmcsaRouter);
 app.use('/api/fmcsa/safety', authMiddleware, tenantContextMiddleware, fmcsaSafetyRouter);
 
+// Inbound email provider webhook — public endpoint, auth via shared secret.
+app.use('/api/webhooks/email-inbound', inboundEmailWebhookRouter);
+
+// Tenant-facing inbound-email settings and logs (authenticated).
+app.use(
+  '/api/tenants/me/inbound-email',
+  authMiddleware,
+  tenantContextMiddleware,
+  inboundEmailRouter
+);
+
+app.get('/api-docs-json', (_req, res) => res.json(swaggerSpec));
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 
 // ─── Bull Queue initialization ───────────────────────────────────────────────
+// FN-1451: SAFER scraper + Bull scrape queue retired. FMCSA reference data
+// now comes from the bulk-importer pipeline (FN-1412/1420/1422) and is read
+// via fmcsa-reference (FN-1427).
 const REDIS_URL = process.env.REDIS_URL || 'redis://localhost:6379';
-let scrapeQueueInstance = null;
+let importQueueInstance = null;
 
-async function initScrapeQueue() {
+async function initImportQueue() {
   if (!process.env.REDIS_URL) {
-    console.warn('[integrations] REDIS_URL not set — FMCSA scrape queue disabled. Dashboard API still works.');
+    console.warn('[integrations] REDIS_URL not set — FMCSA import queue disabled.');
+    app.locals._fmcsaImportInitReason = 'redis_url_missing';
     return;
   }
   try {
-    const { createScrapeQueue } = require('@goodmen/shared/services/fmcsa-scrape-queue');
-    scrapeQueueInstance = createScrapeQueue(knex, REDIS_URL);
-    fmcsaSafetyRouter.initQueue(scrapeQueueInstance);
-    scrapeQueueInstance.initScheduler();
-    console.log('[integrations] FMCSA scrape queue initialized with daily scheduler');
+    const { createImportQueue } = require('@goodmen/shared/services/fmcsa-import-queue');
+    const { getRegisteredImporters } = require('@goodmen/shared/services/fmcsa-importer/register-importers');
+    importQueueInstance = createImportQueue({ redisUrl: REDIS_URL });
+    // FN-1452: bind the five FMCSA file importers to the queue's registry.
+    // Without this, every `run-import` job hits the no-importer branch and
+    // writes status='error' to fmcsa.import_runs.
+    for (const [file, fn] of getRegisteredImporters()) {
+      importQueueInstance.registerImporter(file, fn);
+    }
+    await importQueueInstance.initScheduler();
+    console.log('[integrations] FMCSA import queue initialized (5 importers registered)');
   } catch (err) {
-    console.error('[integrations] Failed to initialize scrape queue:', err.message);
-    console.error('[integrations] FMCSA scraping will be unavailable. Ensure Redis is running.');
+    // FN-1453: persist the boot error so the 503 body can surface the actual
+    // cause instead of a misleading "Redis not connected" message. Truncated
+    // and stack-stripped to keep the public payload bounded.
+    const message = (err && err.message) ? String(err.message) : String(err);
+    app.locals._fmcsaImportInitError = message.slice(0, 500);
+    app.locals._fmcsaImportInitReason = 'init_error';
+    importQueueInstance = null;
+    console.error('[integrations] Failed to initialize import queue:', message);
   }
 }
+
+// FMCSA import control plane (FleetNeuron-internal admin only).
+// The router is built lazily once the queue is constructed during startup.
+app.use(
+  '/api/fmcsa/imports',
+  authMiddleware,
+  tenantContextMiddleware,
+  requireInternalTenant,
+  loadUserRbac,
+  requirePermission('fmcsa.imports.manage'),
+  (req, res, next) => {
+    // FN-1453: distinguish between three distinct boot/runtime states so
+    // operators see the actual cause instead of a generic "Redis not
+    // connected" string for every 503.
+    if (!importQueueInstance) {
+      if (app.locals._fmcsaImportInitReason === 'redis_url_missing') {
+        return res.status(503).json({
+          success: false,
+          error: 'FMCSA import queue not initialized: REDIS_URL is not configured on integrations-service',
+        });
+      }
+      if (app.locals._fmcsaImportInitError) {
+        return res.status(503).json({
+          success: false,
+          error: `FMCSA import queue failed to initialize: ${app.locals._fmcsaImportInitError}`,
+        });
+      }
+      // Init has not yet completed (request landed before app.listen's
+      // initImportQueue() finished). Rare but possible during cold start.
+      return res.status(503).json({
+        success: false,
+        error: 'FMCSA import queue not initialized',
+      });
+    }
+    if (typeof importQueueInstance.isReady === 'function' && !importQueueInstance.isReady()) {
+      return res.status(503).json({
+        success: false,
+        error: 'FMCSA import queue not ready: Redis connection lost',
+      });
+    }
+    if (!app.locals._fmcsaImportsRouter) {
+      app.locals._fmcsaImportsRouter = createImportsRouter({ importQueue: importQueueInstance });
+    }
+    return app.locals._fmcsaImportsRouter(req, res, next);
+  }
+);
 
 /**
  * @openapi
@@ -101,20 +162,25 @@ app.get('/health', (req, res) => {
   res.json({
     status: 'ok',
     service: 'goodmen-integrations-service',
-    scrapeQueue: scrapeQueueInstance ? 'connected' : 'unavailable',
     timestamp: new Date().toISOString()
   });
 });
 
 app.listen(PORT, async () => {
+  try {
+    await knex.migrate.latest();
+    console.log('✅ Database migrations applied');
+  } catch (err) {
+    console.error('⚠️  Migration error (non-fatal):', err.message);
+  }
   console.log(`🔌 Integrations service running on http://localhost:${PORT}`);
-  await initScrapeQueue();
+  await initImportQueue();
 });
 
 // Graceful shutdown
 process.on('SIGTERM', async () => {
-  if (scrapeQueueInstance) {
-    await scrapeQueueInstance.shutdown();
+  if (importQueueInstance) {
+    await importQueueInstance.shutdown();
   }
   await knex.destroy();
   process.exit(0);
