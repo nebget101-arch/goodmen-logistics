@@ -94,6 +94,23 @@ services:
         value: production
       - key: PORT
         value: 10004
+      # Telematics ingestion (FN-1653). Set secret values in the Render dashboard —
+      # never commit secret values. TELEMATICS_WEBHOOK_SECRET gates the ?secret=
+      # query param; the per-provider *_SAMSARA/*_MOTIVE secrets verify the HMAC
+      # signature header; the *_API_TOKEN values authenticate the polling fallback.
+      - key: TELEMATICS_SAMSARA_API_TOKEN
+        sync: false
+      - key: TELEMATICS_MOTIVE_API_TOKEN
+        sync: false
+      - key: TELEMATICS_WEBHOOK_SECRET
+        sync: false
+      - key: TELEMATICS_WEBHOOK_SECRET_SAMSARA
+        sync: false
+      - key: TELEMATICS_WEBHOOK_SECRET_MOTIVE
+        sync: false
+      # Enable the in-process polling-fallback scheduler (single-instance plan).
+      - key: TELEMATICS_POLL_INTERVAL_MINUTES
+        value: 10
 
   - type: web
     name: fleetneuron-auth-users-service
@@ -186,6 +203,27 @@ services:
         fromDatabase:
           name: safetyapp-db
           property: port
+      - key: NODE_ENV
+        value: production
+
+  # Telematics partition maintenance (FN-1662 / FN-1660). Daily: pre-creates
+  # upcoming vehicle_position_pings daily partitions + drops partitions past the
+  # 30-day retention horizon. pg_cron is unavailable on Render, so this runs as a
+  # scheduled job. The SQL function pre-creates a forward buffer, so a missed run
+  # is harmless; a multi-day outage (>~7d) would block inserts for new days.
+  - type: cron
+    name: fleetneuron-telematics-partition-cron
+    runtime: node
+    plan: starter
+    rootDir: backend/packages/goodmen-database
+    schedule: "30 7 * * *"
+    buildCommand: npm install
+    startCommand: node scripts/maintain_telematics_partitions.js
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: safetyapp-db
+          property: connectionString
       - key: NODE_ENV
         value: production
 

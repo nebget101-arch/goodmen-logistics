@@ -412,6 +412,10 @@ app.use('/api/insights', buildProxy(REPORTING_SERVICE_URL, 'reporting'));
 app.use('/api/scan-bridge', buildProxy(INTEGRATIONS_SERVICE_URL, 'integrations'));
 app.use('/api/fmcsa', buildProxy(INTEGRATIONS_SERVICE_URL, 'integrations'));
 app.use('/api/webhooks/email-inbound', buildProxy(INTEGRATIONS_SERVICE_URL, 'integrations'));
+// Telematics provider webhooks (Samsara/Motive) — POST /api/webhooks/telematics/:provider?secret=<...>
+// Mirrors the SendGrid inbound-email proxy; secret + provider-signature verification happen downstream
+// in fleetneuron-integrations-service. See .agent/docs/render_services.md (Telematics section) and FN-1653.
+app.use('/api/webhooks/telematics', buildProxy(INTEGRATIONS_SERVICE_URL, 'integrations'));
 app.use('/api/tenants/me/inbound-email', buildProxy(INTEGRATIONS_SERVICE_URL, 'integrations'));
 app.use('/api/auth', buildProxy(AUTH_USERS_SERVICE_URL, 'auth-users'));
 app.use('/api/stripe', buildProxy(AUTH_USERS_SERVICE_URL, 'auth-users'));
