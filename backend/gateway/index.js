@@ -495,6 +495,11 @@ app.use(
   '/api/vehicles',
   buildProxy(VEHICLES_MAINTENANCE_SERVICE_URL, 'vehicles')
 );
+// Live-map vehicle positions read API (FN-1672)
+app.use(
+  '/api/vehicle-positions',
+  buildProxy(VEHICLES_MAINTENANCE_SERVICE_URL, 'vehicles')
+);
 app.use(
   '/api/maintenance',
   buildProxy(VEHICLES_MAINTENANCE_SERVICE_URL, 'vehicles')

@@ -33,6 +33,47 @@ function buildEnvelope({ tenantId, event, payload }) {
 	};
 }
 
+/**
+ * FN-1672 — Live-map broadcast helper.
+ *
+ * Normalizes a freshly-ingested vehicle position into the wire shape the
+ * `/api/vehicle-positions` read endpoint emits per marker, then broadcasts it
+ * on the `vehicle:position` event so the live map can patch the marker in place
+ * (the client already holds the static vehicle metadata from the initial list).
+ *
+ * Called fire-and-forget from the telematics ingest path
+ * (integrations-service/services/telematics-ingest-service.js) after a ping is
+ * persisted. Like emitToTenant, it never throws and never blocks ingestion.
+ */
+function buildVehiclePositionPayload(position = {}) {
+	const num = (v) => (v == null || v === '' ? null : Number(v));
+	const ts =
+		position.ts == null
+			? null
+			: position.ts instanceof Date
+				? position.ts.toISOString()
+				: String(position.ts);
+	return {
+		vehicleId: position.vehicleId != null ? String(position.vehicleId) : null,
+		lat: num(position.lat),
+		lng: num(position.lng),
+		speedMph: num(position.speedMph),
+		headingDeg: num(position.headingDeg),
+		ts
+	};
+}
+
+async function emitVehiclePosition({ tenantId, position } = {}) {
+	if (!tenantId || !position || position.vehicleId == null) {
+		return { delivered: false, reason: 'missing_args' };
+	}
+	return emitToTenant({
+		tenantId,
+		event: 'vehicle:position',
+		payload: buildVehiclePositionPayload(position)
+	});
+}
+
 async function emitToTenant({ tenantId, event, payload } = {}) {
 	if (!tenantId || !event) {
 		return { delivered: false, reason: 'missing_args' };
@@ -69,6 +110,8 @@ async function emitToTenant({ tenantId, event, payload } = {}) {
 
 module.exports = {
 	emitToTenant,
+	emitVehiclePosition,
 	// exposed for tests
-	_buildEnvelope: buildEnvelope
+	_buildEnvelope: buildEnvelope,
+	_buildVehiclePositionPayload: buildVehiclePositionPayload
 };
