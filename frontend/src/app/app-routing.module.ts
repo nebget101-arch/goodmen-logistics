@@ -128,6 +128,12 @@ const routes: Routes = [
     loadChildren: () => import('./components/geofences/geofences.module').then(m => m.GeofencesModule)
   },
   {
+    // FN-1671 — live fleet map; lazy-loaded to keep leaflet.markercluster out
+    // of the initial bundle (mirrors the geofences route above).
+    path: 'tracking',
+    loadChildren: () => import('./components/tracking-map/tracking-map.module').then(m => m.TrackingMapModule)
+  },
+  {
     path: 'roadside',
     component: RoadsideBoardComponent,
     canActivate: [AuthGuard, PlanGuard, PermissionGuard],

@@ -38,6 +38,7 @@ const swaggerOptions = buildSwaggerOptions({
 const swaggerSpec = swaggerJsdoc(swaggerOptions);
 
 const vehiclesRouter = require('@goodmen/shared/routes/vehicles');
+const vehiclePositionsRouter = require('@goodmen/shared/routes/vehicle-positions');
 const maintenanceRouter = require('@goodmen/shared/routes/maintenance');
 const equipmentRouter = require('@goodmen/shared/routes/equipment');
 const workOrdersRouter = require('@goodmen/shared/routes/work-orders-hub');
@@ -54,6 +55,7 @@ app.get('/api-docs-json', (_req, res) => res.json(swaggerSpec));
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 
 app.use('/api/vehicles', authMiddleware, tenantContextMiddleware, vehiclesRouter);
+app.use('/api/vehicle-positions', authMiddleware, tenantContextMiddleware, vehiclePositionsRouter);
 app.use('/api/maintenance', authMiddleware, tenantContextMiddleware, maintenanceRouter);
 app.use('/api/equipment', authMiddleware, tenantContextMiddleware, equipmentRouter);
 app.use('/api/work-orders', authMiddleware, tenantContextMiddleware, workOrdersRouter);
