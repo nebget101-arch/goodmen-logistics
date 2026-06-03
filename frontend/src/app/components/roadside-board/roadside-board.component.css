@@ -133,6 +133,72 @@
 .btn-icon:focus-visible { outline: none; box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.45); }
 .btn-icon:disabled { opacity: 0.5; cursor: default; }
 
+/* ── CTA buttons (New Call / Start triage / Create public link, etc.) ────────
+   The global .btn-primary/.btn-secondary supply the gradient surface + border
+   color but NOT the box model (those live on .btn, which these CTAs don't use).
+   Own the layout here so the CTAs read as comfortable, inviting buttons. ───── */
+.roadside-board .btn-primary,
+.roadside-board .btn-secondary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  min-height: 44px;
+  padding: 0 20px;
+  border-width: 1px;
+  border-style: solid;
+  border-radius: 12px;
+  font-size: 0.9rem;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  line-height: 1;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: transform 140ms ease, box-shadow 200ms ease, border-color 160ms ease, filter 160ms ease;
+}
+.roadside-board .btn-primary .material-symbols-outlined,
+.roadside-board .btn-secondary .material-symbols-outlined { font-size: 19px; line-height: 1; }
+
+/* Primary CTA — stronger affordance: teal/cyan glow that lifts on hover */
+.roadside-board .btn-primary {
+  box-shadow:
+    0 10px 24px rgba(14, 116, 144, 0.45),
+    0 0 18px rgba(45, 212, 191, 0.25),
+    inset 0 0 0 1px rgba(125, 211, 252, 0.28);
+}
+.roadside-board .btn-primary:hover:not(:disabled) {
+  transform: translateY(-1px);
+  border-color: rgba(103, 232, 249, 0.9);
+  box-shadow:
+    0 14px 30px rgba(14, 116, 144, 0.55),
+    0 0 26px rgba(45, 212, 191, 0.35),
+    inset 0 0 0 1px rgba(125, 211, 252, 0.34);
+  filter: saturate(1.08);
+}
+
+/* Secondary CTA — quieter, clearly distinct from the primary */
+.roadside-board .btn-secondary:hover:not(:disabled) {
+  transform: translateY(-1px);
+  border-color: rgba(148, 163, 184, 0.75);
+  filter: brightness(1.06);
+}
+
+.roadside-board .btn-primary:active:not(:disabled),
+.roadside-board .btn-secondary:active:not(:disabled) { transform: translateY(0); }
+
+.roadside-board .btn-primary:focus-visible,
+.roadside-board .btn-secondary:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.5);
+}
+
+.roadside-board .btn-primary:disabled,
+.roadside-board .btn-secondary:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none;
+}
+
 /* ── Form fields ─────────────────────────────────────────────────────────── */
 .form-field { display: block; margin-bottom: 12px; }
 .form-field > .lbl {
@@ -211,8 +277,12 @@
 
 /* ── Left rail ───────────────────────────────────────────────────────────── */
 .rail { position: sticky; top: 78px; display: flex; flex-direction: column; gap: 12px; }
-.rail-filters { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-.rail-filters .form-field { margin: 0; }
+.rail-filters { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; align-items: end; }
+/* min-width:0 lets each select shrink inside its 1fr track so the Status field
+   never crosses the rail's right border (grid items default to min-width:auto).
+   The open dropdown panel is a CDK overlay on <body>, so it is never clipped. */
+.rail-filters .form-field { margin: 0; min-width: 0; }
+.rail-filters app-ai-select { display: block; width: 100%; min-width: 0; }
 
 .call-list { display: flex; flex-direction: column; gap: 8px; max-height: 60vh; overflow-y: auto; }
 
