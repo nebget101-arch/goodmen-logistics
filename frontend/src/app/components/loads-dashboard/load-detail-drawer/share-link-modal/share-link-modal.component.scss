@@ -1,0 +1,343 @@
+/*
+ * FN-1676 — Share-tracking-link modal styles.
+ * AI dark-theme tokens only (matches the load detail drawer, FN-1040).
+ */
+
+$modal-bg: rgba(15, 23, 42, 0.98);
+$modal-header-bg: rgba(2, 6, 23, 0.92);
+$modal-border: var(--border-color);
+$text: #e5e7eb;
+$text-strong: #e5f9ff;
+$muted: #94a3b8;
+$accent: #67e8f9;
+$accent-soft: rgba(56, 189, 248, 0.18);
+$accent-border: rgba(56, 189, 248, 0.35);
+
+.share-modal__overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(2, 6, 23, 0.7);
+  backdrop-filter: blur(2px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1200;
+  padding: 16px;
+}
+
+.share-modal__dialog {
+  background: $modal-bg;
+  border: 1px solid $modal-border;
+  border-radius: 14px;
+  width: 100%;
+  max-width: 460px;
+  max-height: calc(100vh - 48px);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-shadow:
+    0 24px 56px rgba(0, 0, 0, 0.6),
+    0 0 0 1px rgba(15, 23, 42, 1);
+  color: $text;
+}
+
+/* ── Header ── */
+.share-modal__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px 20px;
+  background: $modal-header-bg;
+  border-bottom: 1px solid $modal-border;
+}
+
+.share-modal__heading {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+
+  h3 {
+    margin: 0;
+    font-size: 16px;
+    font-weight: 600;
+    color: $text-strong;
+  }
+}
+
+.share-modal__heading-icon {
+  color: $accent;
+  font-size: 24px;
+}
+
+.share-modal__subtitle {
+  margin: 2px 0 0;
+  font-size: 12px;
+  color: $muted;
+}
+
+.share-modal__close {
+  background: transparent;
+  border: none;
+  color: $muted;
+  cursor: pointer;
+  display: flex;
+  padding: 4px;
+  border-radius: 6px;
+  transition: background 0.15s ease, color 0.15s ease;
+
+  &:hover {
+    background: $accent-soft;
+    color: $accent;
+  }
+}
+
+/* ── Body ── */
+.share-modal__body {
+  padding: 16px 20px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.share-modal__state {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: $muted;
+  font-size: 14px;
+  padding: 16px 0;
+}
+
+.share-modal__field-label {
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: $muted;
+  margin-bottom: -4px;
+}
+
+/* Always-on chips */
+.share-modal__always {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+}
+
+.share-modal__always-label {
+  color: $muted;
+}
+
+.share-modal__chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: $accent-soft;
+  border: 1px solid $accent-border;
+  color: $text-strong;
+  font-size: 11px;
+
+  .material-symbols-outlined {
+    font-size: 14px;
+  }
+}
+
+/* ── Reveal toggles ── */
+.share-modal__toggles {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid $modal-border;
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.share-modal__toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+
+  & + & {
+    border-top: 1px solid $modal-border;
+  }
+}
+
+.share-modal__toggle-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.share-modal__toggle-name {
+  font-size: 14px;
+  color: $text;
+}
+
+.share-modal__toggle-hint {
+  font-size: 11px;
+  color: $muted;
+}
+
+/* Switch */
+.share-modal__switch {
+  flex-shrink: 0;
+  position: relative;
+  width: 40px;
+  height: 22px;
+  border-radius: 999px;
+  border: 1px solid $modal-border;
+  background: rgba(2, 6, 23, 0.6);
+  cursor: pointer;
+  padding: 0;
+  transition: background 0.18s ease, border-color 0.18s ease;
+
+  &.is-on {
+    background: $accent;
+    border-color: $accent;
+  }
+}
+
+.share-modal__switch-knob {
+  position: absolute;
+  top: 50%;
+  left: 2px;
+  transform: translateY(-50%);
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #e5e7eb;
+  transition: left 0.18s ease;
+
+  .is-on & {
+    left: 20px;
+    background: #02131a;
+  }
+}
+
+/* ── URL row ── */
+.share-modal__url-row {
+  display: flex;
+  gap: 8px;
+}
+
+.share-modal__url-input {
+  flex: 1;
+  min-width: 0;
+  background: rgba(2, 6, 23, 0.6);
+  border: 1px solid $modal-border;
+  border-radius: 8px;
+  color: $text-strong;
+  font-size: 13px;
+  padding: 9px 12px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  &:focus {
+    outline: none;
+    border-color: $accent-border;
+  }
+}
+
+.share-modal__copy-btn {
+  flex-shrink: 0;
+}
+
+.share-modal__copy-feedback {
+  margin: 0;
+  font-size: 12px;
+  color: $accent;
+}
+
+/* ── Meta rows ── */
+.share-modal__meta {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 14px;
+  border: 1px solid $modal-border;
+  border-radius: 10px;
+  background: rgba(2, 6, 23, 0.4);
+}
+
+.share-modal__meta-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: $text;
+
+  .material-symbols-outlined {
+    font-size: 18px;
+    color: $muted;
+  }
+
+  &--views strong {
+    color: $accent;
+  }
+}
+
+.share-modal__meta-sub {
+  color: $muted;
+  font-size: 12px;
+}
+
+.share-modal__manage-note {
+  font-size: 13px;
+  color: $muted;
+  line-height: 1.5;
+}
+
+/* ── Banners ── */
+.share-modal__banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  padding: 9px 12px;
+  border-radius: 8px;
+
+  .material-symbols-outlined {
+    font-size: 18px;
+  }
+
+  &--error {
+    color: #fca5a5;
+    background: rgba(127, 29, 29, 0.35);
+    border: 1px solid rgba(248, 113, 113, 0.3);
+  }
+
+  &--success {
+    color: #86efac;
+    background: rgba(20, 83, 45, 0.35);
+    border: 1px solid rgba(74, 222, 128, 0.3);
+  }
+}
+
+/* ── Footer ── */
+.share-modal__footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 14px 20px;
+  background: $modal-header-bg;
+  border-top: 1px solid $modal-border;
+}
+
+.spin {
+  animation: share-modal-spin 1s linear infinite;
+}
+
+@keyframes share-modal-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
