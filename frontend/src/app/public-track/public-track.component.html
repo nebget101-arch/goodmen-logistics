@@ -1,0 +1,122 @@
+<!--
+  FN-1678 (Story F) — public, unauthenticated tracking page at /track/:token.
+  No app chrome. Mobile-first: status + ETA hero, ~60vh map, milestone timeline,
+  "Last updated" line, light FleetNeuron AI branding. Honors reveal_options.
+-->
+<main class="pt" role="main">
+  <!-- ── Loading ──────────────────────────────────────────────────────────── -->
+  <section class="pt__state" *ngIf="state === 'loading'" aria-busy="true">
+    <span class="material-symbols-outlined pt__spin" aria-hidden="true">progress_activity</span>
+    <p>Loading tracking…</p>
+  </section>
+
+  <!-- ── Error / empty states ─────────────────────────────────────────────── -->
+  <section class="pt__state pt__state--error" *ngIf="state === 'error'" role="alert">
+    <span class="material-symbols-outlined pt__state-icon" aria-hidden="true">
+      {{ errorReason === 'not_found' ? 'link_off' : errorReason === 'gone' ? 'schedule' : 'cloud_off' }}
+    </span>
+    <h1 class="pt__state-title" *ngIf="errorReason === 'not_found'">Tracking link not found</h1>
+    <h1 class="pt__state-title" *ngIf="errorReason === 'gone'">This tracking link has expired</h1>
+    <h1 class="pt__state-title" *ngIf="errorReason === 'error'">Can’t load tracking right now</h1>
+
+    <p class="pt__state-text" *ngIf="errorReason === 'not_found'">
+      Double-check the link you were sent. It may be incomplete or no longer valid.
+    </p>
+    <p class="pt__state-text" *ngIf="errorReason === 'gone'">
+      The sender turned off this link or it reached its expiry date.
+    </p>
+    <p class="pt__state-text" *ngIf="errorReason === 'error'">
+      Something went wrong on our end. Please try again in a moment.
+    </p>
+
+    <button type="button" class="pt__retry" (click)="retry()" *ngIf="errorReason === 'error'">
+      <span class="material-symbols-outlined" aria-hidden="true">refresh</span> Try again
+    </button>
+
+    <p class="pt__brand pt__brand--standalone">
+      <span class="material-symbols-outlined" aria-hidden="true">bolt</span>
+      Powered by <strong>FleetNeuron&nbsp;AI</strong>
+    </p>
+  </section>
+
+  <!-- ── Ready ────────────────────────────────────────────────────────────── -->
+  <ng-container *ngIf="state === 'ready' && payload as p">
+    <!-- SR-only live region: announces status changes between polls. -->
+    <p class="pt__sr-only" aria-live="polite">{{ statusAnnouncement }}</p>
+
+    <header class="pt__header">
+      <div class="pt__hero">
+        <span class="pt__pill" [ngClass]="statusModifier">
+          <span class="pt__pill-dot" aria-hidden="true"></span>
+          {{ p.statusLabel }}
+        </span>
+        <p class="pt__load">Load {{ p.loadNumber }}</p>
+      </div>
+
+      <div class="pt__eta" *ngIf="p.eta as eta">
+        <span class="pt__eta-label">Estimated arrival</span>
+        <span class="pt__eta-value">{{ eta | date: 'EEE, MMM d • h:mm a' }}</span>
+      </div>
+    </header>
+
+    <!-- Map ≈60% of the viewport. -->
+    <section class="pt__map-wrap" aria-label="Map showing the shipment location">
+      <div #mapEl class="pt__map" role="img"
+           [attr.aria-label]="'Map showing the truck near ' + (p.currentPosition ? 'its current location' : p.destination.label)"></div>
+      <div class="pt__map-empty" *ngIf="!p.currentPosition && !p.origin.lat && !p.destination.lat">
+        <span class="material-symbols-outlined" aria-hidden="true">explore_off</span>
+        Location not available yet
+      </div>
+    </section>
+
+    <!-- Revealed driver / vehicle (reveal-gated). -->
+    <section class="pt__facts"
+             *ngIf="(p.reveal.driverName && p.driverName) || (p.reveal.vehicleNumber && p.vehicleNumber)">
+      <div class="pt__fact" *ngIf="p.reveal.driverName && p.driverName">
+        <span class="material-symbols-outlined" aria-hidden="true">person</span>
+        <span class="pt__fact-label">Driver</span>
+        <span class="pt__fact-value">{{ p.driverName }}</span>
+      </div>
+      <div class="pt__fact" *ngIf="p.reveal.vehicleNumber && p.vehicleNumber">
+        <span class="material-symbols-outlined" aria-hidden="true">local_shipping</span>
+        <span class="pt__fact-label">Unit</span>
+        <span class="pt__fact-value">{{ p.vehicleNumber }}</span>
+      </div>
+    </section>
+
+    <!-- Milestone timeline. -->
+    <section class="pt__timeline" aria-label="Shipment progress">
+      <ol class="pt__steps">
+        <li class="pt__step" *ngFor="let m of p.milestones; trackBy: trackMilestone"
+            [ngClass]="'is-' + m.state"
+            [attr.aria-current]="m.state === 'current' ? 'step' : null">
+          <span class="pt__step-marker" aria-hidden="true">
+            <span class="material-symbols-outlined" *ngIf="m.state === 'complete'">check</span>
+          </span>
+          <span class="pt__step-body">
+            <span class="pt__step-label">
+              {{ m.label }}
+              <span class="pt__sr-only" *ngIf="m.state === 'complete'"> (completed)</span>
+              <span class="pt__sr-only" *ngIf="m.state === 'current'"> (current)</span>
+            </span>
+            <span class="pt__step-meta" *ngIf="m.location">{{ m.location }}</span>
+            <span class="pt__step-time" *ngIf="m.timestamp">{{ m.timestamp | date: 'MMM d, h:mm a' }}</span>
+            <span class="pt__step-time pt__step-time--pending" *ngIf="!m.timestamp">—</span>
+          </span>
+        </li>
+      </ol>
+    </section>
+
+    <!-- Footer: freshness + branding. -->
+    <footer class="pt__footer">
+      <span class="pt__updated">
+        <span class="material-symbols-outlined" aria-hidden="true">sync</span>
+        {{ lastUpdatedLabel }}
+      </span>
+      <span class="pt__brand">
+        <span class="material-symbols-outlined" aria-hidden="true">bolt</span>
+        Powered by <strong>FleetNeuron&nbsp;AI</strong>
+      </span>
+    </footer>
+  </ng-container>
+</main>
