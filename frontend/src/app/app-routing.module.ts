@@ -160,6 +160,14 @@ const routes: Routes = [
   { path: 'roadside/:callId', component: PublicRoadsideComponent },
   // Public employer investigation response (no AuthGuard — token-validated)
   { path: 'employer-response/:tokenId', component: EmployerResponseComponent },
+  // FN-1678 (Story F) — public shipment tracking. Unauthenticated, no app
+  // shell, no guard; token-validated server-side. Lazy standalone component so
+  // the map library stays out of the authenticated bundle.
+  {
+    path: 'track/:token',
+    loadComponent: () =>
+      import('./public-track/public-track.component').then(m => m.PublicTrackComponent)
+  },
   { path: 'shop-clients', loadChildren: () => import('./customer-management/customer-management.module').then(m => m.CustomerManagementModule) },
   { path: 'invoices', loadChildren: () => import('./invoicing/invoicing.module').then(m => m.InvoicingModule) },
   { path: 'settlements', loadChildren: () => import('./settlements/settlements.module').then(m => m.SettlementsModule) },
