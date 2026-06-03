@@ -20,13 +20,20 @@
 
 const knex = require('@goodmen/shared/config/knex');
 const dtLogger = require('@goodmen/shared/utils/logger');
+const { emitVehiclePosition } = require('@goodmen/shared/services/websocket.service');
 
 const PINGS_TABLE = 'vehicle_position_pings';
 const DEVICES_TABLE = 'telematics_devices';
 const PROVIDERS_TABLE = 'telematics_providers';
+const VEHICLES_TABLE = 'vehicles';
 
 // Cache column introspection so we only pay it once per process.
 const _columnCache = new Map();
+
+// vehicle_id → tenant_id, cached for the live-map broadcast (FN-1672). A vehicle
+// never changes tenant in practice, so memoizing for the process lifetime keeps
+// the hot ingest path from re-querying `vehicles` on every ping.
+const _vehicleTenantCache = new Map();
 
 async function tableColumns(table) {
   if (_columnCache.has(table)) return _columnCache.get(table);
@@ -44,6 +51,60 @@ async function tableColumns(table) {
 /** Reset the column cache (tests). */
 function _resetColumnCache() {
   _columnCache.clear();
+  _vehicleTenantCache.clear();
+}
+
+/**
+ * Resolve a vehicle's tenant_id for the live-map broadcast. Memoized and
+ * schema-defensive: returns null (broadcast no-ops) when the table/column is
+ * missing or the vehicle is unknown, rather than throwing on the ingest path.
+ */
+async function resolveVehicleTenant(vehicleId) {
+  if (vehicleId == null) return null;
+  if (_vehicleTenantCache.has(vehicleId)) return _vehicleTenantCache.get(vehicleId);
+  let tenantId = null;
+  try {
+    const cols = await tableColumns(VEHICLES_TABLE);
+    if (cols.has('tenant_id')) {
+      const row = await knex(VEHICLES_TABLE)
+        .where('id', vehicleId)
+        .select('tenant_id')
+        .first();
+      tenantId = row ? row.tenant_id : null;
+    }
+  } catch (err) {
+    dtLogger.error('telematics_vehicle_tenant_resolve_failed', err, { vehicleId });
+    tenantId = null;
+  }
+  _vehicleTenantCache.set(vehicleId, tenantId);
+  return tenantId;
+}
+
+/**
+ * Broadcast a freshly-persisted ping to the tenant's live map (FN-1672).
+ * Fire-and-forget: never awaited by ingestion, never throws.
+ */
+async function broadcastPing(vehicleId, ping) {
+  try {
+    const tenantId = await resolveVehicleTenant(vehicleId);
+    if (!tenantId) return;
+    await emitVehiclePosition({
+      tenantId,
+      position: {
+        vehicleId,
+        lat: ping.lat,
+        lng: ping.lng,
+        speedMph: ping.speedMph ?? null,
+        headingDeg: ping.headingDeg ?? null,
+        ts: ping.ts || null
+      }
+    });
+  } catch (err) {
+    dtLogger.warn('telematics_ping_broadcast_failed', {
+      vehicleId,
+      error: err.message
+    });
+  }
 }
 
 async function hasTable(table) {
@@ -176,6 +237,9 @@ async function persistPing(provider, ping) {
       ? inserted[0]?.id ?? inserted[0] ?? null
       : null;
     await touchDevice(device.id, ping.ts);
+    // Live-map broadcast (FN-1672) — fire-and-forget; must not block or fail
+    // ingestion. emitVehiclePosition no-ops when the WS bridge is unconfigured.
+    broadcastPing(device.vehicle_id, ping).catch(() => {});
     return { inserted: true, pingId };
   } catch (err) {
     dtLogger.error('telematics_ping_insert_failed', err, {
@@ -209,9 +273,12 @@ module.exports = {
   persistPings,
   resolveProviderId,
   resolveDevice,
+  resolveVehicleTenant,
   touchDevice,
+  broadcastPing,
   _resetColumnCache,
   PINGS_TABLE,
   DEVICES_TABLE,
-  PROVIDERS_TABLE
+  PROVIDERS_TABLE,
+  VEHICLES_TABLE
 };
