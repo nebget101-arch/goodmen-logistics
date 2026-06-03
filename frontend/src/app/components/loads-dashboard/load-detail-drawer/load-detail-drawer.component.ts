@@ -110,6 +110,9 @@ export class LoadDetailDrawerComponent implements OnInit, OnChanges, OnDestroy {
   dirty = false;
   showUnsavedWarning = false;
 
+  /** FN-1676 — controls the Share-tracking-link modal overlay. */
+  showShareModal = false;
+
   // Resize handle drag state
   private resizing = false;
   private resizeStartX = 0;
@@ -299,6 +302,15 @@ export class LoadDetailDrawerComponent implements OnInit, OnChanges, OnDestroy {
   // ─── Tab selection ────────────────────────────────────────────────────────
 
   selectTab(tab: DrawerTab): void { this.activeTab = tab; }
+
+  // ─── FN-1676: Share-tracking-link modal ────────────────────────────────────
+
+  openShareModal(): void {
+    if (!this.loadId) { return; }
+    this.showShareModal = true;
+  }
+
+  closeShareModal(): void { this.showShareModal = false; }
 
   // ─── Prev / Next navigation ───────────────────────────────────────────────
 

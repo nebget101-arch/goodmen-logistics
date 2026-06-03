@@ -1,0 +1,241 @@
+<!--
+  FN-1676 — Share-tracking-link modal.
+  Hand-rolled overlay (no shared modal component exists). AI dark-theme tokens.
+-->
+<div
+  class="share-modal__overlay"
+  role="dialog"
+  aria-modal="true"
+  aria-labelledby="share-modal-title"
+  (click)="onBackdropClick()"
+>
+  <div class="share-modal__dialog" (click)="$event.stopPropagation()">
+    <!-- Header -->
+    <header class="share-modal__header">
+      <div class="share-modal__heading">
+        <span class="material-symbols-outlined share-modal__heading-icon">share</span>
+        <div>
+          <h3 id="share-modal-title">Share tracking link</h3>
+          <p class="share-modal__subtitle" *ngIf="loadNumber">Load {{ loadNumber }}</p>
+        </div>
+      </div>
+      <button
+        type="button"
+        class="share-modal__close"
+        (click)="requestClose()"
+        aria-label="Close"
+        title="Close (Esc)"
+      >
+        <span class="material-symbols-outlined">close</span>
+      </button>
+    </header>
+
+    <!-- Body -->
+    <div class="share-modal__body">
+      <!-- Loading -->
+      <div class="share-modal__state" *ngIf="view === 'loading'">
+        <span class="material-symbols-outlined spin">progress_activity</span>
+        <span>Loading share links…</span>
+      </div>
+
+      <div class="share-modal__banner share-modal__banner--error" *ngIf="loadingError">
+        {{ loadingError }}
+      </div>
+
+      <!-- Always-included note (shown on create + manage) -->
+      <div
+        class="share-modal__always"
+        *ngIf="view === 'create' || view === 'manage'"
+      >
+        <span class="share-modal__always-label">Always shown:</span>
+        <span class="share-modal__chip" *ngFor="let f of alwaysOnFields">
+          <span class="material-symbols-outlined">{{ f.icon }}</span>{{ f.label }}
+        </span>
+      </div>
+
+      <!-- ── Create form ──────────────────────────────────────────────────── -->
+      <ng-container *ngIf="view === 'create'">
+        <label class="share-modal__field-label" for="share-expiry">Link expiry</label>
+        <app-ai-select
+          inputId="share-expiry"
+          name="shareExpiry"
+          ariaLabel="Link expiry"
+          [options]="expiryOptions"
+          [(ngModel)]="selectedExpiry"
+        ></app-ai-select>
+
+        <div class="share-modal__field-label">Reveal to recipient</div>
+        <ul class="share-modal__toggles">
+          <li class="share-modal__toggle">
+            <span class="share-modal__toggle-text">
+              <span class="share-modal__toggle-name">Driver name</span>
+              <span class="share-modal__toggle-hint">Off by default for privacy</span>
+            </span>
+            <button
+              type="button"
+              role="switch"
+              class="share-modal__switch"
+              [class.is-on]="revealOptions.driverName"
+              [attr.aria-checked]="revealOptions.driverName"
+              aria-label="Reveal driver name"
+              (click)="toggleReveal('driverName')"
+            ><span class="share-modal__switch-knob"></span></button>
+          </li>
+          <li class="share-modal__toggle">
+            <span class="share-modal__toggle-text">
+              <span class="share-modal__toggle-name">Vehicle / unit #</span>
+              <span class="share-modal__toggle-hint">Off by default for privacy</span>
+            </span>
+            <button
+              type="button"
+              role="switch"
+              class="share-modal__switch"
+              [class.is-on]="revealOptions.vehicleNumber"
+              [attr.aria-checked]="revealOptions.vehicleNumber"
+              aria-label="Reveal vehicle number"
+              (click)="toggleReveal('vehicleNumber')"
+            ><span class="share-modal__switch-knob"></span></button>
+          </li>
+          <li class="share-modal__toggle">
+            <span class="share-modal__toggle-text">
+              <span class="share-modal__toggle-name">Breadcrumb trail</span>
+              <span class="share-modal__toggle-hint">Historical GPS pings</span>
+            </span>
+            <button
+              type="button"
+              role="switch"
+              class="share-modal__switch"
+              [class.is-on]="revealOptions.breadcrumbs"
+              [attr.aria-checked]="revealOptions.breadcrumbs"
+              aria-label="Reveal breadcrumb trail"
+              (click)="toggleReveal('breadcrumbs')"
+            ><span class="share-modal__switch-knob"></span></button>
+          </li>
+          <li class="share-modal__toggle">
+            <span class="share-modal__toggle-text">
+              <span class="share-modal__toggle-name">Route line</span>
+              <span class="share-modal__toggle-hint">Planned route polyline</span>
+            </span>
+            <button
+              type="button"
+              role="switch"
+              class="share-modal__switch"
+              [class.is-on]="revealOptions.routeLine"
+              [attr.aria-checked]="revealOptions.routeLine"
+              aria-label="Reveal route line"
+              (click)="toggleReveal('routeLine')"
+            ><span class="share-modal__switch-knob"></span></button>
+          </li>
+        </ul>
+
+        <div class="share-modal__banner share-modal__banner--error" *ngIf="actionError">
+          {{ actionError }}
+        </div>
+      </ng-container>
+
+      <!-- ── Created (one-time URL) ───────────────────────────────────────── -->
+      <ng-container *ngIf="view === 'created'">
+        <div class="share-modal__banner share-modal__banner--success">
+          <span class="material-symbols-outlined">check_circle</span>
+          Link created. Copy it now — it can't be shown again.
+        </div>
+
+        <label class="share-modal__field-label" for="share-url">Public tracking URL</label>
+        <div class="share-modal__url-row">
+          <input
+            id="share-url"
+            type="text"
+            class="share-modal__url-input"
+            [value]="createdUrl"
+            readonly
+            (focus)="$any($event.target).select()"
+          />
+          <button
+            type="button"
+            class="btn btn-primary share-modal__copy-btn"
+            (click)="copyUrl()"
+          >
+            <span class="material-symbols-outlined">content_copy</span>
+            Copy
+          </button>
+        </div>
+        <p class="share-modal__copy-feedback" *ngIf="copyFeedback">{{ copyFeedback }}</p>
+
+        <div class="share-modal__meta" *ngIf="createdLink">
+          <div class="share-modal__meta-row">
+            <span class="material-symbols-outlined">event</span>
+            Expires: {{ formatDate(createdLink.expires_at) }}
+          </div>
+          <div class="share-modal__meta-row">
+            <span class="material-symbols-outlined">visibility</span>
+            Shows: {{ revealSummary(createdLink) }}
+          </div>
+        </div>
+      </ng-container>
+
+      <!-- ── Manage existing active link ──────────────────────────────────── -->
+      <ng-container *ngIf="view === 'manage' && activeLink">
+        <div class="share-modal__manage-note">
+          An active tracking link already exists. The URL was shown once when it
+          was created and can't be displayed again — revoke it and create a new
+          link if you need a fresh URL.
+        </div>
+
+        <div class="share-modal__meta">
+          <div class="share-modal__meta-row share-modal__meta-row--views">
+            <span class="material-symbols-outlined">visibility</span>
+            Viewed <strong>{{ activeLink.view_count }}</strong>
+            time{{ activeLink.view_count === 1 ? '' : 's' }}
+            <span class="share-modal__meta-sub" *ngIf="activeLink.last_viewed_at">
+              · last {{ formatDate(activeLink.last_viewed_at) }}
+            </span>
+          </div>
+          <div class="share-modal__meta-row">
+            <span class="material-symbols-outlined">event</span>
+            Expires: {{ formatDate(activeLink.expires_at) }}
+          </div>
+          <div class="share-modal__meta-row">
+            <span class="material-symbols-outlined">share</span>
+            Shows: {{ revealSummary(activeLink) }}
+          </div>
+        </div>
+
+        <div class="share-modal__banner share-modal__banner--error" *ngIf="actionError">
+          {{ actionError }}
+        </div>
+      </ng-container>
+    </div>
+
+    <!-- Footer -->
+    <footer class="share-modal__footer">
+      <ng-container *ngIf="view === 'create'">
+        <button type="button" class="btn btn-ghost" (click)="requestClose()" [disabled]="busy">
+          Cancel
+        </button>
+        <button type="button" class="btn btn-primary" (click)="generate()" [disabled]="busy">
+          <span *ngIf="!busy" class="material-symbols-outlined">link</span>
+          <span *ngIf="busy" class="material-symbols-outlined spin">progress_activity</span>
+          {{ busy ? 'Generating…' : 'Generate link' }}
+        </button>
+      </ng-container>
+
+      <ng-container *ngIf="view === 'created'">
+        <button type="button" class="btn btn-primary" (click)="requestClose()">Done</button>
+      </ng-container>
+
+      <ng-container *ngIf="view === 'manage'">
+        <button type="button" class="btn btn-ghost" (click)="requestClose()" [disabled]="busy">
+          Close
+        </button>
+        <button type="button" class="btn btn-danger" (click)="revoke()" [disabled]="busy">
+          <span *ngIf="!busy" class="material-symbols-outlined">link_off</span>
+          <span *ngIf="busy" class="material-symbols-outlined spin">progress_activity</span>
+          Revoke link
+        </button>
+        <button type="button" class="btn btn-primary" (click)="startNewLink()" [disabled]="busy">
+          New link
+        </button>
+      </ng-container>
+    </footer>
+  </div>
+</div>
