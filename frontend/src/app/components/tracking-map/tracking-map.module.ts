@@ -19,9 +19,10 @@ const routes: Routes = [
 
 /**
  * TrackingMapModule — lazy-loaded feature module for the `/tracking` live map
- * (FN-1671). Isolates `leaflet` + `leaflet.markercluster` out of the initial
- * bundle (same pattern as GeofencesModule). Imports SharedModule for
- * `app-ai-select` and FormsModule for the `ngModel` filter bindings.
+ * (FN-1671; re-engined to MapLibre GL in FN-1720). Isolates the `maplibre-gl`
+ * WebGL engine out of the initial bundle (same pattern as GeofencesModule).
+ * Imports SharedModule for `app-ai-select` and FormsModule for the `ngModel`
+ * filter bindings.
  */
 @NgModule({
   declarations: [TrackingMapComponent],
