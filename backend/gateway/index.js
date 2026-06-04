@@ -412,6 +412,10 @@ app.use('/api/insights', buildProxy(REPORTING_SERVICE_URL, 'reporting'));
 app.use('/api/scan-bridge', buildProxy(INTEGRATIONS_SERVICE_URL, 'integrations'));
 app.use('/api/fmcsa', buildProxy(INTEGRATIONS_SERVICE_URL, 'integrations'));
 app.use('/api/webhooks/email-inbound', buildProxy(INTEGRATIONS_SERVICE_URL, 'integrations'));
+// Telematics provider webhooks (Samsara/Motive) — POST /api/webhooks/telematics/:provider?secret=<...>
+// Mirrors the SendGrid inbound-email proxy; secret + provider-signature verification happen downstream
+// in fleetneuron-integrations-service. See .agent/docs/render_services.md (Telematics section) and FN-1653.
+app.use('/api/webhooks/telematics', buildProxy(INTEGRATIONS_SERVICE_URL, 'integrations'));
 app.use('/api/tenants/me/inbound-email', buildProxy(INTEGRATIONS_SERVICE_URL, 'integrations'));
 app.use('/api/auth', buildProxy(AUTH_USERS_SERVICE_URL, 'auth-users'));
 app.use('/api/stripe', buildProxy(AUTH_USERS_SERVICE_URL, 'auth-users'));
@@ -491,6 +495,11 @@ app.use(
   '/api/vehicles',
   buildProxy(VEHICLES_MAINTENANCE_SERVICE_URL, 'vehicles')
 );
+// Live-map vehicle positions read API (FN-1672)
+app.use(
+  '/api/vehicle-positions',
+  buildProxy(VEHICLES_MAINTENANCE_SERVICE_URL, 'vehicles')
+);
 app.use(
   '/api/maintenance',
   buildProxy(VEHICLES_MAINTENANCE_SERVICE_URL, 'vehicles')
@@ -533,6 +542,11 @@ app.use('/api/lease-agreements', buildProxy(LOGISTICS_SERVICE_URL, 'logistics'))
 app.use('/api/lease-financing', buildProxy(LOGISTICS_SERVICE_URL, 'logistics'));
 app.use('/api/ifta', buildProxy(LOGISTICS_SERVICE_URL, 'logistics'));
 app.use('/api/loads', buildProxy(LOGISTICS_SERVICE_URL, 'logistics'));
+// FN-1679: public, UNAUTHENTICATED tracking read API. The gateway has no global
+// auth guard (auth is enforced per-route inside each service), so allow-listing
+// here is just routing the path to logistics; that service mounts /api/track
+// without auth middleware.
+app.use('/api/track', buildProxy(LOGISTICS_SERVICE_URL, 'logistics'));
 app.use('/api/load-templates', buildProxy(LOGISTICS_SERVICE_URL, 'logistics'));
 app.use('/api/brokers', buildProxy(LOGISTICS_SERVICE_URL, 'logistics'));
 app.use('/api/locations', buildProxy(LOGISTICS_SERVICE_URL, 'logistics'));

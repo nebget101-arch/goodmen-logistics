@@ -1,0 +1,119 @@
+<div class="tracking-page">
+  <header class="ai-header">
+    <div>
+      <p class="ai-kicker">FleetNeuron AI · Tracking</p>
+      <h1>
+        <span class="material-symbols-outlined title-icon">map</span>
+        Live Map
+      </h1>
+      <p class="subtitle">
+        Real-time fleet positions with breadcrumb trails and geofence overlays.
+      </p>
+    </div>
+
+    <div class="header-status">
+      <span class="conn-dot" [class.online]="connected" [attr.aria-label]="connected ? 'Live' : 'Offline'"></span>
+      <span class="conn-label">{{ connected ? 'Live' : 'Reconnecting…' }}</span>
+      <span class="count-pill">{{ visibleCount }} / {{ totalCount }} shown</span>
+    </div>
+  </header>
+
+  <p class="error-banner" *ngIf="error">{{ error }}</p>
+
+  <!-- ── Filter bar ─────────────────────────────────────────────────────── -->
+  <section class="ai-panel filter-bar">
+    <label class="field">
+      <span class="field-label">Driver</span>
+      <app-ai-select
+        [(ngModel)]="filterDriverId"
+        [options]="driverOptions"
+        (ngModelChange)="onFiltersChanged()"
+        ariaLabel="Filter by driver"
+      ></app-ai-select>
+    </label>
+
+    <label class="field">
+      <span class="field-label">Status</span>
+      <app-ai-select
+        [(ngModel)]="filterStatus"
+        [options]="statusOptions"
+        (ngModelChange)="onFiltersChanged()"
+        ariaLabel="Filter by status"
+      ></app-ai-select>
+    </label>
+
+    <label class="field">
+      <span class="field-label">Geofence</span>
+      <app-ai-select
+        [(ngModel)]="filterGeofenceId"
+        [options]="geofenceOptions"
+        (ngModelChange)="onFiltersChanged()"
+        ariaLabel="Filter by geofence"
+      ></app-ai-select>
+    </label>
+
+    <button
+      type="button"
+      class="btn-secondary toggle-btn"
+      [class.active]="showGeofences"
+      (click)="toggleGeofences()"
+    >
+      <span class="material-symbols-outlined">{{ showGeofences ? 'layers' : 'layers_clear' }}</span>
+      Geofences
+    </button>
+  </section>
+
+  <!-- ── Map + side panel ───────────────────────────────────────────────── -->
+  <div class="tracking-layout">
+    <section class="ai-panel map-panel">
+      <p class="muted map-loading" *ngIf="loading">Loading positions…</p>
+      <div #mapContainer class="map-container" aria-label="Live vehicle map"></div>
+    </section>
+
+    <!-- Side panel → collapses to a bottom sheet on mobile (see SCSS). -->
+    <aside class="ai-panel side-panel" *ngIf="selected" [class.open]="selected">
+      <div class="side-head">
+        <div>
+          <p class="side-kicker">Vehicle</p>
+          <h2 class="side-title">{{ selected.unitNumber || selected.vehicleId }}</h2>
+        </div>
+        <button type="button" class="icon-btn" (click)="closePanel()" aria-label="Close panel">
+          <span class="material-symbols-outlined">close</span>
+        </button>
+      </div>
+
+      <span class="status-pill" [ngClass]="'status-' + selected.movementStatus">{{ selected.movementStatus }}</span>
+
+      <dl class="detail-grid">
+        <dt>Driver</dt>
+        <dd>{{ selected.driverName || '—' }}</dd>
+
+        <dt>Current load</dt>
+        <dd>
+          <a
+            *ngIf="selected.loadId; else noLoad"
+            class="load-link"
+            [routerLink]="['/loads']"
+            [queryParams]="{ loadId: selected.loadId }"
+          >
+            {{ selected.loadReference || selected.loadId }}
+            <span class="material-symbols-outlined">open_in_new</span>
+          </a>
+          <ng-template #noLoad>—</ng-template>
+        </dd>
+
+        <dt>Last ping</dt>
+        <dd>{{ pingAge(selected) }}</dd>
+
+        <dt>Speed</dt>
+        <dd>{{ selected.speedMph != null ? (selected.speedMph + ' mph') : '—' }}</dd>
+
+        <dt>Heading</dt>
+        <dd>{{ selected.headingDeg != null ? (selected.headingDeg + '°') : '—' }}</dd>
+
+        <dt>Position</dt>
+        <dd>{{ selected.lat | number: '1.4-4' }}, {{ selected.lng | number: '1.4-4' }}</dd>
+      </dl>
+    </aside>
+  </div>
+</div>

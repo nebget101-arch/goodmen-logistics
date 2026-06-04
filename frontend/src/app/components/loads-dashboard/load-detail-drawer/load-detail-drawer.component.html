@@ -71,6 +71,17 @@
     </div>
 
     <div class="load-drawer__header-right">
+      <!-- FN-1676: Share public tracking link -->
+      <button
+        type="button"
+        class="load-drawer__icon-btn"
+        *ngIf="loadDetail"
+        (click)="openShareModal()"
+        title="Share tracking link"
+        aria-label="Share tracking link"
+      >
+        <span class="material-symbols-outlined">share</span>
+      </button>
       <button
         type="button"
         class="load-drawer__icon-btn"
@@ -243,4 +254,12 @@
       </div>
     </div>
   </div>
+
+  <!-- ── FN-1676: Share-tracking-link modal ───────────────────────────────── -->
+  <app-share-link-modal
+    *ngIf="showShareModal && loadDetail && loadId"
+    [loadId]="loadId"
+    [loadNumber]="loadDetail.load_number || ''"
+    (close)="closeShareModal()"
+  ></app-share-link-modal>
 </aside>

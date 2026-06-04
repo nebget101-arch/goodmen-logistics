@@ -12,7 +12,15 @@ const app = express();
 const PORT = process.env.PORT || 5002;
 
 app.use(cors());
-app.use(bodyParser.json());
+// Capture the raw request body so telematics webhook adapters can verify the
+// provider HMAC signature (Samsara/Motive sign over the exact bytes received).
+app.use(
+  bodyParser.json({
+    verify: (req, _res, buf) => {
+      req.rawBody = buf;
+    }
+  })
+);
 app.use(bodyParser.urlencoded({ extended: true }));
 
 // ─── Database initialization ─────────────────────────────────────────────────
@@ -45,6 +53,8 @@ const fmcsaSafetyRouter = require('@goodmen/shared/routes/fmcsa-safety');
 const { createImportsRouter } = require('@goodmen/shared/routes/fmcsa-imports');
 const inboundEmailWebhookRouter = require('./routes/inbound-email-webhook');
 const inboundEmailRouter = require('@goodmen/shared/routes/inbound-email');
+const telematicsWebhookRouter = require('./routes/telematics-webhook');
+const telematicsPollRouter = require('./routes/telematics-poll');
 
 app.use('/api/scan-bridge', scanBridgeRouter);
 app.use('/api/fmcsa', fmcsaRouter);
@@ -52,6 +62,13 @@ app.use('/api/fmcsa/safety', authMiddleware, tenantContextMiddleware, fmcsaSafet
 
 // Inbound email provider webhook — public endpoint, auth via shared secret.
 app.use('/api/webhooks/email-inbound', inboundEmailWebhookRouter);
+
+// Telematics provider webhooks — public endpoint, auth via shared secret +
+// provider HMAC signature (Samsara/Motive). FN-1661.
+app.use('/api/webhooks/telematics', telematicsWebhookRouter);
+
+// Telematics polling fallback trigger (external Render cron / operator). FN-1661.
+app.use('/api/telematics', telematicsPollRouter);
 
 // Tenant-facing inbound-email settings and logs (authenticated).
 app.use(
@@ -175,6 +192,16 @@ app.listen(PORT, async () => {
   }
   console.log(`🔌 Integrations service running on http://localhost:${PORT}`);
   await initImportQueue();
+
+  // Telematics polling-fallback scheduler (FN-1661). No-op unless
+  // TELEMATICS_POLL_INTERVAL_MINUTES is set; an external Render cron hitting
+  // POST /api/telematics/poll is the alternative trigger.
+  try {
+    const { startPollingScheduler } = require('./services/telematics-polling-service');
+    startPollingScheduler();
+  } catch (err) {
+    console.error('[integrations] Failed to start telematics poll scheduler:', err.message);
+  }
 });
 
 // Graceful shutdown

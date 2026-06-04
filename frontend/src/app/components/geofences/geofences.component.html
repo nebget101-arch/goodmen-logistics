@@ -1,0 +1,181 @@
+<div class="geofences-page">
+  <header class="ai-header">
+    <div>
+      <p class="ai-kicker">FleetNeuron AI · Tracking</p>
+      <h1>
+        <span class="material-symbols-outlined title-icon">my_location</span>
+        Geofence Library
+      </h1>
+      <p class="subtitle">Define circle &amp; polygon geofences with enter / exit / dwell triggers.</p>
+    </div>
+    <button type="button" class="btn-primary ai-glow-btn" (click)="startCreate()">
+      <span class="material-symbols-outlined">add</span>
+      New geofence
+    </button>
+  </header>
+
+  <p class="error-banner" *ngIf="error">{{ error }}</p>
+
+  <div class="geofences-layout">
+    <!-- ── Saved geofences ───────────────────────────────────────────── -->
+    <section class="ai-panel list-panel">
+      <h2 class="panel-title">Saved geofences</h2>
+
+      <p class="muted" *ngIf="loading">Loading…</p>
+      <p class="muted" *ngIf="!loading && geofences.length === 0">
+        No geofences yet. Draw one on the map to get started.
+      </p>
+
+      <ul class="geofence-list" *ngIf="!loading && geofences.length">
+        <li
+          *ngFor="let gf of geofences; trackBy: trackById"
+          class="geofence-row"
+          [class.active]="gf.id === editingId"
+        >
+          <button type="button" class="geofence-main" (click)="edit(gf)">
+            <span class="geofence-name">{{ gf.name }}</span>
+            <span class="geofence-meta">
+              <span class="kind-pill" [class.polygon]="gf.kind === 'polygon'">{{ gf.kind }}</span>
+              <span *ngIf="gf.kind === 'circle' && gf.radiusMeters">{{ gf.radiusMeters }} m</span>
+              <span *ngIf="gf.kind === 'polygon' && gf.vertices?.length">{{ gf.vertices?.length }} pts</span>
+              <span *ngIf="gf.triggers?.length">· {{ gf.triggers?.length }} triggers</span>
+            </span>
+          </button>
+          <button
+            type="button"
+            class="icon-btn danger"
+            (click)="remove(gf)"
+            [attr.aria-label]="'Delete ' + gf.name"
+          >
+            <span class="material-symbols-outlined">delete</span>
+          </button>
+        </li>
+      </ul>
+    </section>
+
+    <!-- ── Map + draw controls ──────────────────────────────────────── -->
+    <section class="ai-panel map-panel">
+      <div #mapContainer class="map-container" aria-label="Geofence map"></div>
+      <p class="map-hint">
+        Use the draw tools (top-right) to add a
+        <strong>circle</strong> or <strong>polygon</strong> (≤ {{ maxVertices }} vertices).
+      </p>
+    </section>
+
+    <!-- ── Editor form ──────────────────────────────────────────────── -->
+    <section class="ai-panel form-panel">
+      <h2 class="panel-title">{{ editingId ? 'Edit geofence' : 'New geofence' }}</h2>
+
+      <form [formGroup]="form" (ngSubmit)="save()">
+        <label class="field">
+          <span class="field-label">Name</span>
+          <input
+            type="text"
+            class="form-input"
+            formControlName="name"
+            placeholder="e.g. Chicago Yard"
+            maxlength="120"
+          />
+        </label>
+
+        <label class="field">
+          <span class="field-label">Kind</span>
+          <app-ai-select
+            formControlName="kind"
+            [options]="kindOptions"
+            ariaLabel="Geofence kind"
+          ></app-ai-select>
+        </label>
+
+        <label class="field" *ngIf="kind === 'circle'">
+          <span class="field-label">Radius (meters)</span>
+          <input
+            type="number"
+            class="form-input"
+            formControlName="radiusMeters"
+            min="1"
+            placeholder="Draw a circle to set this"
+          />
+        </label>
+
+        <div class="field" *ngIf="kind === 'polygon'">
+          <span class="field-label">Vertices</span>
+          <p class="vertex-count" [class.over-limit]="vertexLimitReached">
+            {{ vertexCount }} / {{ maxVertices }}
+          </p>
+        </div>
+
+        <!-- Triggers -->
+        <div class="triggers-section" formArrayName="triggers">
+          <div class="triggers-head">
+            <span class="field-label">Triggers</span>
+            <button type="button" class="btn-secondary btn-sm" (click)="addTrigger()">
+              <span class="material-symbols-outlined">add</span> Add trigger
+            </button>
+          </div>
+
+          <p class="muted" *ngIf="triggers.length === 0">No triggers configured.</p>
+
+          <div
+            class="trigger-row"
+            *ngFor="let t of triggers.controls; let i = index"
+            [formGroupName]="i"
+          >
+            <div class="trigger-grid">
+              <label class="field compact">
+                <span class="field-label">Event</span>
+                <app-ai-select
+                  formControlName="eventKind"
+                  [options]="eventKindOptions"
+                  ariaLabel="Trigger event"
+                ></app-ai-select>
+              </label>
+
+              <label class="field compact" *ngIf="t.get('eventKind')?.value === 'dwell'">
+                <span class="field-label">Dwell (min)</span>
+                <input type="number" class="form-input" formControlName="dwellMinutes" min="1" />
+              </label>
+
+              <label class="field compact">
+                <span class="field-label">Action</span>
+                <app-ai-select
+                  formControlName="action"
+                  [options]="actionOptions"
+                  ariaLabel="Trigger action"
+                ></app-ai-select>
+              </label>
+
+              <label class="field compact" *ngIf="t.get('action')?.value === 'webhook'">
+                <span class="field-label">Webhook URL</span>
+                <input type="url" class="form-input" formControlName="targetUrl" placeholder="https://…" />
+              </label>
+
+              <label class="field compact">
+                <span class="field-label">Vehicle ID (optional)</span>
+                <input type="text" class="form-input" formControlName="vehicleId" placeholder="All vehicles" />
+              </label>
+            </div>
+            <button
+              type="button"
+              class="icon-btn danger"
+              (click)="removeTrigger(i)"
+              aria-label="Remove trigger"
+            >
+              <span class="material-symbols-outlined">close</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="form-actions">
+          <button type="submit" class="btn-primary ai-glow-btn" [disabled]="saving">
+            <span class="material-symbols-outlined">save</span>
+            {{ saving ? 'Saving…' : (editingId ? 'Update geofence' : 'Create geofence') }}
+          </button>
+          <button type="button" class="btn-secondary" (click)="startCreate()" [disabled]="saving">
+            Reset
+          </button>
+        </div>
+      </form>
+    </section>
+  </div>
+</div>
