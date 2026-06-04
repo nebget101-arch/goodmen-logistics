@@ -45,6 +45,17 @@
     </button>
   </div>
 
+  <!-- ── State D: Subscription past-due / unpaid (grace period) ── -->
+  <div *ngSwitchCase="'state-d'" class="trial-banner banner-red" role="alert" aria-live="assertive">
+    <span class="banner-icon">⚠️</span>
+    <span class="banner-text">
+      Your last payment didn't go through. Update your payment method to keep your subscription active.
+    </span>
+    <button *ngIf="canAccessBilling()" class="banner-cta" type="button" (click)="openPaymentDialog()">
+      Update payment method →
+    </button>
+  </div>
+
   <!-- hidden for 'converted' subscribers and non-trial users -->
   <ng-container *ngSwitchDefault></ng-container>
 

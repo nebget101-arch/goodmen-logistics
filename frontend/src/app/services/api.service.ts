@@ -1473,6 +1473,32 @@ export class ApiService {
       return this.http.post(`${this.baseUrl}/billing/extra-seats/purchase`, { quantity });
     }
 
+    // FN-1698 — Self-service subscription management (API contract: FN-1688)
+    /** Current subscription: plan, status, period, next renewal, cancel flag, line items. */
+    getBillingSubscription(): Observable<any> {
+      return this.http.get(`${this.baseUrl}/billing/subscription`);
+    }
+
+    /** Stripe invoice history with hosted-invoice + PDF links. */
+    getBillingInvoices(): Observable<any> {
+      return this.http.get(`${this.baseUrl}/billing/invoices`);
+    }
+
+    /** Create a Stripe Customer Portal session; returns `{ url }` to redirect to. */
+    createBillingPortalSession(): Observable<any> {
+      return this.http.post(`${this.baseUrl}/billing/portal-session`, {});
+    }
+
+    /** Upgrade/downgrade the subscription plan with proration. */
+    changeBillingPlan(planId: 'basic' | 'multi_mc' | 'end_to_end' | 'enterprise'): Observable<any> {
+      return this.http.post(`${this.baseUrl}/billing/change-plan`, { planId });
+    }
+
+    /** Cancel the subscription at period end. */
+    cancelBillingSubscription(): Observable<any> {
+      return this.http.post(`${this.baseUrl}/billing/cancel`, {});
+    }
+
   // ========== INVENTORY MANAGEMENT (PHASE 2) ==========
 
   // Parts Catalog
