@@ -823,9 +823,11 @@ router.post('/change-plan', async (req, res) => {
   try {
     const tenant = await getTenantForRequest(req);
 
-    const requestedRaw = String(req.body?.planId || '').trim().toLowerCase();
-    const planId = normalizePlanId(requestedRaw, '');
-    if (!requestedRaw || !planId || !VALID_PLAN_IDS.includes(planId)) {
+    // Strict validation: normalizePlanId always coerces unknown input to a valid
+    // plan ('basic' fallback), so it cannot detect bad input. Match the canonical
+    // plan IDs directly (the documented enum) to avoid a silent downgrade.
+    const planId = String(req.body?.planId || '').trim().toLowerCase();
+    if (!VALID_PLAN_IDS.includes(planId)) {
       return res.status(400).json({ success: false, error: 'A valid planId is required.' });
     }
 
