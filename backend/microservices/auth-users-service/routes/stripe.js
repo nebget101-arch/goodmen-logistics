@@ -170,6 +170,65 @@ async function handleSubscriptionUpdated(event) {
   }
 }
 
+async function handleSubscriptionDeleted(event) {
+  dtLogger.info('[stripe-webhook] handler customer.subscription.deleted', { eventId: event.id });
+
+  try {
+    const obj = event.data?.object;
+    if (!obj?.id) {
+      dtLogger.warn('[stripe-webhook] subscription.deleted missing id', { eventId: event.id });
+      return;
+    }
+
+    const subscriptionId = obj.id;
+    const tenant = await knex('tenants')
+      .where({ stripe_subscription_id: subscriptionId })
+      .first('id', 'subscription_plan');
+
+    if (!tenant) {
+      dtLogger.warn('[stripe-webhook] tenant not found for deleted subscription', {
+        eventId: event.id,
+        subscriptionId
+      });
+      return;
+    }
+
+    // Sync local state: the subscription no longer exists in Stripe, so clear
+    // the reference and flag the tenant as canceled.
+    await knex('tenants')
+      .where({ id: tenant.id })
+      .update({
+        stripe_subscription_id: null,
+        trial_status: 'canceled',
+        updated_at: knex.fn.now()
+      });
+
+    await trialService.writeAuditLog(
+      tenant.id,
+      null,
+      'subscription_deleted',
+      'tenants',
+      tenant.id,
+      {
+        stripeSubscriptionId: subscriptionId,
+        canceledAt: obj.canceled_at ? new Date(obj.canceled_at * 1000).toISOString() : null,
+        status: obj.status || null
+      }
+    );
+
+    dtLogger.info('[stripe-webhook] subscription deleted synced', {
+      eventId: event.id,
+      tenantId: tenant.id,
+      subscriptionId
+    });
+  } catch (err) {
+    dtLogger.error('[stripe-webhook] subscription.deleted handler error', err, {
+      eventId: event.id,
+      error: err?.message
+    });
+  }
+}
+
 async function routeEvent(event) {
   switch (event.type) {
     case 'setup_intent.succeeded':
@@ -183,6 +242,9 @@ async function routeEvent(event) {
       break;
     case 'customer.subscription.updated':
       await handleSubscriptionUpdated(event);
+      break;
+    case 'customer.subscription.deleted':
+      await handleSubscriptionDeleted(event);
       break;
     default:
       break;
@@ -200,8 +262,9 @@ async function routeEvent(event) {
  *       Handled event types:
  *       - setup_intent.succeeded — logs successful SetupIntent
  *       - invoice.payment_succeeded — marks trial as converted when first invoice is paid
- *       - invoice.payment_failed — sets a 3-day grace period and logs an audit entry
+ *       - invoice.payment_failed — sets a 3-day grace period, sends the payment-failure email, and logs an audit entry
  *       - customer.subscription.updated — syncs extra seat quantities from the subscription
+ *       - customer.subscription.deleted — clears stripe_subscription_id, flags the tenant canceled, and logs an audit entry
  *       The endpoint acknowledges with 200 immediately and processes the event asynchronously.
  *     tags:
  *       - Billing
