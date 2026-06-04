@@ -48,20 +48,23 @@ const vendorsRouter = require('@goodmen/shared/routes/vendors');
 const authMiddleware = require('@goodmen/shared/middleware/auth-middleware');
 const tenantContextMiddleware = require('@goodmen/shared/middleware/tenant-context-middleware');
 const requirePlanAccess = require('@goodmen/shared/middleware/plan-access-middleware');
+// FN-1694: block expired-no-card / past-grace tenants (after tenant context,
+// before plan checks). super_admin + billing routes exempt.
+const requireActiveSubscription = require('@goodmen/shared/middleware/trial-enforcement-middleware')();
 
 const requirePartsPlan = requirePlanAccess('/parts');
 
 app.get('/api-docs-json', (_req, res) => res.json(swaggerSpec));
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 
-app.use('/api/vehicles', authMiddleware, tenantContextMiddleware, vehiclesRouter);
-app.use('/api/vehicle-positions', authMiddleware, tenantContextMiddleware, vehiclePositionsRouter);
-app.use('/api/maintenance', authMiddleware, tenantContextMiddleware, maintenanceRouter);
-app.use('/api/equipment', authMiddleware, tenantContextMiddleware, equipmentRouter);
-app.use('/api/work-orders', authMiddleware, tenantContextMiddleware, workOrdersRouter);
-app.use('/api/parts', authMiddleware, tenantContextMiddleware, requirePartsPlan, partsRouter);
-app.use('/api/manufacturers', authMiddleware, tenantContextMiddleware, requirePartsPlan, manufacturersRouter);
-app.use('/api/vendors', authMiddleware, tenantContextMiddleware, requirePartsPlan, vendorsRouter);
+app.use('/api/vehicles', authMiddleware, tenantContextMiddleware, requireActiveSubscription, vehiclesRouter);
+app.use('/api/vehicle-positions', authMiddleware, tenantContextMiddleware, requireActiveSubscription, vehiclePositionsRouter);
+app.use('/api/maintenance', authMiddleware, tenantContextMiddleware, requireActiveSubscription, maintenanceRouter);
+app.use('/api/equipment', authMiddleware, tenantContextMiddleware, requireActiveSubscription, equipmentRouter);
+app.use('/api/work-orders', authMiddleware, tenantContextMiddleware, requireActiveSubscription, workOrdersRouter);
+app.use('/api/parts', authMiddleware, tenantContextMiddleware, requireActiveSubscription, requirePartsPlan, partsRouter);
+app.use('/api/manufacturers', authMiddleware, tenantContextMiddleware, requireActiveSubscription, requirePartsPlan, manufacturersRouter);
+app.use('/api/vendors', authMiddleware, tenantContextMiddleware, requireActiveSubscription, requirePartsPlan, vendorsRouter);
 
 /**
  * @openapi

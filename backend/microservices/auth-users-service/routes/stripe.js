@@ -5,7 +5,10 @@ const stripe = require('@goodmen/shared/config/stripe');
 const { knex } = require('@goodmen/shared/internal/db');
 const trialService = require('@goodmen/shared/services/trialService');
 const extraSeatSyncService = require('@goodmen/shared/services/extraSeatSyncService');
+const billingEmailService = require('@goodmen/shared/services/billing-email-service');
 const dtLogger = require('@goodmen/shared/utils/logger');
+
+const PAYMENT_GRACE_PERIOD_DAYS = 3;
 
 const router = express.Router();
 
@@ -78,7 +81,7 @@ async function handlePaymentFailed(event) {
 
     const tenant = await knex('tenants')
       .where({ stripe_customer_id: stripeCustomerId })
-      .first('id', 'email', 'trial_status', 'stripe_subscription_id');
+      .first('id', 'name', 'email', 'trial_status', 'stripe_subscription_id');
 
     if (!tenant) {
       dtLogger.warn('[stripe-webhook] tenant not found for stripe customer', {
@@ -89,7 +92,7 @@ async function handlePaymentFailed(event) {
     }
 
     const gracePeriodEnd = new Date();
-    gracePeriodEnd.setDate(gracePeriodEnd.getDate() + 3);
+    gracePeriodEnd.setDate(gracePeriodEnd.getDate() + PAYMENT_GRACE_PERIOD_DAYS);
 
     await knex('tenants')
       .where({ id: tenant.id })
@@ -106,7 +109,7 @@ async function handlePaymentFailed(event) {
       tenant.id,
       {
         stripeInvoiceId: invoice.id,
-        gracePeriodDays: 3,
+        gracePeriodDays: PAYMENT_GRACE_PERIOD_DAYS,
         gracePeriodEnd: gracePeriodEnd.toISOString()
       }
     );
@@ -117,12 +120,28 @@ async function handlePaymentFailed(event) {
       gracePeriodEnd: gracePeriodEnd.toISOString()
     });
 
-    dtLogger.info('[stripe-webhook] payment failure email to be sent', {
-      eventId: event.id,
-      tenantId: tenant.id,
-      email: tenant.email,
-      note: 'Email implementation in FN-76'
-    });
+    // FN-1694: payment-failure email (replaces the FN-76 TODO). Sent once per
+    // failed invoice with the grace-period deadline. Never throws — a mail
+    // failure must not fail the webhook ack.
+    if (tenant.email) {
+      const emailResult = await billingEmailService.sendPaymentFailureEmail({
+        to: tenant.email,
+        tenantName: tenant.name,
+        gracePeriodEnd,
+        gracePeriodDays: PAYMENT_GRACE_PERIOD_DAYS
+      });
+      dtLogger.info('[stripe-webhook] payment failure email', {
+        eventId: event.id,
+        tenantId: tenant.id,
+        sent: emailResult.sent,
+        reason: emailResult.reason || null
+      });
+    } else {
+      dtLogger.warn('[stripe-webhook] payment failure email skipped — tenant has no email', {
+        eventId: event.id,
+        tenantId: tenant.id
+      });
+    }
   } catch (err) {
     dtLogger.error('[stripe-webhook] payment_failed handler error', err, {
       eventId: event.id,
