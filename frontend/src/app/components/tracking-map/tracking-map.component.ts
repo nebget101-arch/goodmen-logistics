@@ -163,6 +163,8 @@ export class TrackingMapComponent implements OnInit, AfterViewInit, OnDestroy {
   private tweens = new Map<string, MarkerTween>();
   /** Handle for the marker tween loop (runs outside the Angular zone). */
   private rafId: number | null = null;
+  /** Keeps the GL canvas + HTML markers aligned when the container resizes. */
+  private resizeObs: ResizeObserver | null = null;
 
   /** Loaded geofences (for the overlay + client-side geofence filter). */
   private geofences: Geofence[] = [];
@@ -195,6 +197,8 @@ export class TrackingMapComponent implements OnInit, AfterViewInit, OnDestroy {
     this.destroy$.complete();
     if (this.rafId != null) cancelAnimationFrame(this.rafId);
     this.rafId = null;
+    this.resizeObs?.disconnect();
+    this.resizeObs = null;
     this.markers.forEach((m) => m.remove());
     this.markers.clear();
     this.markerEls.clear();
@@ -304,6 +308,19 @@ export class TrackingMapComponent implements OnInit, AfterViewInit, OnDestroy {
 
     // Flex-mounted containers need a nudge once dimensions settle.
     setTimeout(() => this.map?.resize(), 150);
+
+    // Keep the GL canvas + HTML markers aligned on every container size change.
+    // The side panel opening/closing (flex layout) resizes the map; without a
+    // resize() MapLibre projects markers with stale dimensions, so HTML truck
+    // markers land offset from the GL-rendered breadcrumb/geofence layers (and
+    // appear to drift when zooming). Runs outside the zone — resize() is cheap.
+    const host = this.mapContainer?.nativeElement;
+    if (host && typeof ResizeObserver !== 'undefined') {
+      this.zone.runOutsideAngular(() => {
+        this.resizeObs = new ResizeObserver(() => this.map?.resize());
+        this.resizeObs.observe(host);
+      });
+    }
   }
 
   // ── Data loading ─────────────────────────────────────────────────────────
