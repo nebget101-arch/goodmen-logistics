@@ -1,5 +1,6 @@
 'use strict';
 
+const crypto = require('crypto');
 const express = require('express');
 const authMiddleware = require('@goodmen/shared/middleware/auth-middleware');
 const tenantContextMiddleware = require('@goodmen/shared/middleware/tenant-context-middleware');
@@ -9,9 +10,97 @@ const stripe = require('@goodmen/shared/config/stripe');
 const stripeService = require('@goodmen/shared/services/stripeService');
 const trialService = require('@goodmen/shared/services/trialService');
 const extraSeatSyncService = require('@goodmen/shared/services/extraSeatSyncService');
-const { PLANS, normalizePlanId } = require('@goodmen/shared/config/plans');
+const { PLANS, VALID_PLAN_IDS, normalizePlanId } = require('@goodmen/shared/config/plans');
 
 const BILLING_ADMIN_ROLES = new Set(['super_admin', 'admin', 'company_admin']);
+
+/**
+ * Map of plan IDs to their Stripe Price IDs, following the
+ * STRIPE_PRICE_[PLAN_ID_UPPERCASE] env-var pattern used by jobs/processTrialConversions.js.
+ */
+function getPlanPriceMap() {
+  return {
+    basic: String(process.env.STRIPE_PRICE_BASIC || '').trim(),
+    multi_mc: String(process.env.STRIPE_PRICE_MULTI_MC || '').trim(),
+    end_to_end: String(process.env.STRIPE_PRICE_END_TO_END || '').trim(),
+    enterprise: String(process.env.STRIPE_PRICE_ENTERPRISE || '').trim()
+  };
+}
+
+function getExtraSeatPriceId() {
+  return String(process.env.STRIPE_PRICE_EXTRA_USER_SEAT || '').trim() || null;
+}
+
+function getBillingReturnUrl() {
+  const base = String(
+    process.env.PUBLIC_APP_URL ||
+      process.env.FRONTEND_URL ||
+      process.env.APP_URL ||
+      process.env.FRONTEND_BASE_URL ||
+      'http://localhost:4200'
+  ).trim();
+  const root = base.replace(/\/+$/, '');
+  return `${root}/billing`;
+}
+
+/**
+ * Resolve an idempotency key for a Stripe write: honor a client-supplied
+ * `Idempotency-Key` header (so frontend retries are safe), otherwise mint a
+ * fresh one scoped to the operation.
+ */
+function resolveIdempotencyKey(req, prefix) {
+  const provided = String(req.headers['idempotency-key'] || '').trim();
+  return provided || `${prefix}:${crypto.randomUUID()}`;
+}
+
+/**
+ * Send a sanitized error: log the underlying Stripe/internal detail server-side
+ * but return only a generic public message so nothing leaks in the response body.
+ */
+function sendBillingError(res, publicMessage, err) {
+  console.error(`[billing] ${publicMessage}:`, err?.cause?.message || err?.message || err);
+  const status = err?.statusCode || 500;
+  return res.status(status).json({ success: false, error: publicMessage });
+}
+
+/** Convert a Stripe unix-seconds timestamp to an ISO string, or null. */
+function unixToIso(seconds) {
+  const n = Number(seconds);
+  if (!Number.isFinite(n) || n <= 0) return null;
+  return new Date(n * 1000).toISOString();
+}
+
+/** Read the subscription-level current-period window, falling back to the first item. */
+function readSubscriptionPeriod(sub) {
+  const item = sub?.items?.data?.[0] || null;
+  const start = sub?.current_period_start ?? item?.current_period_start ?? null;
+  const end = sub?.current_period_end ?? item?.current_period_end ?? null;
+  return { start: unixToIso(start), end: unixToIso(end) };
+}
+
+/** Shape a Stripe subscription into the documented `data` payload (FN-1688 contract). */
+function formatSubscription(sub, planId) {
+  const { start, end } = readSubscriptionPeriod(sub);
+  const cancelAtPeriodEnd = Boolean(sub?.cancel_at_period_end);
+  const lineItems = (sub?.items?.data || []).map((item) => ({
+    priceId: item.price?.id || null,
+    nickname: item.price?.nickname || null,
+    quantity: Number.isFinite(Number(item.quantity)) ? Number(item.quantity) : null,
+    unitAmount: Number.isFinite(Number(item.price?.unit_amount)) ? Number(item.price.unit_amount) : null,
+    currency: item.price?.currency || null,
+    interval: item.price?.recurring?.interval || null
+  }));
+
+  return {
+    planId,
+    status: sub?.status || 'unknown',
+    currentPeriodStart: start,
+    currentPeriodEnd: end,
+    nextRenewal: cancelAtPeriodEnd ? null : end,
+    cancelAtPeriodEnd,
+    lineItems
+  };
+}
 
 async function requireBillingAdmin(req, res, next) {
   try {
@@ -594,6 +683,298 @@ router.get('/config-status', async (req, res) => {
     });
   } catch (err) {
     return res.status(500).json({ success: false, error: err.message || 'Failed to load Stripe config status' });
+  }
+});
+
+/**
+ * @openapi
+ * /api/billing/portal-session:
+ *   post:
+ *     summary: Create a Stripe Customer Portal session
+ *     description: Creates a Stripe Billing Customer Portal session for the tenant and returns the redirect URL. Billing-admin only.
+ *     tags:
+ *       - Billing
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Portal session created
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean }
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     url: { type: string, description: Stripe Customer Portal redirect URL }
+ *       400:
+ *         description: Stripe customer not initialized for this tenant
+ */
+router.post('/portal-session', async (req, res) => {
+  try {
+    const tenant = await getTenantForRequest(req);
+
+    if (!tenant.stripe_customer_id) {
+      return res.status(400).json({ success: false, error: 'Stripe customer is not initialized for this tenant' });
+    }
+
+    const { url } = await stripeService.createBillingPortalSession(tenant.stripe_customer_id, getBillingReturnUrl());
+
+    return res.json({ success: true, data: { url } });
+  } catch (err) {
+    return sendBillingError(res, 'Failed to create portal session', err);
+  }
+});
+
+/**
+ * @openapi
+ * /api/billing/subscription:
+ *   get:
+ *     summary: Get the tenant current subscription
+ *     description: Returns the current plan, status, billing period, next renewal, cancel-at-period-end flag, and line items.
+ *     tags:
+ *       - Billing
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Subscription details (data.status = "none" when no active subscription)
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean }
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     planId: { type: string, nullable: true }
+ *                     status: { type: string }
+ *                     currentPeriodStart: { type: string, format: date-time, nullable: true }
+ *                     currentPeriodEnd: { type: string, format: date-time, nullable: true }
+ *                     nextRenewal: { type: string, format: date-time, nullable: true }
+ *                     cancelAtPeriodEnd: { type: boolean }
+ *                     lineItems: { type: array, items: { type: object } }
+ */
+router.get('/subscription', async (req, res) => {
+  try {
+    const tenant = await getTenantForRequest(req);
+    const planId = tenant.subscription_plan ? normalizePlanId(tenant.subscription_plan, 'basic') : null;
+
+    if (!tenant.stripe_subscription_id || stripe?._disabled) {
+      return res.json({
+        success: true,
+        data: {
+          planId,
+          status: 'none',
+          currentPeriodStart: null,
+          currentPeriodEnd: null,
+          nextRenewal: null,
+          cancelAtPeriodEnd: false,
+          lineItems: []
+        }
+      });
+    }
+
+    const sub = await stripeService.getSubscription(tenant.stripe_subscription_id);
+    return res.json({ success: true, data: formatSubscription(sub, planId) });
+  } catch (err) {
+    return sendBillingError(res, 'Failed to load subscription', err);
+  }
+});
+
+/**
+ * @openapi
+ * /api/billing/change-plan:
+ *   post:
+ *     summary: Change the tenant subscription plan
+ *     description: Updates the base plan on the tenant Stripe subscription with proration. Validates the target plan against plans.js and updates tenants.subscription_plan on success. Billing-admin only.
+ *     tags:
+ *       - Billing
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [planId]
+ *             properties:
+ *               planId: { type: string, enum: [basic, multi_mc, end_to_end, enterprise] }
+ *     responses:
+ *       200:
+ *         description: Plan changed
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean }
+ *                 data:
+ *                   type: object
+ *                   description: Updated subscription (same shape as GET /subscription data)
+ *       400:
+ *         description: Invalid plan, plan not configured, or no active subscription
+ */
+router.post('/change-plan', async (req, res) => {
+  try {
+    const tenant = await getTenantForRequest(req);
+
+    // Strict validation: normalizePlanId always coerces unknown input to a valid
+    // plan ('basic' fallback), so it cannot detect bad input. Match the canonical
+    // plan IDs directly (the documented enum) to avoid a silent downgrade.
+    const planId = String(req.body?.planId || '').trim().toLowerCase();
+    if (!VALID_PLAN_IDS.includes(planId)) {
+      return res.status(400).json({ success: false, error: 'A valid planId is required.' });
+    }
+
+    if (stripe?._disabled) {
+      return res.status(400).json({ success: false, error: 'Billing is not configured for this environment.' });
+    }
+    if (!tenant.stripe_subscription_id) {
+      return res.status(400).json({ success: false, error: 'An active subscription is required to change plans.' });
+    }
+
+    const newPriceId = getPlanPriceMap()[planId];
+    if (!newPriceId) {
+      return res.status(400).json({ success: false, error: 'The selected plan is not available for self-serve changes.' });
+    }
+
+    const updated = await stripeService.changePlan(
+      tenant.stripe_subscription_id,
+      newPriceId,
+      getExtraSeatPriceId(),
+      resolveIdempotencyKey(req, 'change-plan')
+    );
+
+    await knex('tenants')
+      .where({ id: tenant.id })
+      .update({ subscription_plan: planId, updated_at: knex.fn.now() });
+
+    return res.json({ success: true, data: formatSubscription(updated, planId) });
+  } catch (err) {
+    return sendBillingError(res, 'Failed to change plan', err);
+  }
+});
+
+/**
+ * @openapi
+ * /api/billing/cancel:
+ *   post:
+ *     summary: Cancel the tenant subscription at period end
+ *     description: Marks the tenant Stripe subscription to cancel at the end of the current billing period. Billing-admin only.
+ *     tags:
+ *       - Billing
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Cancellation scheduled
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean }
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     cancelAtPeriodEnd: { type: boolean, example: true }
+ *                     currentPeriodEnd: { type: string, format: date-time, nullable: true }
+ *       400:
+ *         description: No active subscription to cancel
+ */
+router.post('/cancel', async (req, res) => {
+  try {
+    const tenant = await getTenantForRequest(req);
+
+    if (stripe?._disabled) {
+      return res.status(400).json({ success: false, error: 'Billing is not configured for this environment.' });
+    }
+    if (!tenant.stripe_subscription_id) {
+      return res.status(400).json({ success: false, error: 'There is no active subscription to cancel.' });
+    }
+
+    const updated = await stripeService.cancelSubscription(
+      tenant.stripe_subscription_id,
+      resolveIdempotencyKey(req, 'cancel')
+    );
+    const { end } = readSubscriptionPeriod(updated);
+
+    return res.json({
+      success: true,
+      data: {
+        cancelAtPeriodEnd: Boolean(updated?.cancel_at_period_end),
+        currentPeriodEnd: end
+      }
+    });
+  } catch (err) {
+    return sendBillingError(res, 'Failed to cancel subscription', err);
+  }
+});
+
+/**
+ * @openapi
+ * /api/billing/invoices:
+ *   get:
+ *     summary: List the tenant Stripe invoices
+ *     description: Returns the tenant invoices/receipts (id, date, amount, status, hosted invoice + PDF URLs). Billing-admin only.
+ *     tags:
+ *       - Billing
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Invoice list (empty array when no Stripe customer / billing disabled)
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean }
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     invoices:
+ *                       type: array
+ *                       items:
+ *                         type: object
+ *                         properties:
+ *                           id: { type: string }
+ *                           created: { type: string, format: date-time, nullable: true }
+ *                           amountDue: { type: integer, description: Amount in the smallest currency unit (cents) }
+ *                           amountPaid: { type: integer, description: Amount in the smallest currency unit (cents) }
+ *                           currency: { type: string, nullable: true }
+ *                           status: { type: string, nullable: true }
+ *                           hostedInvoiceUrl: { type: string, nullable: true }
+ *                           pdfUrl: { type: string, nullable: true }
+ */
+router.get('/invoices', async (req, res) => {
+  try {
+    const tenant = await getTenantForRequest(req);
+
+    if (!tenant.stripe_customer_id || stripe?._disabled) {
+      return res.json({ success: true, data: { invoices: [] } });
+    }
+
+    const invoices = await stripeService.listInvoices(tenant.stripe_customer_id);
+    const data = invoices.map((inv) => ({
+      id: inv.id,
+      created: unixToIso(inv.created),
+      amountDue: Number.isFinite(Number(inv.amount_due)) ? Number(inv.amount_due) : null,
+      amountPaid: Number.isFinite(Number(inv.amount_paid)) ? Number(inv.amount_paid) : null,
+      currency: inv.currency || null,
+      status: inv.status || null,
+      hostedInvoiceUrl: inv.hosted_invoice_url || null,
+      pdfUrl: inv.invoice_pdf || null
+    }));
+
+    return res.json({ success: true, data: { invoices: data } });
+  } catch (err) {
+    return sendBillingError(res, 'Failed to load invoices', err);
   }
 });
 
