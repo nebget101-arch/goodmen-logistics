@@ -39,6 +39,39 @@ Use the Jira MCP tools:
 - `createJiraIssue` for each item (use `parent` field to link subtasks to stories, stories to epics)
 - `createIssueLink` for cross-story dependencies (use "Blocks" link type)
 
+### 2.5 Swimlane Lane-Label Propagation
+
+Every Story and Subtask MUST inherit the parent Epic's `epic:*` lane label so new work lands in the correct board swimlane automatically. The FN board has swimlanes wired to JQL `labels = "epic:<slug>"` — without this propagation, items fall into the default lane and need to be hand-tagged.
+
+**Lane registry (source of truth — keep current):**
+
+| Parent Epic(s) | Lane Label | Swimlane |
+|----------------|-----------|----------|
+| FN-1090 | `epic:quick-add-part` | Parts Catalog |
+| FN-1122 | `epic:control-center` | AI Control Center |
+| FN-1113 | `epic:reports-center` | AI Reports Center |
+| FN-1140, FN-1144, FN-1147, FN-1150, FN-1153, FN-1157, FN-1158, FN-1162, FN-1164, FN-1168 | `epic:roadside-v2` | Roadside AI v2 |
+| FN-1321 | `epic:control-center-redesign` | Control Center Redesign |
+| FN-1351 | `epic:ux-redesign` | UX Redesign |
+| FN-1379, FN-1652 | `epic:fleet-equipment-redesign` | Fleet Equipment Redesign |
+| FN-1411 | `epic:fmcsa-reference` | FMCSA Reference Dataset |
+| FN-1429 | `epic:ai-tools-phase-1` | AI Tools Phase 1 |
+| FN-1477 | `epic:warehouse-receiving` | Warehouse Receiving Redesign |
+| FN-1515 | `epic:wo-create-fixes` | Work Order Page Bug Bash |
+| FN-679 | `epic:locations-admin` | Locations Admin |
+| FN-1583 | `epic:loads-import` | Loads Spreadsheet Import |
+| FN-1617 | `epic:ai-tools-phase-2` | AI Tools Phase 2 |
+| FN-1685 | `epic:billing-redesign` | Billing & Subscription |
+| FN-1701 | `epic:session-management` | Session Management |
+
+**Propagation rule:**
+- Before creating a **Story** under an Epic: read the Epic's `labels`, find any `epic:*` label, and include it in the Story's `labels` array (alongside the `agent:*` label).
+- Before creating a **Subtask** under a Story: include any `epic:*` label that's on the Story (or look up the grandparent Epic if absent).
+- If the parent Epic has multiple `epic:*` labels, copy them all.
+- If the parent Epic has **none**: stop and ask the user to register the lane — add a row to the registry above, apply the label to the Epic, then resume.
+
+**New Epic creation:** when intake creates a *new* Epic, propose a lane label following the `epic:<short-slug>` convention, add it to the new Epic's labels, and add a row to the registry table in this file in the same change.
+
 ### 3. Subtask Guidelines
 
 **CRITICAL RULE — one subtask per agent type, not per sub-unit of work.**
