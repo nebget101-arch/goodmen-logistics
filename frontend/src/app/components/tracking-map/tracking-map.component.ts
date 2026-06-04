@@ -221,9 +221,9 @@ export class TrackingMapComponent implements OnInit, AfterViewInit, OnDestroy {
           center: [-98.35, 39.5],
           zoom: 3.5,
           maxZoom: MAX_ZOOM, // street-level vector detail (FN-1723)
-          pitch: 50, // true 3D camera (AC: ~45–60°)
-          bearing: -17.6,
-          maxPitch: 75,
+          pitch: 0, // top-down by default so markers stay locked to coords on zoom (no tilt parallax)
+          bearing: 0,
+          maxPitch: 75, // user can still tilt/rotate to 3D via the nav control + drag-rotate
           attributionControl: { compact: true },
         });
 
