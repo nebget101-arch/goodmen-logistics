@@ -621,6 +621,32 @@ export const MARKETING_PLANS: MarketingPlan[] = [
   }
 ];
 
+// ─── Plan helpers (single source — consumed by marketing site AND /billing FN-1698) ──
+
+/** Canonical low→high tier ordering. Drives upgrade vs downgrade detection. */
+export const PLAN_ORDER: MarketingPlan['id'][] = ['basic', 'multi_mc', 'end_to_end', 'enterprise'];
+
+/** Look up a plan by id from the single MARKETING_PLANS source. */
+export function getMarketingPlan(id: string | null | undefined): MarketingPlan | undefined {
+  if (!id) return undefined;
+  return MARKETING_PLANS.find(p => p.id === id);
+}
+
+/** Parse the numeric monthly USD price from a plan's priceLabel (null for "Let's talk"). */
+export function getPlanMonthlyPriceUsd(plan: MarketingPlan | null | undefined): number | null {
+  if (!plan) return null;
+  const match = plan.priceLabel.match(/[\d,]+(?:\.\d+)?/);
+  if (!match) return null;
+  const value = Number(match[0].replace(/,/g, ''));
+  return Number.isFinite(value) ? value : null;
+}
+
+/** Tier rank for a plan id (−1 if unknown). Higher = higher tier. */
+export function getPlanRank(id: string | null | undefined): number {
+  if (!id) return -1;
+  return PLAN_ORDER.indexOf(id as MarketingPlan['id']);
+}
+
 // ─── Social proof (landing — FN-7) ────────────────────────────────────────────
 
 export interface SocialProofStat {

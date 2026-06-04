@@ -1,107 +1,207 @@
 <div class="billing-page">
-  <div class="billing-header">
-    <h1 class="billing-title">Billing &amp; Subscription</h1>
-    <p class="billing-subtitle">Manage your plan, trial, and payment method.</p>
-  </div>
 
-  <!-- Loading -->
+  <!-- ── Header ── -->
+  <header class="billing-header">
+    <p class="ai-kicker">FleetNeuron Billing</p>
+    <h1 class="billing-title">
+      <span class="material-symbols-outlined title-icon">receipt_long</span>
+      Billing &amp; Subscription
+    </h1>
+    <p class="subtitle">Manage your plan, payment method, invoices, and subscription.</p>
+  </header>
+
+  <!-- ── Loading ── -->
   <div *ngIf="loading" class="billing-loading">
-    <span class="loading-spinner"></span>
-    <span>Loading billing details…</span>
+    <app-ai-skeleton width="100%" height="92px" radius="12px"></app-ai-skeleton>
+    <app-ai-skeleton width="100%" height="160px" radius="12px"></app-ai-skeleton>
+    <app-ai-skeleton width="100%" height="220px" radius="12px"></app-ai-skeleton>
   </div>
 
   <ng-container *ngIf="!loading">
 
-    <!-- ── No billing data (non-trial / admin / error) ── -->
-    <div *ngIf="!state" class="billing-card billing-empty">
+    <!-- ── No billing data (non-trial / error) ── -->
+    <div *ngIf="!state" class="billing-panel billing-empty">
+      <span class="material-symbols-outlined empty-icon">info</span>
       <p>No billing information is available for your account.</p>
     </div>
 
     <ng-container *ngIf="state">
 
-      <!-- ── Plan Card ── -->
-      <section class="billing-card">
-        <h2 class="card-section-title">
+      <!-- ── Contextual status banner ── -->
+      <div class="status-banner ai-panel-flat" [attr.data-severity]="statusSeverity" role="status">
+        <span class="material-symbols-outlined banner-icon">
+          {{ isPastDue ? 'error' : isExpired ? 'warning' : cancelAtPeriodEnd ? 'event_busy' : isInTrial ? 'schedule' : 'verified' }}
+        </span>
+        <div class="banner-body">
+          <ng-container *ngIf="isPastDue">
+            <strong>Payment past due.</strong>
+            Your last payment didn't go through. Update your payment method to avoid losing access.
+          </ng-container>
+          <ng-container *ngIf="!isPastDue && cancelAtPeriodEnd">
+            <strong>Subscription ending.</strong>
+            Your plan stays active until <strong>{{ state.currentPeriodEnd | date:'mediumDate' }}</strong>, then cancels.
+          </ng-container>
+          <ng-container *ngIf="!isPastDue && !cancelAtPeriodEnd && isInTrial">
+            <strong>Free trial active.</strong>
+            <ng-container *ngIf="state.daysRemaining !== null">
+              {{ state.daysRemaining }} day{{ state.daysRemaining === 1 ? '' : 's' }} remaining
+            </ng-container>
+            <ng-container *ngIf="state.trialEnd">
+              — {{ state.hasPaymentMethod ? 'billing starts' : 'add a card before' }}
+              {{ state.trialEnd | date:'mediumDate' }}.
+            </ng-container>
+          </ng-container>
+          <ng-container *ngIf="!isPastDue && !cancelAtPeriodEnd && isExpired">
+            <strong>Trial ended.</strong>
+            Add a payment method to reactivate your account.
+          </ng-container>
+          <ng-container *ngIf="!isPastDue && !cancelAtPeriodEnd && !isInTrial && !isExpired">
+            <strong>Subscription active.</strong>
+            <ng-container *ngIf="state.nextRenewal">
+              Renews {{ state.nextRenewal | date:'mediumDate' }}.
+            </ng-container>
+          </ng-container>
+        </div>
+      </div>
+
+      <!-- ── KPI summary ── -->
+      <div class="kpi-grid">
+        <app-kpi-card
+          label="Current plan"
+          [value]="(currentPlan?.name) || state.planName || state.planId || 'FleetNeuron'"
+          [subline]="currentPlan?.priceLabel || (state.planAmount !== null ? (state.planAmount | currency) + '/mo' : '')"
+          status="info"
+        ></app-kpi-card>
+
+        <app-kpi-card
+          label="Status"
+          [value]="isPastDue ? 'Past due' : isExpired ? 'Expired' : cancelAtPeriodEnd ? 'Cancelling' : isInTrial ? 'Trial' : 'Active'"
+          [status]="statusSeverity"
+        ></app-kpi-card>
+
+        <app-kpi-card
+          *ngIf="state.trialEnd && (isInTrial || isExpired)"
+          label="Trial ends"
+          [value]="(state.trialEnd | date:'MMM d') || '—'"
+          [subline]="isInTrial && state.daysRemaining !== null ? state.daysRemaining + ' days left' : ''"
+          [status]="isExpired ? 'critical' : 'info'"
+        ></app-kpi-card>
+
+        <app-kpi-card
+          *ngIf="state.nextRenewal && !cancelAtPeriodEnd && !isInTrial"
+          label="Next renewal"
+          [value]="(state.nextRenewal | date:'MMM d') || '—'"
+          status="good"
+        ></app-kpi-card>
+
+        <app-kpi-card
+          *ngIf="seatUsage && seatUsage.effectiveSeatLimit !== null"
+          label="Seats in use"
+          [value]="seatUsage.activeUsers + ' / ' + seatUsage.effectiveSeatLimit"
+          [subline]="seatUsage.extraPaidSeats > 0 ? (seatUsage.includedUsers + ' incl. + ' + seatUsage.extraPaidSeats + ' paid') : ''"
+          [status]="seatLimitReached ? 'warning' : 'good'"
+        ></app-kpi-card>
+      </div>
+
+      <!-- ── Plans comparison ── -->
+      <section class="billing-panel">
+        <h2 class="section-title">
           <span class="material-symbols-outlined section-icon">workspace_premium</span>
-          Current Plan
+          Plans
         </h2>
-        <div class="plan-row">
-          <div class="plan-name">
-            {{ state.planName || state.planId || 'FleetNeuron' }}
-          </div>
-          <div class="plan-price" *ngIf="state.planAmount !== null">
-            {{ state.planAmount | currency }}<span class="price-period">/mo</span>
-          </div>
-          <div class="plan-price plan-price-contact" *ngIf="state.planAmount === null">
-            Contact us
-          </div>
-        </div>
+        <div class="plans-grid">
+          <article
+            *ngFor="let plan of plans"
+            class="plan-card"
+            [class.is-current]="planRelation(plan) === 'current'"
+            [class.is-highlighted]="plan.highlighted"
+          >
+            <div class="plan-card-head">
+              <span class="plan-name">{{ plan.name }}</span>
+              <span *ngIf="planRelation(plan) === 'current'" class="plan-pill plan-pill-current">Current</span>
+              <span *ngIf="planRelation(plan) !== 'current' && plan.badge" class="plan-pill plan-pill-popular">{{ plan.badge }}</span>
+            </div>
+            <div class="plan-price">{{ plan.priceLabel }}</div>
+            <p class="plan-tagline">{{ plan.tagline }}</p>
+            <ul class="plan-features">
+              <li *ngFor="let f of plan.features" [class.feat-highlight]="f.highlight">
+                <span class="material-symbols-outlined feat-check">check_circle</span>
+                {{ f.text }}
+              </li>
+            </ul>
 
-        <!-- Trial status badge -->
-        <div *ngIf="isInTrial" class="status-badge badge-trial">
-          🕐 Free trial active
-        </div>
-        <div *ngIf="isExpired" class="status-badge badge-expired">
-          ⚠️ Trial expired
-        </div>
-        <div *ngIf="isConverted" class="status-badge badge-converted">
-          ✅ Active subscriber
+            <div class="plan-actions">
+              <span *ngIf="planRelation(plan) === 'current'" class="plan-current-label">
+                <span class="material-symbols-outlined">check</span> Your plan
+              </span>
+              <button
+                *ngIf="planRelation(plan) === 'upgrade'"
+                type="button"
+                class="btn-primary plan-btn"
+                (click)="requestChangePlan(plan)"
+              >
+                <span class="material-symbols-outlined">arrow_upward</span> Upgrade
+              </button>
+              <button
+                *ngIf="planRelation(plan) === 'downgrade'"
+                type="button"
+                class="btn-secondary plan-btn"
+                (click)="requestChangePlan(plan)"
+              >
+                Switch to this plan
+              </button>
+              <a
+                *ngIf="planRelation(plan) === 'contact'"
+                routerLink="/contact"
+                class="btn-secondary plan-btn"
+              >
+                Contact sales
+              </a>
+            </div>
+          </article>
         </div>
       </section>
 
-      <!-- ── Trial Info Card (shown only during / after trial) ── -->
-      <section class="billing-card" *ngIf="isInTrial || isExpired">
-        <h2 class="card-section-title">
-          <span class="material-symbols-outlined section-icon">timer</span>
-          Trial Details
-        </h2>
-
-        <div class="detail-grid">
-          <div class="detail-row" *ngIf="state.trialEnd">
-            <span class="detail-label">Trial end date</span>
-            <span class="detail-value">{{ state.trialEnd | date:'fullDate' }}</span>
-          </div>
-          <div class="detail-row" *ngIf="isInTrial && state.daysRemaining !== null">
-            <span class="detail-label">Days remaining</span>
-            <span class="detail-value days-remaining" [class.low]="(state.daysRemaining ?? 99) <= 3">
-              {{ state.daysRemaining }} day{{ state.daysRemaining === 1 ? '' : 's' }}
-            </span>
-          </div>
-          <div class="detail-row" *ngIf="isExpired">
-            <span class="detail-label">Status</span>
-            <span class="detail-value expired-label">Trial has ended</span>
-          </div>
+      <!-- ── Seat limit "upgrade to unlock" prompt ── -->
+      <div *ngIf="seatLimitReached" class="upgrade-prompt ai-panel-flat" data-severity="warning" role="status">
+        <span class="material-symbols-outlined prompt-icon">group_add</span>
+        <div class="prompt-body">
+          <strong>You've reached your seat limit.</strong>
+          You're using all {{ seatUsage?.effectiveSeatLimit }} seats on your plan. Buy additional seats from
+          the billing portal, or upgrade to a higher plan to unlock more included users.
         </div>
-      </section>
+        <button type="button" class="btn-secondary prompt-btn" (click)="openPortal()" [disabled]="portalLoading">
+          {{ portalLoading ? 'Opening…' : 'Manage seats' }}
+        </button>
+      </div>
 
-      <!-- ── Payment Method Card ── -->
-      <section class="billing-card">
-        <h2 class="card-section-title">
+      <!-- ── Payment method ── -->
+      <section class="billing-panel">
+        <h2 class="section-title">
           <span class="material-symbols-outlined section-icon">credit_card</span>
           Payment Method
         </h2>
 
-        <!-- Card on file -->
         <div *ngIf="state.hasPaymentMethod" class="card-on-file">
           <div class="card-chip">
+            <span class="material-symbols-outlined">credit_card</span>
             <span class="card-brand">{{ state.cardBrand | titlecase }}</span>
             <span class="card-last4">•••• {{ state.cardLast4 }}</span>
-            <span class="card-exp">Expires {{ state.cardExpMonth }}/{{ state.cardExpYear }}</span>
+            <span class="card-exp">Exp {{ state.cardExpMonth }}/{{ state.cardExpYear }}</span>
           </div>
 
           <div class="card-actions">
-            <button class="btn btn-secondary" type="button" (click)="openPaymentDialog()">
-              <span class="material-symbols-outlined btn-icon">edit</span>
-              Update card
+            <button class="btn-secondary" type="button" (click)="openPaymentDialog()">
+              <span class="material-symbols-outlined">edit</span> Update card
             </button>
             <button
               *ngIf="isInTrial || isExpired"
-              class="btn btn-danger-outline"
+              class="btn-danger"
               type="button"
               [disabled]="removing"
               (click)="removeCard()"
             >
-              <span class="material-symbols-outlined btn-icon">delete</span>
+              <span class="material-symbols-outlined">delete</span>
               {{ removing ? 'Removing…' : 'Remove card' }}
             </button>
           </div>
@@ -110,16 +210,145 @@
           <p *ngIf="removeSuccess" class="inline-success">{{ removeSuccess }}</p>
         </div>
 
-        <!-- No card on file -->
         <div *ngIf="!state.hasPaymentMethod" class="no-card">
           <p class="no-card-text">No payment method on file.</p>
-          <button class="btn btn-primary" type="button" (click)="openPaymentDialog()">
-            <span class="material-symbols-outlined btn-icon">add_card</span>
-            Add payment method
+          <button class="btn-primary" type="button" (click)="openPaymentDialog()">
+            <span class="material-symbols-outlined">add_card</span> Add payment method
           </button>
+        </div>
+      </section>
+
+      <!-- ── Invoice history ── -->
+      <section class="billing-panel">
+        <h2 class="section-title">
+          <span class="material-symbols-outlined section-icon">history</span>
+          Invoice History
+        </h2>
+
+        <div *ngIf="invoicesLoading" class="invoices-loading">
+          <app-ai-skeleton width="100%" height="40px"></app-ai-skeleton>
+          <app-ai-skeleton width="100%" height="40px"></app-ai-skeleton>
+        </div>
+
+        <p *ngIf="!invoicesLoading && invoices.length === 0" class="empty-text">
+          No invoices yet.
+        </p>
+
+        <div *ngIf="!invoicesLoading && invoices.length > 0" class="table-responsive">
+          <table class="table invoices-table">
+            <thead>
+              <tr>
+                <th scope="col">Date</th>
+                <th scope="col">Amount</th>
+                <th scope="col">Status</th>
+                <th scope="col" class="col-links">Invoice</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr *ngFor="let inv of invoices">
+                <td>{{ invoiceDateMs(inv.created) | date:'mediumDate' }}</td>
+                <td class="amount">{{ invoiceAmount(inv.amountPaid || inv.amountDue) | currency }}</td>
+                <td>
+                  <span class="inv-status" [attr.data-status]="inv.status">{{ inv.status | titlecase }}</span>
+                </td>
+                <td class="col-links">
+                  <a *ngIf="inv.hostedInvoiceUrl" [href]="inv.hostedInvoiceUrl" target="_blank" rel="noopener" class="inv-link">
+                    <span class="material-symbols-outlined">open_in_new</span> View
+                  </a>
+                  <a *ngIf="inv.pdfUrl" [href]="inv.pdfUrl" target="_blank" rel="noopener" class="inv-link">
+                    <span class="material-symbols-outlined">picture_as_pdf</span> PDF
+                  </a>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- ── Manage subscription ── -->
+      <section class="billing-panel">
+        <h2 class="section-title">
+          <span class="material-symbols-outlined section-icon">settings</span>
+          Manage Subscription
+        </h2>
+        <div class="manage-row">
+          <div class="manage-copy">
+            <strong>Stripe Customer Portal</strong>
+            <span>Update billing details, download receipts, and manage payment methods.</span>
+          </div>
+          <button type="button" class="btn-secondary" (click)="openPortal()" [disabled]="portalLoading">
+            <span class="material-symbols-outlined">open_in_new</span>
+            {{ portalLoading ? 'Opening…' : 'Manage in portal' }}
+          </button>
+        </div>
+
+        <!-- Danger zone: cancel -->
+        <div class="manage-row danger-zone" *ngIf="hasActiveSubscription && !cancelAtPeriodEnd">
+          <div class="manage-copy">
+            <strong>Cancel subscription</strong>
+            <span>Your plan stays active until the end of the current billing period.</span>
+          </div>
+          <button type="button" class="btn-danger" (click)="requestCancel()">
+            <span class="material-symbols-outlined">cancel</span> Cancel subscription
+          </button>
+        </div>
+
+        <div class="manage-row" *ngIf="cancelAtPeriodEnd">
+          <div class="manage-copy">
+            <strong>Subscription scheduled to cancel</strong>
+            <span>Use the portal to resume your subscription before it ends.</span>
+          </div>
         </div>
       </section>
 
     </ng-container>
   </ng-container>
+
+  <!-- ── Confirmation modal (change-plan / cancel) ── -->
+  <div *ngIf="pending" class="confirm-backdrop" (click)="closeConfirm()">
+    <div
+      class="confirm-modal billing-panel"
+      role="dialog"
+      aria-modal="true"
+      [attr.aria-label]="pending.type === 'cancel' ? 'Confirm cancellation' : 'Confirm plan change'"
+      (click)="$event.stopPropagation()"
+    >
+      <h3 class="confirm-title">
+        <span class="material-symbols-outlined" [class.danger]="pending.type === 'cancel'">
+          {{ pending.type === 'cancel' ? 'cancel' : 'swap_horiz' }}
+        </span>
+        {{ pending.type === 'cancel' ? 'Cancel subscription?' : 'Change plan to ' + pending.plan?.name + '?' }}
+      </h3>
+
+      <div class="confirm-body">
+        <p *ngIf="pending.type === 'cancel'">
+          Your subscription will remain active until the end of your current billing period, then cancel.
+          You can resume any time before then from the Customer Portal.
+        </p>
+        <p *ngIf="pending.type === 'change'">{{ prorationPreview }}</p>
+      </div>
+
+      <p *ngIf="actionError" class="inline-error">{{ actionError }}</p>
+
+      <div class="confirm-actions">
+        <button type="button" class="btn-secondary" (click)="closeConfirm()" [disabled]="actionInFlight">
+          Keep current plan
+        </button>
+        <button
+          type="button"
+          [class.btn-danger]="pending.type === 'cancel'"
+          [class.btn-primary]="pending.type === 'change'"
+          (click)="confirmAction()"
+          [disabled]="actionInFlight"
+        >
+          {{ actionInFlight
+              ? 'Working…'
+              : pending.type === 'cancel'
+                ? 'Yes, cancel'
+                : 'Confirm change' }}
+        </button>
+      </div>
+    </div>
+  </div>
+
 </div>

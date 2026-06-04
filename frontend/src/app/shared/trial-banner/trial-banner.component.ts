@@ -30,9 +30,13 @@ export class TrialBannerComponent implements OnInit, OnDestroy {
   }
 
   /** Returns the display variant for the banner, or 'hidden' if it should not render. */
-  get bannerVariant(): 'state-a' | 'state-b' | 'state-c' | 'hidden' {
+  get bannerVariant(): 'state-a' | 'state-b' | 'state-c' | 'state-d' | 'hidden' {
     const s = this.state;
-    if (!s || !s.trialStatus) return 'hidden';
+    if (!s) return 'hidden';
+    // Past-due / unpaid overrides trial state: an active subscriber whose latest
+    // invoice failed needs to fix their card (grace period before suspension).
+    if (s.subscriptionStatus === 'past_due' || s.subscriptionStatus === 'unpaid') return 'state-d';
+    if (!s.trialStatus) return 'hidden';
     if (s.trialStatus === 'converted') return 'hidden';
     if (s.trialStatus === 'expired') return 'state-c';
     if (s.trialStatus === 'trial') {
