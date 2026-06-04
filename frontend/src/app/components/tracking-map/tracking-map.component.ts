@@ -10,8 +10,14 @@ import {
 } from '@angular/core';
 import { Subject } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
-import * as L from 'leaflet';
-import 'leaflet.markercluster';
+import {
+  GeoJSONSource,
+  Map as MaplibreMap,
+  Marker,
+  NavigationControl,
+  Popup,
+  StyleSpecification,
+} from 'maplibre-gl';
 
 import { AiSelectOption } from '../../shared/ai-select/ai-select.component';
 import { LoadsService } from '../../services/loads.service';
@@ -27,35 +33,80 @@ import {
   VehiclePositionPing,
 } from './vehicle-position.model';
 
-/** Marker colour per movement status (AI dark-theme palette — no new hex). */
-const STATUS_COLOR: Record<VehicleMovementStatus, string> = {
-  moving: '#34d399',
-  idle: '#fbbf24',
-  offline: '#94a3b8',
-};
-
 /** Load statuses that count as a vehicle's "current load" (driving states). */
 const ACTIVE_LOAD_STATUSES = new Set(['DISPATCHED', 'EN_ROUTE', 'PICKED_UP', 'IN_TRANSIT']);
 
+/** Geofence overlay tint (AI dark-theme violet — matches the base Leaflet map). */
+const GEOFENCE_COLOR = '#a78bfa';
+/** Breadcrumb trail tint (AI dark-theme sky-blue — matches the base Leaflet map). */
+const BREADCRUMB_COLOR = '#38bdf8';
+
+/** Source / layer ids on the MapLibre style. */
+const SRC_GEOFENCES = 'fn-geofences';
+const SRC_BREADCRUMB = 'fn-breadcrumb';
+const LYR_GEOFENCE_FILL = 'fn-geofence-fill';
+const LYR_GEOFENCE_LINE = 'fn-geofence-line';
+const LYR_BREADCRUMB_LINE = 'fn-breadcrumb-line';
+
+/** Milliseconds to glide a marker between two pings (so trucks never teleport). */
+const MOVE_ANIM_MS = 900;
+
+/** Per-marker tween state for smooth ping-to-ping interpolation. */
+interface MarkerTween {
+  fromLng: number;
+  fromLat: number;
+  toLng: number;
+  toLat: number;
+  start: number;
+  dur: number;
+}
+
 /**
- * TrackingMapComponent — the `/tracking` live map (FN-1671).
+ * A dark, key-less basemap matching the AI dark theme. CARTO's `dark_all`
+ * raster tiles need no API key and render the dark palette this UI uses; a true
+ * vector basemap (which would unlock extruded 3D buildings) would require a
+ * keyed tile provider, so we keep the raster basemap and deliver the 3D *camera*
+ * (pitch / rotate / tilt) over it. See the FN-1717 story doc for the tradeoff.
+ */
+const DARK_BASEMAP_STYLE: StyleSpecification = {
+  version: 8,
+  sources: {
+    'carto-dark': {
+      type: 'raster',
+      tiles: [
+        'https://a.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png',
+        'https://b.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png',
+        'https://c.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png',
+        'https://d.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png',
+      ],
+      tileSize: 256,
+      attribution: '© OpenStreetMap contributors © CARTO',
+    },
+  },
+  layers: [
+    { id: 'bg', type: 'background', paint: { 'background-color': '#0b1120' } },
+    { id: 'carto-dark', type: 'raster', source: 'carto-dark' },
+  ],
+};
+
+/**
+ * TrackingMapComponent — the `/tracking` live map (FN-1671, re-engined to
+ * MapLibre GL in FN-1720 / Story J).
  *
- * A Leaflet map with a clustered vehicle layer that updates in real time from
- * the shared {@link WebsocketService} (via {@link VehiclePositionService}, wired
- * to the FN-1672 contract). Hovering a vehicle draws its last-{@link
- * BREADCRUMB_WINDOW_HOURS}h breadcrumb trail; clicking opens a side panel
- * (driver, vehicle, current load, ping age, speed, heading, open-load link). A
- * filter bar narrows the layer by driver, movement status, and geofence;
- * geofences also render as a toggleable overlay.
+ * A WebGL map (MapLibre GL) with a true 3D camera (default pitch ~50°, free
+ * rotate / tilt / zoom) over a dark basemap matching the AI dark theme. Vehicles
+ * render as catchy, status-tinted **truck markers** (HTML markers, not Leaflet
+ * arrows) that glow/pulse, rotate to `heading_deg`, and glide smoothly between
+ * pings via a single `requestAnimationFrame` tween loop (no teleporting). Live
+ * positions arrive over the shared {@link WebsocketService} (via {@link
+ * VehiclePositionService}); hovering a truck draws its last-{@link
+ * BREADCRUMB_WINDOW_HOURS}h breadcrumb trail; clicking opens a side panel. A
+ * filter bar narrows by driver, movement status, and geofence; geofences also
+ * render as a toggleable GeoJSON overlay.
  *
- * The backend positions endpoint serves vehicle metadata but no movement status,
- * driver name, or current load, and the live `vehicle:position` ping is leaner
- * still (geometry only). So this component derives movement status from speed +
- * ping age, resolves driver names from the active-driver list, and looks up the
- * current load on selection — keeping the marker read cheap at 500 vehicles.
- *
- * Performance: markers are clustered (`leaflet.markercluster`) and rendered on a
- * canvas (`preferCanvas`); live pings + filtering mutate the layer imperatively.
+ * Performance: the map's render loop + the marker tween loop both run *outside*
+ * the Angular zone, so smooth 60fps movement at 50+ trucks never thrashes change
+ * detection; only user-driven events (click / hover) re-enter the zone.
  *
  * FN-317 RCA: every `[options]` binding is a plain class field (never a getter)
  * — getter-backed option arrays allocate a new reference each CD pass and drive
@@ -104,16 +155,24 @@ export class TrackingMapComponent implements OnInit, AfterViewInit, OnDestroy {
 
   readonly breadcrumbHours = BREADCRUMB_WINDOW_HOURS;
 
-  // ── Leaflet ────────────────────────────────────────────────────────────────
-  private map: L.Map | null = null;
-  private clusterGroup: L.MarkerClusterGroup | null = null;
-  private geofenceLayer: L.LayerGroup | null = null;
-  private breadcrumbLayer: L.LayerGroup | null = null;
+  // ── MapLibre ───────────────────────────────────────────────────────────────
+  private map: MaplibreMap | null = null;
+  /** True once the style has loaded and our sources/layers are installed. */
+  private styleReady = false;
+  /** Reusable popup for the geofence-name hover tooltip. */
+  private geofencePopup: Popup | null = null;
 
   /** Latest known position per vehicle (source of truth for the layer). */
   private positions = new Map<string, VehiclePosition>();
-  /** Live marker per vehicle, kept in sync with {@link positions}. */
-  private markers = new Map<string, L.Marker>();
+  /** Live truck marker per vehicle, kept in sync with {@link positions}. */
+  private markers = new Map<string, Marker>();
+  /** Marker root element per vehicle (for cheap status/heading updates). */
+  private markerEls = new Map<string, HTMLElement>();
+  /** Active position tweens, advanced by the rAF loop. */
+  private tweens = new Map<string, MarkerTween>();
+  /** Handle for the marker tween loop (runs outside the Angular zone). */
+  private rafId: number | null = null;
+
   /** Loaded geofences (for the overlay + client-side geofence filter). */
   private geofences: Geofence[] = [];
   /** Driver id → display name (the positions wire carries only `driverId`). */
@@ -143,6 +202,13 @@ export class TrackingMapComponent implements OnInit, AfterViewInit, OnDestroy {
   ngOnDestroy(): void {
     this.destroy$.next();
     this.destroy$.complete();
+    if (this.rafId != null) cancelAnimationFrame(this.rafId);
+    this.rafId = null;
+    this.markers.forEach((m) => m.remove());
+    this.markers.clear();
+    this.markerEls.clear();
+    this.tweens.clear();
+    this.geofencePopup?.remove();
     this.map?.remove();
     this.map = null;
   }
@@ -152,28 +218,95 @@ export class TrackingMapComponent implements OnInit, AfterViewInit, OnDestroy {
     const el = this.mapContainer?.nativeElement;
     if (!el || this.map) return;
 
-    // `preferCanvas` keeps rendering cheap at 500+ markers.
-    const map = L.map(el, { center: [39.5, -98.35], zoom: 4, preferCanvas: true });
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      attribution: '© OpenStreetMap',
-    }).addTo(map);
+    // MapLibre runs its own internal render loop; create + wire it outside the
+    // Angular zone so its rAF ticks never trigger change detection. WebGL is
+    // unavailable in some headless/CI contexts — fail soft so the component
+    // still constructs (the spec relies on this).
+    this.zone.runOutsideAngular(() => {
+      try {
+        const map = new MaplibreMap({
+          container: el,
+          style: DARK_BASEMAP_STYLE,
+          center: [-98.35, 39.5],
+          zoom: 3.5,
+          pitch: 50, // true 3D camera (AC: ~45–60°)
+          bearing: -17.6,
+          maxPitch: 75,
+          attributionControl: { compact: true },
+        });
 
-    this.geofenceLayer = L.layerGroup();
-    this.breadcrumbLayer = L.layerGroup().addTo(map);
+        // Navigation control with pitch visualiser → user rotate / tilt / zoom.
+        map.addControl(new NavigationControl({ visualizePitch: true }), 'top-right');
+        map.dragRotate.enable();
+        map.touchZoomRotate.enableRotation();
 
-    // Cluster nearby vehicles so the layer stays readable + fast.
-    this.clusterGroup = L.markerClusterGroup({
-      chunkedLoading: true,
-      showCoverageOnHover: false,
-      maxClusterRadius: 60,
+        map.on('load', () => this.onMapLoad());
+
+        this.map = map;
+      } catch {
+        this.zone.run(() => {
+          this.error = 'Live map could not start (WebGL unavailable).';
+          this.cdr.markForCheck();
+        });
+      }
     });
-    map.addLayer(this.clusterGroup);
+  }
 
-    if (this.showGeofences) this.geofenceLayer.addTo(map);
+  /** Install our sources/layers once the basemap style is ready, then render. */
+  private onMapLoad(): void {
+    const map = this.map;
+    if (!map) return;
 
-    this.map = map;
-    // Flex-mounted map containers need a nudge once dimensions settle.
-    setTimeout(() => map.invalidateSize(), 150);
+    const empty: GeoJSON.FeatureCollection = { type: 'FeatureCollection', features: [] };
+
+    map.addSource(SRC_GEOFENCES, { type: 'geojson', data: empty });
+    map.addLayer({
+      id: LYR_GEOFENCE_FILL,
+      type: 'fill',
+      source: SRC_GEOFENCES,
+      paint: { 'fill-color': GEOFENCE_COLOR, 'fill-opacity': 0.08 },
+    });
+    map.addLayer({
+      id: LYR_GEOFENCE_LINE,
+      type: 'line',
+      source: SRC_GEOFENCES,
+      paint: { 'line-color': GEOFENCE_COLOR, 'line-width': 1 },
+    });
+
+    map.addSource(SRC_BREADCRUMB, { type: 'geojson', data: empty });
+    map.addLayer({
+      id: LYR_BREADCRUMB_LINE,
+      type: 'line',
+      source: SRC_BREADCRUMB,
+      layout: { 'line-cap': 'round', 'line-join': 'round' },
+      paint: {
+        'line-color': BREADCRUMB_COLOR,
+        'line-width': 2,
+        'line-opacity': 0.85,
+        'line-dasharray': [2, 2],
+      },
+    });
+
+    // Geofence-name tooltip on hover (ports the base map's bindTooltip).
+    this.geofencePopup = new Popup({ closeButton: false, closeOnClick: false, offset: 8 });
+    map.on('mousemove', LYR_GEOFENCE_FILL, (e) => {
+      const name = e.features?.[0]?.properties?.['name'];
+      if (!name) return;
+      map.getCanvas().style.cursor = 'pointer';
+      this.geofencePopup!.setLngLat(e.lngLat).setText(String(name)).addTo(map);
+    });
+    map.on('mouseleave', LYR_GEOFENCE_FILL, () => {
+      map.getCanvas().style.cursor = '';
+      this.geofencePopup?.remove();
+    });
+
+    this.styleReady = true;
+    this.applyGeofenceVisibility();
+    this.renderGeofenceOverlay();
+    this.rebuildLayer();
+
+    // Flex-mounted containers need a nudge once dimensions settle.
+    setTimeout(() => this.map?.resize(), 150);
   }
 
   // ── Data loading ─────────────────────────────────────────────────────────
@@ -294,8 +427,8 @@ export class TrackingMapComponent implements OnInit, AfterViewInit, OnDestroy {
     const existing = this.markers.get(ping.vehicleId);
     if (existing) {
       if (visible) {
-        existing.setLatLng([merged.lat, merged.lng]);
-        existing.setIcon(this.iconFor(merged));
+        this.updateMarkerVisual(ping.vehicleId, merged);
+        this.tweenTo(ping.vehicleId, merged.lng, merged.lat); // glide, don't teleport
       } else {
         this.removeMarker(ping.vehicleId);
       }
@@ -310,63 +443,103 @@ export class TrackingMapComponent implements OnInit, AfterViewInit, OnDestroy {
     this.cdr.markForCheck();
   }
 
-  // ── Layer rendering ────────────────────────────────────────────────────────
-  /** Rebuild the entire cluster layer from {@link positions} + current filters. */
+  // ── Marker layer ─────────────────────────────────────────────────────────
+  /** Rebuild the entire truck marker layer from {@link positions} + filters. */
   private rebuildLayer(): void {
-    if (!this.clusterGroup) return;
-    this.clusterGroup.clearLayers();
+    if (!this.map) return;
+    this.markers.forEach((m) => m.remove());
     this.markers.clear();
-    const batch: L.Marker[] = [];
+    this.markerEls.clear();
+    this.tweens.clear();
     this.positions.forEach((p) => {
-      if (!this.matchesFilters(p)) return;
-      const marker = this.buildMarker(p);
-      this.markers.set(p.vehicleId, marker);
-      batch.push(marker);
+      if (this.matchesFilters(p)) this.addMarker(p);
     });
-    // addLayers (bulk) is markercluster's fast path for large batches.
-    this.clusterGroup.addLayers(batch);
     this.recomputeVisibleCount();
   }
 
   private addMarker(p: VehiclePosition): void {
-    if (!this.clusterGroup) return;
-    const marker = this.buildMarker(p);
+    if (!this.map) return;
+    const el = this.buildMarkerEl(p);
+    const marker = new Marker({
+      element: el,
+      rotationAlignment: 'map', // heading is true-north, rotate with the camera
+      pitchAlignment: 'viewport', // keep the truck upright/readable when tilted
+    })
+      .setLngLat([p.lng, p.lat])
+      .setRotation(typeof p.headingDeg === 'number' ? p.headingDeg : 0)
+      .addTo(this.map);
     this.markers.set(p.vehicleId, marker);
-    this.clusterGroup.addLayer(marker);
+    this.markerEls.set(p.vehicleId, el);
   }
 
   private removeMarker(vehicleId: string): void {
-    const marker = this.markers.get(vehicleId);
-    if (marker && this.clusterGroup) this.clusterGroup.removeLayer(marker);
+    this.markers.get(vehicleId)?.remove();
     this.markers.delete(vehicleId);
+    this.markerEls.delete(vehicleId);
+    this.tweens.delete(vehicleId);
   }
 
-  /** Build a fully-wired marker (icon + hover trail + click panel) for a vehicle. */
-  private buildMarker(p: VehiclePosition): L.Marker {
-    const marker = L.marker([p.lat, p.lng], {
-      icon: this.iconFor(p),
-      title: p.unitNumber ?? p.vehicleId,
+  /** Build the truck marker DOM: glow halo + rotatable truck glyph + handlers. */
+  private buildMarkerEl(p: VehiclePosition): HTMLElement {
+    const el = document.createElement('div');
+    el.className = `fn-truck ${this.statusClass(p)}`;
+    el.title = p.unitNumber ?? p.vehicleId;
+    el.innerHTML = `
+      <span class="fn-truck-glow"></span>
+      <svg class="fn-truck-ico" viewBox="0 0 24 24" width="30" height="30" aria-hidden="true">
+        <path class="fn-truck-body" d="M12 1.6l3 3.1H9l3-3.1zM8.4 5h7.2c.9 0 1.6.7 1.6 1.6v13c0 .8-.6 1.4-1.4 1.4H8.2c-.8 0-1.4-.6-1.4-1.4v-13C6.8 5.7 7.5 5 8.4 5z"/>
+      </svg>`;
+    el.addEventListener('click', () => this.zone.run(() => this.selectVehicle(p.vehicleId)));
+    el.addEventListener('mouseenter', () => this.zone.run(() => this.showBreadcrumbs(p.vehicleId)));
+    el.addEventListener('mouseleave', () => this.clearBreadcrumbs());
+    return el;
+  }
+
+  /** Cheaply update an existing marker's status tint + heading (no rebuild). */
+  private updateMarkerVisual(vehicleId: string, p: VehiclePosition): void {
+    const el = this.markerEls.get(vehicleId);
+    if (el) el.className = `fn-truck ${this.statusClass(p)}`;
+    if (typeof p.headingDeg === 'number') this.markers.get(vehicleId)?.setRotation(p.headingDeg);
+  }
+
+  private statusClass(p: VehiclePosition): string {
+    return `fn-${p.movementStatus ?? 'offline'}`;
+  }
+
+  // ── Smooth movement (rAF tween, outside the Angular zone) ──────────────────
+  /** Glide a marker from its current position to a new ping over {@link MOVE_ANIM_MS}. */
+  private tweenTo(vehicleId: string, toLng: number, toLat: number): void {
+    const marker = this.markers.get(vehicleId);
+    if (!marker) return;
+    const from = marker.getLngLat();
+    this.tweens.set(vehicleId, {
+      fromLng: from.lng,
+      fromLat: from.lat,
+      toLng,
+      toLat,
+      start: performance.now(),
+      dur: MOVE_ANIM_MS,
     });
-    marker.on('mouseover', () => this.zone.run(() => this.showBreadcrumbs(p.vehicleId)));
-    marker.on('mouseout', () => this.clearBreadcrumbs());
-    marker.on('click', () => this.zone.run(() => this.selectVehicle(p.vehicleId)));
-    return marker;
+    this.ensureTweenLoop();
   }
 
-  /** Status-coloured, heading-rotated div icon. */
-  private iconFor(p: VehiclePosition): L.DivIcon {
-    const status = p.movementStatus ?? 'offline';
-    const color = STATUS_COLOR[status];
-    const rotation = typeof p.headingDeg === 'number' ? p.headingDeg : null;
-    const inner =
-      rotation == null
-        ? `<span class="veh-dot" style="background:${color}"></span>`
-        : `<span class="veh-arrow" style="color:${color};transform:rotate(${rotation}deg)">▲</span>`;
-    return L.divIcon({
-      className: `veh-marker veh-${status}`,
-      html: inner,
-      iconSize: [20, 20],
-      iconAnchor: [10, 10],
+  private ensureTweenLoop(): void {
+    if (this.rafId != null || !this.map) return;
+    this.zone.runOutsideAngular(() => {
+      const step = (now: number) => {
+        let active = false;
+        this.tweens.forEach((t, id) => {
+          const raw = Math.min(1, (now - t.start) / t.dur);
+          const e = raw * (2 - raw); // easeOutQuad
+          const lng = t.fromLng + (t.toLng - t.fromLng) * e;
+          const lat = t.fromLat + (t.toLat - t.fromLat) * e;
+          this.markers.get(id)?.setLngLat([lng, lat]);
+          if (raw >= 1) this.tweens.delete(id);
+          else active = true;
+        });
+        this.rafId = active ? requestAnimationFrame(step) : null;
+      };
+      this.rafId = requestAnimationFrame(step);
     });
   }
 
@@ -376,51 +549,97 @@ export class TrackingMapComponent implements OnInit, AfterViewInit, OnDestroy {
       .pipe(takeUntil(this.destroy$))
       .subscribe({
         next: (res) => {
-          if (!this.breadcrumbLayer) return;
-          this.breadcrumbLayer.clearLayers();
-          const pts = (res?.data ?? [])
+          const coords = (res?.data ?? [])
             .filter((b) => b.lat != null && b.lng != null)
-            .map((b) => [b.lat as number, b.lng as number] as L.LatLngTuple);
-          if (pts.length >= 2) {
-            L.polyline(pts, { color: '#38bdf8', weight: 2, opacity: 0.85, dashArray: '4 4' })
-              .addTo(this.breadcrumbLayer);
-          }
+            .map((b) => [b.lng as number, b.lat as number]);
+          const fc: GeoJSON.FeatureCollection = {
+            type: 'FeatureCollection',
+            features: coords.length >= 2
+              ? [{ type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: coords } }]
+              : [],
+          };
+          this.setSourceData(SRC_BREADCRUMB, fc);
         },
         error: () => { /* trail is best-effort — ignore fetch failures */ },
       });
   }
 
   private clearBreadcrumbs(): void {
-    this.breadcrumbLayer?.clearLayers();
+    this.setSourceData(SRC_BREADCRUMB, { type: 'FeatureCollection', features: [] });
   }
 
   // ── Geofence overlay ───────────────────────────────────────────────────────
   private renderGeofenceOverlay(): void {
-    if (!this.geofenceLayer) return;
-    this.geofenceLayer.clearLayers();
+    if (!this.styleReady) return;
+    this.setSourceData(SRC_GEOFENCES, this.geofenceFeatureCollection());
+  }
+
+  /** Build a GeoJSON FeatureCollection for the geofence overlay. */
+  private geofenceFeatureCollection(): GeoJSON.FeatureCollection {
+    const features: GeoJSON.Feature[] = [];
     this.geofences.forEach((g) => {
       if (g.kind === 'circle' && g.center && g.radiusMeters) {
-        L.circle([g.center.lat, g.center.lng], {
-          radius: g.radiusMeters,
-          color: '#a78bfa',
-          weight: 1,
-          fillColor: '#a78bfa',
-          fillOpacity: 0.08,
-        }).bindTooltip(g.name).addTo(this.geofenceLayer!);
+        features.push({
+          type: 'Feature',
+          properties: { name: g.name },
+          geometry: {
+            type: 'Polygon',
+            coordinates: [this.circleRing(g.center.lat, g.center.lng, g.radiusMeters)],
+          },
+        });
       } else if (g.kind === 'polygon' && g.vertices?.length) {
-        L.polygon(
-          g.vertices.map((v) => [v.lat, v.lng] as L.LatLngTuple),
-          { color: '#a78bfa', weight: 1, fillColor: '#a78bfa', fillOpacity: 0.08 },
-        ).bindTooltip(g.name).addTo(this.geofenceLayer!);
+        const ring = g.vertices.map((v) => [v.lng, v.lat]);
+        ring.push(ring[0]); // close the ring
+        features.push({
+          type: 'Feature',
+          properties: { name: g.name },
+          geometry: { type: 'Polygon', coordinates: [ring] },
+        });
       }
     });
+    return { type: 'FeatureCollection', features };
+  }
+
+  /** Approximate a metres-radius circle as a 64-gon ring of [lng, lat] points. */
+  private circleRing(lat: number, lng: number, radiusMeters: number, steps = 64): number[][] {
+    const ring: number[][] = [];
+    const R = 6_378_137;
+    const d = radiusMeters / R;
+    const latR = (lat * Math.PI) / 180;
+    const lngR = (lng * Math.PI) / 180;
+    for (let i = 0; i <= steps; i++) {
+      const brng = (i / steps) * 2 * Math.PI;
+      const lat2 = Math.asin(
+        Math.sin(latR) * Math.cos(d) + Math.cos(latR) * Math.sin(d) * Math.cos(brng),
+      );
+      const lng2 =
+        lngR +
+        Math.atan2(
+          Math.sin(brng) * Math.sin(d) * Math.cos(latR),
+          Math.cos(d) - Math.sin(latR) * Math.sin(lat2),
+        );
+      ring.push([(lng2 * 180) / Math.PI, (lat2 * 180) / Math.PI]);
+    }
+    return ring;
   }
 
   toggleGeofences(): void {
     this.showGeofences = !this.showGeofences;
-    if (!this.map || !this.geofenceLayer) return;
-    if (this.showGeofences) this.geofenceLayer.addTo(this.map);
-    else this.map.removeLayer(this.geofenceLayer);
+    this.applyGeofenceVisibility();
+  }
+
+  private applyGeofenceVisibility(): void {
+    if (!this.map || !this.styleReady) return;
+    const vis = this.showGeofences ? 'visible' : 'none';
+    this.map.setLayoutProperty(LYR_GEOFENCE_FILL, 'visibility', vis);
+    this.map.setLayoutProperty(LYR_GEOFENCE_LINE, 'visibility', vis);
+  }
+
+  /** Set a GeoJSON source's data, guarding for style-ready + source presence. */
+  private setSourceData(id: string, data: GeoJSON.FeatureCollection): void {
+    if (!this.map || !this.styleReady) return;
+    const src = this.map.getSource(id) as GeoJSONSource | undefined;
+    src?.setData(data);
   }
 
   // ── Selection / side panel ───────────────────────────────────────────────
