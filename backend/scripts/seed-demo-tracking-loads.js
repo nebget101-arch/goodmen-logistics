@@ -191,8 +191,13 @@ async function upsertZipCodes() {
     latitude: c.latitude,
     longitude: c.longitude
   }));
-  // Don't clobber real zip data if it already exists — only insert what's missing.
-  await knex('zip_codes').insert(rows).onConflict('zip').ignore();
+  // These 41 metros have authoritative downtown coords; correct any stale/wrong
+  // rows on conflict so demo trucks resolve to real US locations (FN-1718 fix:
+  // a pre-existing zip_codes row with bad coords was scattering trucks globally).
+  await knex('zip_codes')
+    .insert(rows)
+    .onConflict('zip')
+    .merge(['latitude', 'longitude', 'city', 'state']);
   return rows.length;
 }
 
