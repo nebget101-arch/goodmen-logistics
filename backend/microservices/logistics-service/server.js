@@ -66,6 +66,9 @@ const notificationsRouter = require(path.join(sharedRoot, 'routes', 'notificatio
 const authMiddleware = require(path.join(sharedRoot, 'middleware', 'auth-middleware'));
 const tenantContextMiddleware = require(path.join(sharedRoot, 'middleware', 'tenant-context-middleware'));
 const requirePlanAccess = require(path.join(sharedRoot, 'middleware', 'plan-access-middleware'));
+// FN-1694: block expired-no-card / past-grace tenants. Mounted in every authed
+// group after tenant context, before plan checks. super_admin + billing exempt.
+const requireActiveSubscription = require(path.join(sharedRoot, 'middleware', 'trial-enforcement-middleware'))();
 
 const requireInvoicesPlan = requirePlanAccess('/invoices');
 const requireSettlementsPlan = requirePlanAccess((req) => {
@@ -96,29 +99,29 @@ app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 // resolves the share link — there is no session/tenant context here.
 app.use('/api/track', publicTrackRouter);
 
-app.use('/api/fuel', authMiddleware, tenantContextMiddleware, fuelRouter);
-app.use('/api/tolls', authMiddleware, tenantContextMiddleware, tollsRouter);
-app.use('/api/loads', authMiddleware, tenantContextMiddleware, loadsRouter);
-app.use('/api/load-templates', authMiddleware, tenantContextMiddleware, loadTemplatesRouter);
+app.use('/api/fuel', authMiddleware, tenantContextMiddleware, requireActiveSubscription, fuelRouter);
+app.use('/api/tolls', authMiddleware, tenantContextMiddleware, requireActiveSubscription, tollsRouter);
+app.use('/api/loads', authMiddleware, tenantContextMiddleware, requireActiveSubscription, loadsRouter);
+app.use('/api/load-templates', authMiddleware, tenantContextMiddleware, requireActiveSubscription, loadTemplatesRouter);
 // Share links own both /api/loads/:id/share-links and /api/share-links/:id, so mount at /api.
-app.use('/api', authMiddleware, tenantContextMiddleware, loadShareLinksRouter);
-app.use('/api/brokers', authMiddleware, tenantContextMiddleware, brokersRouter);
-app.use('/api/locations', authMiddleware, tenantContextMiddleware, locationsRouter);
-app.use('/api/locations/:locationId/bins', authMiddleware, tenantContextMiddleware, locationBinsRouter);
-app.use('/api', authMiddleware, tenantContextMiddleware, userLocationsRouter);
-app.use('/api/geo', authMiddleware, tenantContextMiddleware, geoRouter);
-app.use('/api/geofences', authMiddleware, tenantContextMiddleware, geofencesRouter);
-app.use('/api/invoices', authMiddleware, tenantContextMiddleware, requireInvoicesPlan, invoicesRouter);
-app.use('/api/credit', authMiddleware, tenantContextMiddleware, creditRouter);
-app.use('/api/db-example', authMiddleware, tenantContextMiddleware, dbExampleRouter);
-app.use('/api/settlements', authMiddleware, tenantContextMiddleware, requireSettlementsPlan, settlementsRouter);
-app.use('/api', authMiddleware, tenantContextMiddleware, requireLeaseFinancingPlan, leaseFinancingRouter);
-app.use('/api', authMiddleware, tenantContextMiddleware, requireIftaPlan, iftaRouter);
-app.use('/api/expense-payment-categories', authMiddleware, tenantContextMiddleware, expensePaymentCategoriesRouter);
-app.use('/api/expense-categories', authMiddleware, tenantContextMiddleware, expensePaymentCategoriesRouter);
-app.use('/api/reference', authMiddleware, tenantContextMiddleware, referenceRouter);
-app.use('/api/idle-truck-monitor', authMiddleware, tenantContextMiddleware, idleTruckMonitorRouter);
-app.use('/api/notifications', authMiddleware, tenantContextMiddleware, notificationsRouter);
+app.use('/api', authMiddleware, tenantContextMiddleware, requireActiveSubscription, loadShareLinksRouter);
+app.use('/api/brokers', authMiddleware, tenantContextMiddleware, requireActiveSubscription, brokersRouter);
+app.use('/api/locations', authMiddleware, tenantContextMiddleware, requireActiveSubscription, locationsRouter);
+app.use('/api/locations/:locationId/bins', authMiddleware, tenantContextMiddleware, requireActiveSubscription, locationBinsRouter);
+app.use('/api', authMiddleware, tenantContextMiddleware, requireActiveSubscription, userLocationsRouter);
+app.use('/api/geo', authMiddleware, tenantContextMiddleware, requireActiveSubscription, geoRouter);
+app.use('/api/geofences', authMiddleware, tenantContextMiddleware, requireActiveSubscription, geofencesRouter);
+app.use('/api/invoices', authMiddleware, tenantContextMiddleware, requireActiveSubscription, requireInvoicesPlan, invoicesRouter);
+app.use('/api/credit', authMiddleware, tenantContextMiddleware, requireActiveSubscription, creditRouter);
+app.use('/api/db-example', authMiddleware, tenantContextMiddleware, requireActiveSubscription, dbExampleRouter);
+app.use('/api/settlements', authMiddleware, tenantContextMiddleware, requireActiveSubscription, requireSettlementsPlan, settlementsRouter);
+app.use('/api', authMiddleware, tenantContextMiddleware, requireActiveSubscription, requireLeaseFinancingPlan, leaseFinancingRouter);
+app.use('/api', authMiddleware, tenantContextMiddleware, requireActiveSubscription, requireIftaPlan, iftaRouter);
+app.use('/api/expense-payment-categories', authMiddleware, tenantContextMiddleware, requireActiveSubscription, expensePaymentCategoriesRouter);
+app.use('/api/expense-categories', authMiddleware, tenantContextMiddleware, requireActiveSubscription, expensePaymentCategoriesRouter);
+app.use('/api/reference', authMiddleware, tenantContextMiddleware, requireActiveSubscription, referenceRouter);
+app.use('/api/idle-truck-monitor', authMiddleware, tenantContextMiddleware, requireActiveSubscription, idleTruckMonitorRouter);
+app.use('/api/notifications', authMiddleware, tenantContextMiddleware, requireActiveSubscription, notificationsRouter);
 
 /**
  * @openapi
