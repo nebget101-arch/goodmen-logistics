@@ -214,6 +214,34 @@ const PLAN_ID_ALIASES = {
 
 const VALID_PLAN_IDS = Object.keys(PLANS);
 
+/**
+ * Maps each plan ID to the environment variable that holds its Stripe Price ID.
+ * Single source of truth for the `STRIPE_PRICE_[PLAN]` convention used by
+ * `jobs/processTrialConversions.js` (PLAN_PRICE_MAP) and the config validator.
+ */
+const PLAN_PRICE_ENV_VARS = {
+  basic: 'STRIPE_PRICE_BASIC',
+  multi_mc: 'STRIPE_PRICE_MULTI_MC',
+  end_to_end: 'STRIPE_PRICE_END_TO_END',
+  enterprise: 'STRIPE_PRICE_ENTERPRISE'
+};
+
+/**
+ * Build the plan-id → Stripe Price ID map from the environment, following the
+ * same pattern as `jobs/processTrialConversions.js`. Plans without a configured
+ * price resolve to undefined so callers can detect missing keys.
+ * @param {NodeJS.ProcessEnv} [env=process.env]
+ * @returns {Record<string, string|undefined>}
+ */
+function buildPlanPriceMap(env = process.env) {
+  const map = {};
+  for (const planId of VALID_PLAN_IDS) {
+    const envVar = PLAN_PRICE_ENV_VARS[planId];
+    map[planId] = envVar ? env[envVar] : undefined;
+  }
+  return map;
+}
+
 const TRIAL_REQUEST_STATUSES = [
   'new',
   'contacted',
@@ -232,4 +260,11 @@ function normalizePlanId(rawPlanId, fallbackPlanId = 'basic') {
   return PLANS[fallbackPlanId] ? fallbackPlanId : 'basic';
 }
 
-module.exports = { PLANS, VALID_PLAN_IDS, TRIAL_REQUEST_STATUSES, normalizePlanId };
+module.exports = {
+  PLANS,
+  VALID_PLAN_IDS,
+  TRIAL_REQUEST_STATUSES,
+  normalizePlanId,
+  PLAN_PRICE_ENV_VARS,
+  buildPlanPriceMap
+};

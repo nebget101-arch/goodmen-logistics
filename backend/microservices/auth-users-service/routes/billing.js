@@ -539,4 +539,62 @@ router.get('/trial-status', async (req, res) => {
   }
 });
 
+/**
+ * @openapi
+ * /api/billing/config-status:
+ *   get:
+ *     summary: Stripe configuration status (go-live verification)
+ *     description: >
+ *       Admin-only. Returns a per-key present/absent map for the Stripe secret,
+ *       webhook secret, every plan price ID, and the extra-seat add-on price.
+ *       Booleans only — secret values are never returned.
+ *     tags:
+ *       - Billing
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Stripe configuration status
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean }
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     stripeEnabled: { type: boolean, description: false when STRIPE_SECRET_KEY is missing (disabled mock) }
+ *                     ok: { type: boolean, description: true when all required keys are present }
+ *                     keys:
+ *                       type: object
+ *                       additionalProperties: { type: boolean }
+ *                       description: Per-env-var present (true) / absent (false) flags. Never includes secret values.
+ *                     missing:
+ *                       type: array
+ *                       items: { type: string }
+ *                       description: Env var names that are absent.
+ *                     missingPlans:
+ *                       type: array
+ *                       items: { type: string }
+ *                       description: Plan IDs whose Stripe price ID is not configured.
+ */
+router.get('/config-status', async (req, res) => {
+  try {
+    const status = stripe.getStripeConfigStatus();
+    return res.json({
+      success: true,
+      data: {
+        stripeEnabled: !stripe._disabled,
+        ok: status.ok,
+        keys: status.keys,
+        missing: status.missing,
+        missingPlans: status.missingPlans
+      }
+    });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message || 'Failed to load Stripe config status' });
+  }
+});
+
 module.exports = router;
