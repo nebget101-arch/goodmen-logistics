@@ -16,7 +16,6 @@ import {
   Marker,
   NavigationControl,
   Popup,
-  StyleSpecification,
 } from 'maplibre-gl';
 
 import { AiSelectOption } from '../../shared/ai-select/ai-select.component';
@@ -62,32 +61,20 @@ interface MarkerTween {
 }
 
 /**
- * A dark, key-less basemap matching the AI dark theme. CARTO's `dark_all`
- * raster tiles need no API key and render the dark palette this UI uses; a true
- * vector basemap (which would unlock extruded 3D buildings) would require a
- * keyed tile provider, so we keep the raster basemap and deliver the 3D *camera*
- * (pitch / rotate / tilt) over it. See the FN-1717 story doc for the tradeoff.
+ * Key-less dark **vector** basemap (CARTO `dark-matter` GL style). FN-1720 used
+ * CARTO's `dark_all` *raster* tiles, which carry only the faintest dark-on-dark
+ * borders and blur out the moment you zoom past their native tile resolution.
+ * This hosted vector style instead ships US state/admin boundaries and place
+ * labels (so the map reads as a US map) and stays crisp at street level —
+ * vector geometry re-rasterises at every zoom. It needs no API key and keeps
+ * the AI dark theme; the 3D *camera* (pitch / rotate / tilt) from FN-1720 rides
+ * on top unchanged. See the FN-1717 / FN-1722 story docs for the tradeoff.
  */
-const DARK_BASEMAP_STYLE: StyleSpecification = {
-  version: 8,
-  sources: {
-    'carto-dark': {
-      type: 'raster',
-      tiles: [
-        'https://a.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png',
-        'https://b.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png',
-        'https://c.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png',
-        'https://d.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png',
-      ],
-      tileSize: 256,
-      attribution: '© OpenStreetMap contributors © CARTO',
-    },
-  },
-  layers: [
-    { id: 'bg', type: 'background', paint: { 'background-color': '#0b1120' } },
-    { id: 'carto-dark', type: 'raster', source: 'carto-dark' },
-  ],
-};
+const DARK_BASEMAP_STYLE_URL =
+  'https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json';
+
+/** Highest zoom the camera allows — vector tiles stay sharp down to street level. */
+const MAX_ZOOM = 18;
 
 /**
  * TrackingMapComponent — the `/tracking` live map (FN-1671, re-engined to
@@ -152,6 +139,10 @@ export class TrackingMapComponent implements OnInit, AfterViewInit, OnDestroy {
   selected: VehiclePosition | null = null;
   /** Live socket connection indicator for the header dot. */
   connected = false;
+  /** Vehicle the camera is following; null = free camera (FN-1723). */
+  followVehicleId: string | null = null;
+  /** Unit label of the followed vehicle (for the "Following · Stop" chip). */
+  followUnitLabel: string | null = null;
 
   readonly breadcrumbHours = BREADCRUMB_WINDOW_HOURS;
 
@@ -226,9 +217,10 @@ export class TrackingMapComponent implements OnInit, AfterViewInit, OnDestroy {
       try {
         const map = new MaplibreMap({
           container: el,
-          style: DARK_BASEMAP_STYLE,
+          style: DARK_BASEMAP_STYLE_URL,
           center: [-98.35, 39.5],
           zoom: 3.5,
+          maxZoom: MAX_ZOOM, // street-level vector detail (FN-1723)
           pitch: 50, // true 3D camera (AC: ~45–60°)
           bearing: -17.6,
           maxPitch: 75,
@@ -298,6 +290,11 @@ export class TrackingMapComponent implements OnInit, AfterViewInit, OnDestroy {
     map.on('mouseleave', LYR_GEOFENCE_FILL, () => {
       map.getCanvas().style.cursor = '';
       this.geofencePopup?.remove();
+    });
+
+    // A user pan releases follow mode (programmatic easeTo never fires dragstart).
+    map.on('dragstart', () => {
+      if (this.followVehicleId) this.zone.run(() => this.stopFollow());
     });
 
     this.styleReady = true;
@@ -438,6 +435,11 @@ export class TrackingMapComponent implements OnInit, AfterViewInit, OnDestroy {
 
     if (this.selected?.vehicleId === ping.vehicleId) {
       this.selected = { ...merged, loadId: this.selected.loadId, loadReference: this.selected.loadReference };
+    }
+    // Follow mode: keep the camera centered on the followed unit's latest ping.
+    if (this.followVehicleId === ping.vehicleId) {
+      this.followUnitLabel = merged.unitNumber ?? merged.vehicleId;
+      this.flyToVehicle(merged, false);
     }
     this.recomputeVisibleCount();
     this.cdr.markForCheck();
@@ -646,8 +648,49 @@ export class TrackingMapComponent implements OnInit, AfterViewInit, OnDestroy {
   private selectVehicle(vehicleId: string): void {
     const p = this.positions.get(vehicleId);
     this.selected = p ? { ...p } : null;
-    if (this.selected) this.resolveCurrentLoad(this.selected);
+    if (this.selected) {
+      this.resolveCurrentLoad(this.selected);
+      this.enterFollow(vehicleId); // clicking a unit follows it (FN-1723)
+    }
     this.cdr.markForCheck();
+  }
+
+  // ── Follow-the-unit camera (FN-1723) ───────────────────────────────────────
+  /**
+   * Enter "follow" mode for a vehicle: frame it now and re-center on every new
+   * ping until the user stops following, deselects, or pans the map.
+   */
+  private enterFollow(vehicleId: string): void {
+    this.followVehicleId = vehicleId;
+    const p = this.positions.get(vehicleId);
+    this.followUnitLabel = p ? (p.unitNumber ?? p.vehicleId) : vehicleId;
+    if (p) this.flyToVehicle(p, true);
+  }
+
+  /** Stop following — the chip "Stop", a panel close, or a user pan all land here. */
+  stopFollow(): void {
+    if (!this.followVehicleId) return;
+    this.followVehicleId = null;
+    this.followUnitLabel = null;
+    this.cdr.markForCheck();
+  }
+
+  /**
+   * Ease the camera to a vehicle. On the first follow we frame it at a
+   * street-ish zoom; on live re-centers we keep the user's current
+   * zoom/pitch/bearing and only slide the center. Runs outside the Angular zone
+   * (easeTo drives its own rAF) so the glide never thrashes change detection.
+   */
+  private flyToVehicle(p: VehiclePosition, initial: boolean): void {
+    const map = this.map;
+    if (!map || p.lat == null || p.lng == null) return;
+    this.zone.runOutsideAngular(() => {
+      map.easeTo({
+        center: [p.lng, p.lat],
+        zoom: initial ? Math.max(map.getZoom(), 11) : map.getZoom(),
+        duration: initial ? 800 : 600,
+      });
+    });
   }
 
   /**
@@ -674,6 +717,13 @@ export class TrackingMapComponent implements OnInit, AfterViewInit, OnDestroy {
 
   closePanel(): void {
     this.selected = null;
+    this.stopFollow(); // deselecting releases the camera (FN-1723)
+  }
+
+  /** Google Maps deep-link for a vehicle's current coordinate (opens a new tab). */
+  mapsUrl(p: VehiclePosition | null): string {
+    if (!p || p.lat == null || p.lng == null) return '';
+    return `https://www.google.com/maps?q=${p.lat},${p.lng}`;
   }
 
   /** Human-friendly "x min ago" for the last-ping age. */
@@ -700,8 +750,11 @@ export class TrackingMapComponent implements OnInit, AfterViewInit, OnDestroy {
   /** Re-apply filters after a filter-bar change. */
   onFiltersChanged(): void {
     this.rebuildLayer();
-    // Drop the open panel if its vehicle no longer matches.
-    if (this.selected && !this.matchesFilters(this.selected)) this.selected = null;
+    // Drop the open panel (and release follow) if its vehicle no longer matches.
+    if (this.selected && !this.matchesFilters(this.selected)) {
+      this.selected = null;
+      this.stopFollow();
+    }
     this.cdr.markForCheck();
   }
 

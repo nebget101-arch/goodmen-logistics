@@ -177,4 +177,31 @@ describe('TrackingMapComponent', () => {
     const ring = fc.features[1].geometry.coordinates[0];
     expect(ring[0]).toEqual(ring[ring.length - 1]);
   });
+
+  it('builds a Google Maps deep-link for a vehicle coordinate (FN-1723)', () => {
+    expect(component.mapsUrl(pos({ lat: 41.8, lng: -87.6 })))
+      .toBe('https://www.google.com/maps?q=41.8,-87.6');
+    expect(component.mapsUrl(pos({ lat: null as any, lng: null as any }))).toBe('');
+    expect(component.mapsUrl(null)).toBe('');
+  });
+
+  it('follow-the-unit: enter sets the follow target + label, stop clears it (FN-1723)', () => {
+    (component as any).positions.set('v1', pos({ vehicleId: 'v1', unitNumber: 'Unit 1' }));
+    (component as any).enterFollow('v1');
+    expect(component.followVehicleId).toBe('v1');
+    expect(component.followUnitLabel).toBe('Unit 1');
+
+    component.stopFollow();
+    expect(component.followVehicleId).toBeNull();
+    expect(component.followUnitLabel).toBeNull();
+  });
+
+  it('closing the side panel also stops following (FN-1723)', () => {
+    component.followVehicleId = 'v1';
+    component.followUnitLabel = 'Unit 1';
+    component.selected = pos();
+    component.closePanel();
+    expect(component.selected).toBeNull();
+    expect(component.followVehicleId).toBeNull();
+  });
 });
