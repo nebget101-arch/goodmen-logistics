@@ -143,12 +143,51 @@ describe('TrackingMapComponent', () => {
     expect(component.selected).toBeNull();
   });
 
-  it('maps movement status to a truck marker tint class (FN-1720)', () => {
-    const cls = (p: VehiclePosition) => (component as any).statusClass(p) as string;
-    expect(cls(pos({ movementStatus: 'moving' }))).toBe('fn-moving');
-    expect(cls(pos({ movementStatus: 'idle' }))).toBe('fn-idle');
-    expect(cls(pos({ movementStatus: 'offline' }))).toBe('fn-offline');
-    expect(cls(pos({ movementStatus: undefined }))).toBe('fn-offline');
+  it('builds vehicle GeoJSON features carrying status + heading props (FN-1725)', () => {
+    // Seed two positions and mark them as rendered (in the tween set).
+    const a = pos({ vehicleId: 'v1', unitNumber: 'Unit 1', movementStatus: 'moving', headingDeg: 90 });
+    const b = pos({ vehicleId: 'v2', unitNumber: 'Unit 2', movementStatus: 'idle', headingDeg: 270, lat: 40, lng: -88 });
+    (component as any).positions.set('v1', a);
+    (component as any).positions.set('v2', b);
+    (component as any).tweens.set('v1', (component as any).newTween(a.lng, a.lat));
+    (component as any).tweens.set('v2', (component as any).newTween(b.lng, b.lat));
+
+    const fc = (component as any).buildVehicleFeatures() as GeoJSON.FeatureCollection;
+    expect(fc.type).toBe('FeatureCollection');
+    expect(fc.features.length).toBe(2);
+
+    const f1 = fc.features.find((f) => f.properties?.['vehicleId'] === 'v1')!;
+    expect(f1.geometry.type).toBe('Point');
+    expect((f1.geometry as GeoJSON.Point).coordinates).toEqual([-87.6, 41.8]);
+    expect(f1.properties?.['unitNumber']).toBe('Unit 1');
+    expect(f1.properties?.['status']).toBe('moving');
+    expect(f1.properties?.['heading']).toBe(90);
+
+    const f2 = fc.features.find((f) => f.properties?.['vehicleId'] === 'v2')!;
+    expect(f2.properties?.['status']).toBe('idle');
+    expect(f2.properties?.['heading']).toBe(270);
+  });
+
+  it('vehicle features default status to offline and heading to 0 when missing (FN-1725)', () => {
+    const p = pos({ vehicleId: 'v9', movementStatus: undefined, headingDeg: null });
+    (component as any).positions.set('v9', p);
+    (component as any).tweens.set('v9', (component as any).newTween(p.lng, p.lat));
+
+    const fc = (component as any).buildVehicleFeatures() as GeoJSON.FeatureCollection;
+    const f = fc.features.find((x) => x.properties?.['vehicleId'] === 'v9')!;
+    expect(f.properties?.['status']).toBe('offline');
+    expect(f.properties?.['heading']).toBe(0);
+  });
+
+  it('rebuildLayer only renders filtered-in vehicles (FN-1725)', () => {
+    (component as any).positions.set('v1', pos({ vehicleId: 'v1', driverId: 'd1' }));
+    (component as any).positions.set('v2', pos({ vehicleId: 'v2', driverId: 'd2' }));
+    component.filterDriverId = 'd1';
+    (component as any).rebuildLayer();
+
+    const ids = [...(component as any).tweens.keys()];
+    expect(ids).toEqual(['v1']);
+    expect(component.visibleCount).toBe(1);
   });
 
   it('approximates a circle geofence as a closed lng/lat ring (FN-1720)', () => {
