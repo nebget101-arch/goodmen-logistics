@@ -11,9 +11,10 @@ import {
 import { Subject } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
 import {
+  ExpressionSpecification,
   GeoJSONSource,
   Map as MaplibreMap,
-  Marker,
+  MapLayerMouseEvent,
   NavigationControl,
   Popup,
 } from 'maplibre-gl';
@@ -43,21 +44,44 @@ const BREADCRUMB_COLOR = '#38bdf8';
 /** Source / layer ids on the MapLibre style. */
 const SRC_GEOFENCES = 'fn-geofences';
 const SRC_BREADCRUMB = 'fn-breadcrumb';
+const SRC_VEHICLES = 'fn-vehicles';
 const LYR_GEOFENCE_FILL = 'fn-geofence-fill';
 const LYR_GEOFENCE_LINE = 'fn-geofence-line';
 const LYR_BREADCRUMB_LINE = 'fn-breadcrumb-line';
+const LYR_VEHICLE_GLOW = 'fn-vehicle-glow';
+const LYR_VEHICLE_ICON = 'fn-vehicle-icon';
 
-/** Milliseconds to glide a marker between two pings (so trucks never teleport). */
+/** SDF truck icon registered on the style via `map.addImage`. */
+const IMG_TRUCK = 'fn-truck';
+
+/**
+ * Status → tint, shared by the circle glow (`circle-color`) and the SDF truck
+ * icon (`icon-color`). AI dark-theme palette only — the same hex the old HTML
+ * markers used (moving=emerald, idle=amber, offline=slate, fallback=slate-300).
+ */
+const STATUS_TINT_EXPRESSION: ExpressionSpecification = [
+  'match',
+  ['get', 'status'],
+  'moving', '#34d399',
+  'idle', '#fbbf24',
+  'offline', '#64748b',
+  '#cbd5e1',
+];
+
+/** Milliseconds to glide a vehicle between two pings (so trucks never teleport). */
 const MOVE_ANIM_MS = 900;
 
-/** Per-marker tween state for smooth ping-to-ping interpolation. */
-interface MarkerTween {
+/** Per-vehicle tween state for smooth ping-to-ping interpolation. */
+interface VehicleTween {
   fromLng: number;
   fromLat: number;
   toLng: number;
   toLat: number;
   start: number;
   dur: number;
+  /** Eased lng/lat written by the rAF loop, read when building the GeoJSON. */
+  curLng: number;
+  curLat: number;
 }
 
 /**
@@ -80,18 +104,21 @@ const MAX_ZOOM = 18;
  * TrackingMapComponent — the `/tracking` live map (FN-1671, re-engined to
  * MapLibre GL in FN-1720 / Story J).
  *
- * A WebGL map (MapLibre GL) with a true 3D camera (default pitch ~50°, free
- * rotate / tilt / zoom) over a dark basemap matching the AI dark theme. Vehicles
- * render as catchy, status-tinted **truck markers** (HTML markers, not Leaflet
- * arrows) that glow/pulse, rotate to `heading_deg`, and glide smoothly between
- * pings via a single `requestAnimationFrame` tween loop (no teleporting). Live
- * positions arrive over the shared {@link WebsocketService} (via {@link
- * VehiclePositionService}); hovering a truck draws its last-{@link
- * BREADCRUMB_WINDOW_HOURS}h breadcrumb trail; clicking opens a side panel. A
- * filter bar narrows by driver, movement status, and geofence; geofences also
- * render as a toggleable GeoJSON overlay.
+ * A WebGL map (MapLibre GL) over a dark basemap matching the AI dark theme.
+ * Vehicles render as status-tinted **truck symbols** drawn natively by the GPU
+ * (FN-1725): a single GeoJSON `vehicles` source feeds a `circle` glow layer and
+ * an SDF `symbol` layer on top, so icons are GPU-projected and stay locked to
+ * their coordinates at every zoom (the old `maplibregl.Marker` HTML overlays
+ * drifted/offset because they re-project in CSS pixels per frame). Icons rotate
+ * to `heading_deg` and glide smoothly between pings via a single
+ * `requestAnimationFrame` tween loop that eases each feature's coordinates and
+ * calls `source.setData` once per frame (no teleporting). Live positions arrive
+ * over the shared {@link WebsocketService} (via {@link VehiclePositionService});
+ * hovering a truck draws its last-{@link BREADCRUMB_WINDOW_HOURS}h breadcrumb
+ * trail; clicking opens a side panel. A filter bar narrows by driver, movement
+ * status, and geofence; geofences also render as a toggleable GeoJSON overlay.
  *
- * Performance: the map's render loop + the marker tween loop both run *outside*
+ * Performance: the map's render loop + the vehicle tween loop both run *outside*
  * the Angular zone, so smooth 60fps movement at 50+ trucks never thrashes change
  * detection; only user-driven events (click / hover) re-enter the zone.
  *
@@ -155,15 +182,15 @@ export class TrackingMapComponent implements OnInit, AfterViewInit, OnDestroy {
 
   /** Latest known position per vehicle (source of truth for the layer). */
   private positions = new Map<string, VehiclePosition>();
-  /** Live truck marker per vehicle, kept in sync with {@link positions}. */
-  private markers = new Map<string, Marker>();
-  /** Marker root element per vehicle (for cheap status/heading updates). */
-  private markerEls = new Map<string, HTMLElement>();
-  /** Active position tweens, advanced by the rAF loop. */
-  private tweens = new Map<string, MarkerTween>();
-  /** Handle for the marker tween loop (runs outside the Angular zone). */
+  /**
+   * Currently-rendered (filtered-in) vehicles → tween state. Holds the eased
+   * lng/lat the rAF loop writes into the GeoJSON each frame, so it doubles as
+   * the "which vehicles are on the map" set ({@link recomputeVisibleCount}).
+   */
+  private tweens = new Map<string, VehicleTween>();
+  /** Handle for the vehicle tween loop (runs outside the Angular zone). */
   private rafId: number | null = null;
-  /** Keeps the GL canvas + HTML markers aligned when the container resizes. */
+  /** Keeps the GL canvas aligned when the container resizes (side panel toggles). */
   private resizeObs: ResizeObserver | null = null;
 
   /** Loaded geofences (for the overlay + client-side geofence filter). */
@@ -199,9 +226,6 @@ export class TrackingMapComponent implements OnInit, AfterViewInit, OnDestroy {
     this.rafId = null;
     this.resizeObs?.disconnect();
     this.resizeObs = null;
-    this.markers.forEach((m) => m.remove());
-    this.markers.clear();
-    this.markerEls.clear();
     this.tweens.clear();
     this.geofencePopup?.remove();
     this.map?.remove();
@@ -283,6 +307,70 @@ export class TrackingMapComponent implements OnInit, AfterViewInit, OnDestroy {
       },
     });
 
+    // ── Vehicles: native GL source + glow circle + SDF truck symbol (FN-1725) ──
+    // GPU-projected so icons sit exactly on their coordinates at every zoom (the
+    // old HTML markers re-projected in CSS pixels and drifted on zoom).
+    this.registerTruckImage(map);
+    map.addSource(SRC_VEHICLES, { type: 'geojson', data: empty });
+
+    // Soft status-tinted glow beneath each truck — the GL stand-in for the old
+    // CSS pulse halo (a GL paint layer can't CSS-animate; static glow is the
+    // accepted trade for pixel-correct placement).
+    map.addLayer({
+      id: LYR_VEHICLE_GLOW,
+      type: 'circle',
+      source: SRC_VEHICLES,
+      paint: {
+        'circle-color': STATUS_TINT_EXPRESSION,
+        'circle-radius': 13,
+        'circle-blur': 0.9,
+        'circle-opacity': 0.45,
+      },
+    });
+
+    // The truck glyph itself — SDF so `icon-color` applies the status tint;
+    // map-aligned + heading-rotated; overlap/placement ignored so dense fleets
+    // never drop icons.
+    map.addLayer({
+      id: LYR_VEHICLE_ICON,
+      type: 'symbol',
+      source: SRC_VEHICLES,
+      layout: {
+        'icon-image': IMG_TRUCK,
+        'icon-size': 0.5, // glyph rendered at 2x (60px) → ~30px on-screen, matching the old marker
+        'icon-rotate': ['get', 'heading'],
+        'icon-rotation-alignment': 'map',
+        'icon-pitch-alignment': 'viewport', // stays upright/readable if the user tilts
+        'icon-allow-overlap': true,
+        'icon-ignore-placement': true,
+      },
+      paint: {
+        'icon-color': STATUS_TINT_EXPRESSION,
+        'icon-halo-color': 'rgba(2, 6, 23, 0.85)',
+        'icon-halo-width': 1.2,
+      },
+    });
+
+    // Click a truck → open the side panel (re-enter the zone for CD).
+    map.on('click', LYR_VEHICLE_ICON, (e) => {
+      const id = this.featureVehicleId(e);
+      if (id) this.zone.run(() => this.selectVehicle(id));
+    });
+    // Hover a truck → pointer cursor + breadcrumb trail; leaving clears both.
+    map.on('mouseenter', LYR_VEHICLE_ICON, (e) => {
+      map.getCanvas().style.cursor = 'pointer';
+      const id = this.featureVehicleId(e);
+      if (id) this.zone.run(() => this.showBreadcrumbs(id));
+    });
+    map.on('mousemove', LYR_VEHICLE_ICON, (e) => {
+      const id = this.featureVehicleId(e);
+      if (id) this.zone.run(() => this.showBreadcrumbs(id));
+    });
+    map.on('mouseleave', LYR_VEHICLE_ICON, () => {
+      map.getCanvas().style.cursor = '';
+      this.clearBreadcrumbs();
+    });
+
     // Geofence-name tooltip on hover (ports the base map's bindTooltip).
     this.geofencePopup = new Popup({ closeButton: false, closeOnClick: false, offset: 8 });
     map.on('mousemove', LYR_GEOFENCE_FILL, (e) => {
@@ -309,11 +397,9 @@ export class TrackingMapComponent implements OnInit, AfterViewInit, OnDestroy {
     // Flex-mounted containers need a nudge once dimensions settle.
     setTimeout(() => this.map?.resize(), 150);
 
-    // Keep the GL canvas + HTML markers aligned on every container size change.
-    // The side panel opening/closing (flex layout) resizes the map; without a
-    // resize() MapLibre projects markers with stale dimensions, so HTML truck
-    // markers land offset from the GL-rendered breadcrumb/geofence layers (and
-    // appear to drift when zooming). Runs outside the zone — resize() is cheap.
+    // Keep the GL canvas sized to its container on every change. The side panel
+    // opening/closing (flex layout) resizes the map; without a resize() MapLibre
+    // renders against stale dimensions. Runs outside the zone — resize() is cheap.
     const host = this.mapContainer?.nativeElement;
     if (host && typeof ResizeObserver !== 'undefined') {
       this.zone.runOutsideAngular(() => {
@@ -438,16 +524,17 @@ export class TrackingMapComponent implements OnInit, AfterViewInit, OnDestroy {
     if (!prior) this.totalCount = this.positions.size;
 
     const visible = this.matchesFilters(merged);
-    const existing = this.markers.get(ping.vehicleId);
+    const existing = this.tweens.get(ping.vehicleId);
     if (existing) {
       if (visible) {
-        this.updateMarkerVisual(ping.vehicleId, merged);
         this.tweenTo(ping.vehicleId, merged.lng, merged.lat); // glide, don't teleport
       } else {
-        this.removeMarker(ping.vehicleId);
+        this.tweens.delete(ping.vehicleId);
+        this.publishVehicles(); // it dropped out of the filter — re-render now
       }
     } else if (visible) {
-      this.addMarker(merged);
+      this.tweens.set(ping.vehicleId, this.newTween(merged.lng, merged.lat));
+      this.publishVehicles(); // new truck appears at its coordinate immediately
     }
 
     if (this.selected?.vehicleId === ping.vehicleId) {
@@ -462,100 +549,124 @@ export class TrackingMapComponent implements OnInit, AfterViewInit, OnDestroy {
     this.cdr.markForCheck();
   }
 
-  // ── Marker layer ─────────────────────────────────────────────────────────
-  /** Rebuild the entire truck marker layer from {@link positions} + filters. */
+  // ── Vehicle layer (native GL: GeoJSON source + circle glow + SDF symbol) ───
+  /**
+   * Rebuild the rendered vehicle set from {@link positions} + filters, then push
+   * the GeoJSON to the source. Each newly-rendered vehicle starts settled at its
+   * coordinate (no spurious glide on first paint); existing ones keep tweening.
+   */
   private rebuildLayer(): void {
-    if (!this.map) return;
-    this.markers.forEach((m) => m.remove());
-    this.markers.clear();
-    this.markerEls.clear();
-    this.tweens.clear();
+    const next = new Map<string, VehicleTween>();
     this.positions.forEach((p) => {
-      if (this.matchesFilters(p)) this.addMarker(p);
+      if (!this.matchesFilters(p)) return;
+      const prior = this.tweens.get(p.vehicleId);
+      next.set(p.vehicleId, prior ?? this.newTween(p.lng, p.lat));
     });
+    this.tweens = next;
+    this.publishVehicles();
     this.recomputeVisibleCount();
   }
 
-  private addMarker(p: VehiclePosition): void {
-    if (!this.map) return;
-    const el = this.buildMarkerEl(p);
-    const marker = new Marker({
-      element: el,
-      rotationAlignment: 'map', // heading is true-north, rotate with the camera
-      pitchAlignment: 'viewport', // keep the truck upright/readable when tilted
-    })
-      .setLngLat([p.lng, p.lat])
-      .setRotation(typeof p.headingDeg === 'number' ? p.headingDeg : 0)
-      .addTo(this.map);
-    this.markers.set(p.vehicleId, marker);
-    this.markerEls.set(p.vehicleId, el);
+  /** A settled tween parked at a coordinate (from === to, instantly complete). */
+  private newTween(lng: number, lat: number): VehicleTween {
+    return { fromLng: lng, fromLat: lat, toLng: lng, toLat: lat, start: 0, dur: MOVE_ANIM_MS, curLng: lng, curLat: lat };
   }
 
-  private removeMarker(vehicleId: string): void {
-    this.markers.get(vehicleId)?.remove();
-    this.markers.delete(vehicleId);
-    this.markerEls.delete(vehicleId);
-    this.tweens.delete(vehicleId);
+  /** Build the vehicles FeatureCollection from current tween positions + metadata. */
+  private buildVehicleFeatures(): GeoJSON.FeatureCollection {
+    const features: GeoJSON.Feature[] = [];
+    this.tweens.forEach((t, id) => {
+      const p = this.positions.get(id);
+      if (!p) return;
+      features.push({
+        type: 'Feature',
+        geometry: { type: 'Point', coordinates: [t.curLng, t.curLat] },
+        properties: {
+          vehicleId: id,
+          unitNumber: p.unitNumber ?? p.vehicleId,
+          status: p.movementStatus ?? 'offline',
+          heading: typeof p.headingDeg === 'number' ? p.headingDeg : 0,
+        },
+      });
+    });
+    return { type: 'FeatureCollection', features };
   }
 
-  /** Build the truck marker DOM: glow halo + rotatable truck glyph + handlers. */
-  private buildMarkerEl(p: VehiclePosition): HTMLElement {
-    const el = document.createElement('div');
-    el.className = `fn-truck ${this.statusClass(p)}`;
-    el.title = p.unitNumber ?? p.vehicleId;
-    el.innerHTML = `
-      <span class="fn-truck-glow"></span>
-      <svg class="fn-truck-ico" viewBox="0 0 24 24" width="30" height="30" aria-hidden="true">
-        <path class="fn-truck-body" d="M12 1.6l3 3.1H9l3-3.1zM8.4 5h7.2c.9 0 1.6.7 1.6 1.6v13c0 .8-.6 1.4-1.4 1.4H8.2c-.8 0-1.4-.6-1.4-1.4v-13C6.8 5.7 7.5 5 8.4 5z"/>
-      </svg>`;
-    el.addEventListener('click', () => this.zone.run(() => this.selectVehicle(p.vehicleId)));
-    el.addEventListener('mouseenter', () => this.zone.run(() => this.showBreadcrumbs(p.vehicleId)));
-    el.addEventListener('mouseleave', () => this.clearBreadcrumbs());
-    return el;
+  /** Push the current vehicle features to the GL source. */
+  private publishVehicles(): void {
+    this.setSourceData(SRC_VEHICLES, this.buildVehicleFeatures());
   }
 
-  /** Cheaply update an existing marker's status tint + heading (no rebuild). */
-  private updateMarkerVisual(vehicleId: string, p: VehiclePosition): void {
-    const el = this.markerEls.get(vehicleId);
-    if (el) el.className = `fn-truck ${this.statusClass(p)}`;
-    if (typeof p.headingDeg === 'number') this.markers.get(vehicleId)?.setRotation(p.headingDeg);
+  /** Read a vehicleId off the hovered/clicked symbol feature. */
+  private featureVehicleId(e: MapLayerMouseEvent): string | null {
+    const v = e.features?.[0]?.properties?.['vehicleId'];
+    return v != null ? String(v) : null;
   }
 
-  private statusClass(p: VehiclePosition): string {
-    return `fn-${p.movementStatus ?? 'offline'}`;
+  /**
+   * Render the truck SVG glyph to an SDF-ready ImageData and register it as
+   * `fn-truck`. SDF (single-channel alpha) lets the symbol layer recolour the
+   * icon per-feature via `icon-color`, so one image serves every status tint.
+   * Drawn at 2x for crispness, then down-scaled by `icon-size`.
+   */
+  private registerTruckImage(map: MaplibreMap): void {
+    if (map.hasImage(IMG_TRUCK)) return;
+    const size = 60; // 2x the on-screen ~30px glyph
+    const canvas = document.createElement('canvas');
+    canvas.width = size;
+    canvas.height = size;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    // viewBox is 0 0 24 24 → scale to fill the canvas.
+    const scale = size / 24;
+    ctx.scale(scale, scale);
+    ctx.fillStyle = '#fff'; // SDF reads alpha only; fill is recoloured by icon-color
+    const path = new Path2D(
+      'M12 1.6l3 3.1H9l3-3.1zM8.4 5h7.2c.9 0 1.6.7 1.6 1.6v13c0 .8-.6 1.4-1.4 1.4H8.2c-.8 0-1.4-.6-1.4-1.4v-13C6.8 5.7 7.5 5 8.4 5z',
+    );
+    ctx.fill(path);
+    const img = ctx.getImageData(0, 0, size, size);
+    map.addImage(IMG_TRUCK, { width: size, height: size, data: new Uint8Array(img.data) }, { sdf: true });
   }
 
   // ── Smooth movement (rAF tween, outside the Angular zone) ──────────────────
-  /** Glide a marker from its current position to a new ping over {@link MOVE_ANIM_MS}. */
+  /** Glide a vehicle from its current position to a new ping over {@link MOVE_ANIM_MS}. */
   private tweenTo(vehicleId: string, toLng: number, toLat: number): void {
-    const marker = this.markers.get(vehicleId);
-    if (!marker) return;
-    const from = marker.getLngLat();
-    this.tweens.set(vehicleId, {
-      fromLng: from.lng,
-      fromLat: from.lat,
-      toLng,
-      toLat,
-      start: performance.now(),
-      dur: MOVE_ANIM_MS,
-    });
+    const cur = this.tweens.get(vehicleId);
+    if (!cur) return;
+    cur.fromLng = cur.curLng;
+    cur.fromLat = cur.curLat;
+    cur.toLng = toLng;
+    cur.toLat = toLat;
+    cur.start = performance.now();
+    cur.dur = MOVE_ANIM_MS;
     this.ensureTweenLoop();
   }
 
+  /**
+   * One rAF loop eases every active tween, writes the eased coordinate back onto
+   * the tween, and pushes the whole FeatureCollection to the source once per
+   * frame (replacing per-marker `setLngLat`). Runs outside the Angular zone.
+   */
   private ensureTweenLoop(): void {
     if (this.rafId != null || !this.map) return;
     this.zone.runOutsideAngular(() => {
       const step = (now: number) => {
         let active = false;
-        this.tweens.forEach((t, id) => {
+        this.tweens.forEach((t) => {
+          if (t.curLng === t.toLng && t.curLat === t.toLat) return; // already settled
           const raw = Math.min(1, (now - t.start) / t.dur);
           const e = raw * (2 - raw); // easeOutQuad
-          const lng = t.fromLng + (t.toLng - t.fromLng) * e;
-          const lat = t.fromLat + (t.toLat - t.fromLat) * e;
-          this.markers.get(id)?.setLngLat([lng, lat]);
-          if (raw >= 1) this.tweens.delete(id);
-          else active = true;
+          t.curLng = t.fromLng + (t.toLng - t.fromLng) * e;
+          t.curLat = t.fromLat + (t.toLat - t.fromLat) * e;
+          if (raw >= 1) {
+            t.curLng = t.toLng;
+            t.curLat = t.toLat;
+          } else {
+            active = true;
+          }
         });
+        this.publishVehicles();
         this.rafId = active ? requestAnimationFrame(step) : null;
       };
       this.rafId = requestAnimationFrame(step);
@@ -787,7 +898,7 @@ export class TrackingMapComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   private recomputeVisibleCount(): void {
-    this.visibleCount = this.markers.size;
+    this.visibleCount = this.tweens.size;
   }
 
   /** Client-side point-in-geofence test (circle = haversine, polygon = ray cast). */
