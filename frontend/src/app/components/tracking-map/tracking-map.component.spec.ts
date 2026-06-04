@@ -142,4 +142,39 @@ describe('TrackingMapComponent', () => {
     component.onFiltersChanged();
     expect(component.selected).toBeNull();
   });
+
+  it('maps movement status to a truck marker tint class (FN-1720)', () => {
+    const cls = (p: VehiclePosition) => (component as any).statusClass(p) as string;
+    expect(cls(pos({ movementStatus: 'moving' }))).toBe('fn-moving');
+    expect(cls(pos({ movementStatus: 'idle' }))).toBe('fn-idle');
+    expect(cls(pos({ movementStatus: 'offline' }))).toBe('fn-offline');
+    expect(cls(pos({ movementStatus: undefined }))).toBe('fn-offline');
+  });
+
+  it('approximates a circle geofence as a closed lng/lat ring (FN-1720)', () => {
+    const ring = (component as any).circleRing(41.8, -87.6, 1000, 64) as number[][];
+    expect(ring.length).toBe(65); // steps + 1, closed
+    // First and last points coincide (closed ring).
+    expect(ring[0][0]).toBeCloseTo(ring[64][0], 6);
+    expect(ring[0][1]).toBeCloseTo(ring[64][1], 6);
+    // Every vertex is roughly the requested radius from the centre.
+    const dist = (component as any).haversineMeters(41.8, -87.6, ring[10][1], ring[10][0]) as number;
+    expect(dist).toBeCloseTo(1000, -1); // within ~10m
+  });
+
+  it('builds a geofence FeatureCollection carrying the geofence name (FN-1720)', () => {
+    (component as any).geofences = [
+      { id: 'g1', name: 'Yard', kind: 'circle', center: { lat: 41.8, lng: -87.6 }, radiusMeters: 500 },
+      { id: 'p1', name: 'Box', kind: 'polygon', vertices: [
+        { lat: 0, lng: 0 }, { lat: 0, lng: 1 }, { lat: 1, lng: 1 },
+      ] },
+    ];
+    const fc = (component as any).geofenceFeatureCollection();
+    expect(fc.features.length).toBe(2);
+    expect(fc.features[0].properties.name).toBe('Yard');
+    expect(fc.features[1].geometry.type).toBe('Polygon');
+    // Polygon ring is closed (first === last vertex).
+    const ring = fc.features[1].geometry.coordinates[0];
+    expect(ring[0]).toEqual(ring[ring.length - 1]);
+  });
 });
