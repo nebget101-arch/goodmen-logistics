@@ -154,28 +154,45 @@ function parseArgs(argv) {
 }
 
 /**
- * Build `count` geographically varied routes by pairing cities from CITIES.
- * Multiplying the index by a stride that's coprime with the list length walks the
- * (region-ordered) list in big jumps, so pickup and delivery land in different
- * regions — long, spread-out legs instead of neighbouring cities. Deterministic,
- * so re-running the seed reproduces the same routes for the same load numbers.
+ * Build `count` routes by pairing each pickup city with a NEARBY delivery city.
+ *
+ * FN-1718 follow-up: the original stride-based pairing made long cross-country legs
+ * (e.g. Miami↔Boston, Miami↔Houston). The simulator interpolates a straight lat/lng
+ * line between endpoints, so those coastal legs ran over the Atlantic / Gulf of
+ * Mexico and trucks appeared to float on water. Pairing each pickup with one of its
+ * nearest neighbours keeps every leg short and overland, while the pickups (all 41
+ * spread-out metros) keep the fleet distributed across the country. Deterministic —
+ * re-running reproduces the same routes for the same load numbers.
  */
 function buildRoutes(count) {
   const n = CITIES.length;
-  const stride = 17; // coprime with 41; large jumps across the region-ordered list
+  // Equirectangular distance with longitude scaled by cos(lat) so east–west spans
+  // aren't overstated at higher latitudes. Good enough to rank nearest neighbours.
+  const dist = (a, b) => {
+    const dLat = a.latitude - b.latitude;
+    const dLng = (a.longitude - b.longitude) * Math.cos((a.latitude * Math.PI) / 180);
+    return Math.hypot(dLat, dLng);
+  };
   const routes = [];
   const seen = new Set();
   for (let i = 0; i < count; i++) {
     const pIdx = i % n;
-    // Walk the delivery index forward until the (pickup,delivery) pair is unique
-    // and not self-referential, so no two trucks share an identical corridor (and
-    // sit superimposed on the map). With n·(n-1) possible pairs this never starves
-    // for the demo's fleet sizes.
-    let dIdx = (i * stride + 7) % n;
-    for (let guard = 0; guard < n; guard++) {
-      const key = `${pIdx}-${dIdx}`;
-      if (dIdx !== pIdx && !seen.has(key)) break;
-      dIdx = (dIdx + 1) % n;
+    const p = CITIES[pIdx];
+    // Cities ranked nearest → farthest (excluding self), deterministic tie-break.
+    const nearest = CITIES.map((c, idx) => ({ idx, d: dist(p, c) }))
+      .filter((c) => c.idx !== pIdx)
+      .sort((a, b) => a.d - b.d || a.idx - b.idx);
+    // Take the closest neighbour that yields a unique (pickup,delivery) pair so no
+    // two trucks share a corridor. On the wrap-around pass (i ≥ n the same pickup
+    // recurs) start a rank later for variety — still a short, overland leg.
+    const offset = Math.floor(i / n);
+    let dIdx = nearest[0].idx;
+    for (let k = 0; k < nearest.length; k++) {
+      const cand = nearest[(offset + k) % nearest.length].idx;
+      if (!seen.has(`${pIdx}-${cand}`)) {
+        dIdx = cand;
+        break;
+      }
     }
     seen.add(`${pIdx}-${dIdx}`);
     routes.push({ pickup: CITIES[pIdx].zip, delivery: CITIES[dIdx].zip });
