@@ -2,9 +2,9 @@
   "_comment": "Per-agent default scope for the autopilot routines. CLI args to /autopilot-tick override these. To activate a change, commit + push to dev.",
   "_format": "Values are null (no scope) OR 'epic:FN-XXX' OR 'lane:<slug>'. Example: 'backend': 'epic:FN-1090' or 'frontend': 'lane:billing-redesign'.",
   "_see_also": ".claude/skills/pick-next-task/SKILL.md §0 for full semantics.",
-  "frontend": null,
-  "backend": null,
-  "database": null,
-  "devops": null,
-  "qa": null
+  "_active_focus": "Roadside AI v2 (epic:roadside-v2) — set 2026-06-10. Change when shifting focus to a new lane.",
+  "frontend": "lane:roadside-v2",
+  "backend":  "lane:roadside-v2",
+  "database": "lane:roadside-v2",
+  "qa":       null
 }

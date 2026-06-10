@@ -10,7 +10,7 @@ args: "<agent-type> [epic:FN-XXX | lane:<slug>]"
 Designed for scheduled remote runs. Performs **at most one task per tick** and always exits cleanly. If anything is ambiguous or risky, the tick stops and leaves the work for a human.
 
 ## Input
-- **First arg (required)**: agent type — `frontend`, `backend`, `database`, `devops`, `qa`. (AI-service work falls under `backend` — there is no separate `ai` agent. The `backend/microservices/ai-service/` path stays on the blocklist so AI-service PRs never auto-merge.)
+- **First arg (required)**: agent type — `frontend`, `backend`, `database`, `qa`. (AI-service AND infra/Docker/Render work both fall under `backend` — there are no separate `ai` or `devops` agents. The `backend/microservices/ai-service/`, `Dockerfile`, `render.yaml`, `.env*`, `infra/` paths all stay on the blocklist so those PRs never auto-merge.)
 - **Second arg (optional)**: scope filter — `epic:FN-XXX` or `lane:<slug>`. If omitted, the agent's default scope is read from `.agent/autopilot_scope.json`. See `/pick-next-task` §0 for full scope semantics.
 
 The full `$ARGS` (including the scope token if present) is passed through verbatim to `/work-next` in step 2.

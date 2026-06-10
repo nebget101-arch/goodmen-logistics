@@ -11,7 +11,7 @@ Find the next dependency-ready task for the specified agent type. Optionally sco
 
 ## Input
 
-- **First arg (required)**: agent type — `frontend`, `backend`, `database`, `devops`, `qa`. (AI-service work falls under `backend` — there is no separate `ai` agent.)
+- **First arg (required)**: agent type — `frontend`, `backend`, `database`, `qa`. (AI-service AND infra/Docker/Render work both fall under `backend` — there are no separate `ai` or `devops` agents.)
 - **Second arg (optional)**: scope filter — either:
   - `epic:FN-XXX` — only tickets under epic `FN-XXX` (resolved via the epic's `epic:*` lane label)
   - `lane:<slug>` — only tickets carrying label `epic:<slug>` (e.g., `lane:quick-add-part` → label `epic:quick-add-part`)
