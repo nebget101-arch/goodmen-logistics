@@ -1,5 +1,34 @@
 # Autopilot Log
 
+## 2026-06-10T13:44 — database tick
+
+**Result:** SUBTASK_DONE FN-1250 + PR_OPENED FN-1201
+
+**Task:** FN-1250 — [database] vendors table + PostGIS extension
+**Parent Story:** FN-1201 (Roadside v2 Story 5.1: vendor onboarding API + admin UI)
+**Branch:** `database/FN-1250/vendors-table-postgis` off `origin/integration/FN-1201`
+
+**Work done:**
+- Confirmed `roadside_vendors` schema fully delivered by FN-1249 migration (`20260610130000_create_roadside_vendors.js`): table, JSONB `base_location`, status CHECK, tenant+status index, marketplace partial index
+- PostGIS unavailable on production (only `uuid-ossp`/`pgcrypto` present — consistent with FN-1664 geofences decision); JSONB `{lat, lng}` fallback documented; PostGIS enablement deferred
+- Updated story doc `docs/stories/FN-1201.md` with FN-1250 implementation notes and Done status
+- FF-merged into `integration/FN-1201`
+- Transitioned FN-1250 → Done; added branch comment to Jira
+- All sibling subtasks Done (FN-1249 Done, FN-1250 Done, FN-1251 Done, FN-1252 Canceled) — ran create-pr
+- Rebased `integration/FN-1201` on latest dev (3 commits, 18 files, 2320 insertions)
+- Opened PR #809: https://github.com/nebget101-arch/goodmen-logistics/pull/809
+- Transitioned FN-1201 → Code Review
+
+**Sibling summary:**
+- FN-1249 (backend): Done ✓
+- FN-1250 (database): Done ✓
+- FN-1251 (frontend): Done ✓
+- FN-1252 (qa): Canceled
+
+**Next step:** PR #809 ready for human review and merge.
+
+---
+
 ## 2026-06-10T13:33 — database tick
 
 **Result:** SUBTASK_DONE FN-1241
