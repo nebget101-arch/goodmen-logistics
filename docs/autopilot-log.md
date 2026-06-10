@@ -306,6 +306,7 @@
 |---|---|---|---|---|
 | 2026-06-10 18:39Z | frontend | IDLE | — | No eligible tasks for frontend |
 | 2026-06-10 18:44Z | backend | SUBTASK_DONE | FN-1242 | Render sticky-session + runbook + env wiring; integrated into integration/FN-1198; all FN-1198 subtasks Done — ready for /create-pr FN-1198 |
+| 2026-06-10 20:09Z | frontend | IDLE | — | No eligible tasks for agent:frontend in Selected for Development |
 
 ---
 
