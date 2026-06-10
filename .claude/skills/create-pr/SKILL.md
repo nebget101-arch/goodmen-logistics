@@ -30,12 +30,55 @@ The argument is the Jira key (e.g., `FN-42`). This should be a **Story** key, no
 
 ### 2. Route by Story Type
 
-#### Story WITHOUT subtasks (standard flow)
+Determine which of three flows applies by counting non-QA subtasks under `$ARGS`:
+
+- **0 non-QA subtasks** → **STANDALONE flow** (story has no subtasks at all)
+- **Exactly 1 non-QA subtask** → **SINGLE-SUBTASK flow** (the subtask branch IS the PR head; no integration branch)
+- **2+ non-QA subtasks** → **MULTI-SUBTASK flow** (integration-branch model)
+
+Also read `docs/stories/$ARGS.md` and confirm the `## Integration Branch` field agrees with the count:
+- Doc says `_none — single-agent_` but count is 2+: STOP. "Story $ARGS shape changed since intake. Split or migrate manually before opening the PR."
+- Doc says `integration/$ARGS` but count is 1: proceed on SINGLE-SUBTASK flow and warn that the integration branch (if it exists) will be ignored.
+
+#### Story WITHOUT subtasks (STANDALONE flow)
 - Run `git log dev..HEAD --oneline` to see commits
 - Run `git diff dev...HEAD --stat` for changed files summary
 - Proceed to step 3
 
-#### Story WITH subtasks (integration-branch flow)
+#### Story WITH exactly one non-QA subtask (SINGLE-SUBTASK flow)
+
+**Pre-flight guards:**
+
+1. **Subtask Done?** If the single subtask is not Done:
+   - Print: "Cannot create PR — subtask FN-SUBTASK is <status>. Implement first."
+   - STOP
+
+2. **Subtask branch exists on remote?**
+   ```
+   SUBTASK_BRANCH=$(git ls-remote --heads origin "*/FN-SUBTASK/*" | awk '{print $2}' | sed 's|refs/heads/||' | head -1)
+   ```
+   If empty, STOP: "Subtask branch for FN-SUBTASK not found on origin. Was implement-ticket run?"
+
+**Rebase the subtask branch on latest dev (resolve any conflicts here):**
+```
+git fetch origin dev $SUBTASK_BRANCH
+git worktree add .claude/worktrees/$ARGS-pr $SUBTASK_BRANCH
+cd .claude/worktrees/$ARGS-pr
+git rebase origin/dev
+```
+
+If conflicts surface:
+- The implementing agent wrote this code. If they're not in-session, resolve based on the story doc's intent. If too tangled: STOP and escalate.
+
+```
+git push --force-with-lease origin $SUBTASK_BRANCH
+```
+
+Run `git log origin/dev..HEAD --oneline` and `git diff origin/dev...HEAD --stat`.
+
+**The PR head is `$SUBTASK_BRANCH`.** Skip step 3 (already rebased) and step 4 (already pushed). Proceed directly to step 5 with `--head $SUBTASK_BRANCH`.
+
+#### Story WITH 2+ non-QA subtasks (MULTI-SUBTASK / integration-branch flow)
 
 **Pre-flight guards — run all of these before touching git:**
 
@@ -98,8 +141,9 @@ git push -u origin HEAD
 ### 5. Create PR
 Use `gh pr create --base dev` with this format (PRs always target `dev`, never `main`).
 
-**Standard flow:** `gh pr create --base dev` (uses current branch as head)
-**Integration-branch flow:** `gh pr create --base dev --head integration/$ARGS`
+**STANDALONE flow:** `gh pr create --base dev` (uses current branch as head)
+**SINGLE-SUBTASK flow:** `gh pr create --base dev --head $SUBTASK_BRANCH`
+**MULTI-SUBTASK flow:** `gh pr create --base dev --head integration/$ARGS`
 
 **Title**: `[$ARGS] <Jira summary>`
 
@@ -130,7 +174,9 @@ Use `gh pr create --base dev` with this format (PRs always target `dev`, never `
 Jira: $ARGS
 ```
 
-**Body** (integration-branch flow — add subtask section):
+**Body** (SINGLE-SUBTASK flow — same as standard, optionally add a one-line "Implemented by: FN-SUBTASK (`<branch>`)" reference above the Summary).
+
+**Body** (MULTI-SUBTASK / integration-branch flow — add subtask section):
 ```markdown
 ## Summary
 <1-3 bullet points of what changed and why>
@@ -172,6 +218,7 @@ Jira: $ARGS
 Print:
 - PR URL
 - Jira key and new status
-- PR head branch (e.g., `integration/$ARGS` for integration-branch flow)
-- Subtask branches merged into integration (if integration-branch flow)
+- Flow used (STANDALONE / SINGLE-SUBTASK / MULTI-SUBTASK)
+- PR head branch (current branch / `$SUBTASK_BRANCH` / `integration/$ARGS`)
+- Subtask branches merged (MULTI-SUBTASK only)
 - Next step: `/review-ticket $ARGS`

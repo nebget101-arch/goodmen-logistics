@@ -9,7 +9,9 @@
 ## FleetNeuronAPP integration branch: `dev`
 **ALWAYS** branch from `origin/dev` and create PRs targeting `dev`. Never target `main` unless the user explicitly says otherwise.
 
-### Branching workflow — Story WITHOUT subtasks (or single-agent task):
+There are three story shapes. Pick the one that matches the planned subtask count.
+
+### Shape A — STANDALONE (story has no subtasks)
 1. `git fetch origin dev` — get latest dev
 2. `git worktree add .claude/worktrees/<slug> -b <agent>/<jira-key>/<slug> origin/dev` — isolated worktree per agent
 3. Make changes, commit (stage explicit paths: `git add <file>`)
@@ -17,13 +19,25 @@
 5. `gh pr create --base dev` — PR always targets dev
 6. If `dev` advances mid-work: `git fetch origin dev && git rebase origin/dev` — **NEVER `git merge origin/dev`** (merge can silently absorb uncommitted work during conflict resolution; rebase fails loudly)
 
-### Branching workflow — Story WITH subtasks (integration-branch model):
+### Shape B — SINGLE-AGENT story (exactly one non-QA subtask)
+The single subtask's branch IS the PR head. No integration branch.
+1. `git fetch origin dev`
+2. `git worktree add .claude/worktrees/<slug> -b <agent>/FN-SUBTASK/<slug> origin/dev` — base off `dev` directly
+3. Implement, commit, push
+4. When subtask is Done: `git fetch && git rebase origin/dev`, then `git push --force-with-lease origin HEAD`
+5. `/create-pr FN-STORY` opens the PR with `--head <agent>/FN-SUBTASK/<slug>` (the subtask branch is the PR head)
+
+### Shape C — MULTI-AGENT story (2+ non-QA subtasks, integration-branch model)
 1. **First subtask agent** creates `integration/FN-STORY` from `origin/dev` if it doesn't exist (see `.claude/skills/implement-ticket/SKILL.md`)
 2. Each subtask: `git worktree add .claude/worktrees/<slug> -b <agent>/FN-XXX/<slug> origin/integration/FN-STORY`
 3. When subtask is done: `git fetch && git rebase origin/integration/FN-STORY` (resolve conflicts here, where the agent knows the code), then ff-merge into `integration/FN-STORY` and push
 4. When all subtasks Done: `/create-pr FN-STORY` rebases the integration branch on latest `dev` and opens **one PR**: `integration/FN-STORY → dev`
 
-**Why integration branch:** siblings share a base, so each subtask sees prior subtasks' changes. Conflicts surface incrementally and are resolved by the agent who wrote the code, not at PR-assembly time when no one has full context.
+**Why integration branch (Shape C only):** siblings share a base, so each subtask sees prior subtasks' changes. Conflicts surface incrementally and are resolved by the agent who wrote the code, not at PR-assembly time when no one has full context.
+
+**Why no integration branch for Shape B:** with only one subtask, there are no siblings to share a base with. The integration branch is pure overhead — extra refs, extra ff-merges, no benefit.
+
+**Classification source of truth:** intake records the shape in the story doc's `## Integration Branch` field. Implement-ticket and create-pr re-verify by counting subtasks at runtime; if the count contradicts the doc (e.g., a 2nd subtask was added to a Shape B story after intake), they STOP rather than guess.
 
 ## Which agent may edit FleetNeuronAPP?
 
@@ -126,42 +140,64 @@ Cloud ID: `aff43a9d-6456-476c-9aa5-1b3da163f242`
 ### Lifecycle by Issue Type
 
 **Subtask**: `Backlog → Selected for Dev → In Progress → Done`
-- Each subtask gets its own branch: `<agent>/FN-XXX/<slug>` branched from `origin/integration/FN-PARENT` (NOT `origin/dev`)
-- No individual PR — subtask rebases on the integration branch, then ff-merges into `integration/FN-PARENT`
-- Transition to Done when subtask is integrated and pushed
+- Each subtask gets its own branch: `<agent>/FN-XXX/<slug>`
+- Branch base depends on parent story shape:
+  - **Shape B (single-agent story)**: branched from `origin/dev` directly; the subtask branch IS the eventual PR head
+  - **Shape C (multi-agent story)**: branched from `origin/integration/FN-PARENT`
+- No individual PR — Shape B subtasks rebase on `origin/dev`; Shape C subtasks rebase on the integration branch then ff-merge into it
+- Transition to Done when subtask is rebased and pushed
 
 **Story**: `Backlog → Selected for Dev → In Progress → Code Review → Done`
 - The QA step is **skipped by default** — the user tests manually after Code Review and merges when satisfied.
 - The `In Testing` (51) and QA-style steps only run when a story has a `agent:qa` automation subtask (rare; only when automation must be written as part of the story). See intake skill for when to create one.
-- If story has subtasks: the integration branch `integration/FN-STORY` is the merge target; subtasks merge into it; final PR is `integration/FN-STORY → dev`
-- If story has no subtasks: standard single-branch workflow off `dev`
-- A story with subtasks does **not** have its own implementation branch — the integration branch IS the PR head
+- PR head depends on shape (see "Branching workflow" above):
+  - **Shape A (no subtasks)**: PR head is the story's own branch
+  - **Shape B (1 non-QA subtask)**: PR head is the subtask's branch — no integration branch involved
+  - **Shape C (2+ non-QA subtasks)**: PR head is `integration/FN-STORY` — the integration branch is the merge target for siblings
+- For Shape C only: a story with multiple subtasks does **not** have its own implementation branch — the integration branch IS the PR head
 
 **Epic**: `Backlog → In Progress (auto) → Done (auto)`
 - Auto-transitions to In Progress when first child story starts
 - Auto-transitions to Done when ALL child stories are Done
 
-### Subtask Branch & Merge Strategy (integration-branch model)
+### Subtask Branch & Merge Strategy (by shape)
+
+**Shape B — single-agent story (the common case):**
 ```
 Epic: FN-100
-  Story: FN-101 → integration/FN-101 (created by first subtask agent from origin/dev)
-    Subtask: FN-102 → frontend/FN-102/<slug> (branched off integration/FN-101)
-    Subtask: FN-103 → backend/FN-103/<slug>  (branched off integration/FN-101)
-    Subtask: FN-104 → qa/FN-104/<slug>       (RARE — only when story requires new automation tests; default is NO qa subtask)
+  Story: FN-101 (single-agent — no integration branch)
+    Subtask: FN-102 → frontend/FN-102/<slug> (branched off origin/dev)
 
-Each subtask on completion:
-  git fetch origin integration/FN-101
-  git rebase origin/integration/FN-101         # surface conflicts on the subtask side
+Subtask on completion:
+  git fetch origin dev
+  git rebase origin/dev                        # surface conflicts on the subtask side
   git push --force-with-lease origin HEAD
-  git checkout integration/FN-101
-  git merge --ff-only <subtask-branch>
-  git push origin integration/FN-101
 
-When all subtasks Done:
-  /create-pr FN-101 → rebases integration/FN-101 on latest dev → single PR: integration/FN-101 → dev
+When subtask Done:
+  /create-pr FN-101 → opens PR with --head frontend/FN-102/<slug> → dev
 ```
 
-**Anti-pattern (forbidden):** branching subtasks off `origin/dev` independently and merging them with `--no-ff` into a fresh story branch at PR time. This is the pattern that caused historical lost-changes incidents — siblings have stale, divergent bases and conflict resolution at PR time has no agent context.
+**Shape C — multi-agent story (integration-branch model):**
+```
+Epic: FN-100
+  Story: FN-201 → integration/FN-201 (created by first subtask agent from origin/dev)
+    Subtask: FN-202 → frontend/FN-202/<slug> (branched off integration/FN-201)
+    Subtask: FN-203 → backend/FN-203/<slug>  (branched off integration/FN-201)
+    Subtask: FN-204 → qa/FN-204/<slug>       (RARE — only when story requires new automation tests; default is NO qa subtask)
+
+Each subtask on completion:
+  git fetch origin integration/FN-201
+  git rebase origin/integration/FN-201         # surface conflicts on the subtask side
+  git push --force-with-lease origin HEAD
+  git checkout integration/FN-201
+  git merge --ff-only <subtask-branch>
+  git push origin integration/FN-201
+
+When all subtasks Done:
+  /create-pr FN-201 → rebases integration/FN-201 on latest dev → single PR: integration/FN-201 → dev
+```
+
+**Anti-pattern (forbidden):** branching multi-agent siblings off `origin/dev` independently and merging them with `--no-ff` into a fresh story branch at PR time. This is the pattern that caused historical lost-changes incidents — siblings have stale, divergent bases and conflict resolution at PR time has no agent context. The Shape B single-subtask off-dev path is **not** this anti-pattern, because there are no siblings to diverge from.
 
 ### QA Evidence (only when an automation QA subtask exists)
 - The default flow has no QA subtask — user tests manually after Code Review and merges. No evidence files required.

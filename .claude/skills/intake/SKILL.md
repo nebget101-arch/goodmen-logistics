@@ -90,6 +90,18 @@ If the scope genuinely exceeds what one agent can reasonably deliver in a single
 
 **Do not create multiple subtasks of the same agent type under one story.** If you catch yourself writing `FN-102 (frontend): component` and `FN-103 (frontend): service`, collapse them into one frontend subtask.
 
+### 3a. Story Shape Classification (single-agent fast path vs integration-branch)
+
+After deciding the subtask shape, classify the story by **non-QA subtask count**:
+
+- **0 non-QA subtasks** → **Standalone story**. No subtasks at all. Branch directly off `origin/dev`; one PR off that branch.
+- **1 non-QA subtask** → **Single-agent story** (the common case after dropping mandatory QA). The single subtask branches **off `origin/dev` directly**. No integration branch. The subtask branch IS the PR head when `/create-pr` runs.
+- **2+ non-QA subtasks** → **Multi-agent story**. Integration-branch model applies: subtasks branch off `origin/integration/FN-STORY`, ff-merge into it, final PR is `integration/FN-STORY → dev`.
+
+A QA automation subtask, when present, follows the parent story's classification. It is treated as a sibling for branching base but is excluded from the count that decides single-vs-multi shape.
+
+**Stamp the classification into the story doc** (in the `## Integration Branch` field — see Section 5 template). Implement-ticket and create-pr read this field, but also re-verify by counting subtasks at runtime. If the doc says single-agent and a 2nd impl subtask appears later, implement-ticket will STOP with a "story shape changed — split the story or migrate manually" message rather than guess.
+
 **Other requirements:**
 - If a QA subtask is created (only when automation is required), its description must specify exactly which test files/suites it will add (`cypress/e2e/*.cy.ts`, `karate/features/*.feature`, etc.). If no automation is needed, do not create a QA subtask — leave manual validation to the user.
 - Subtask branch naming: `<agent>/FN-XXX/<slug>` where FN-XXX is the subtask key
@@ -134,7 +146,13 @@ For each Story, create `docs/stories/FN-XXX.md` using this template:
 [frontend | backend | ai | database | devops]
 
 ## Integration Branch
-`integration/FN-XXX` (created by first subtask agent from `origin/dev`; subtasks branch off this; story PR merges to `dev`)
+<!--
+Fill ONE of the following based on Story Shape Classification (intake skill §3a):
+  - "_none — standalone story, no subtasks. Branch off origin/dev."
+  - "_none — single-agent story. Subtask branches off origin/dev; subtask branch IS the PR head."
+  - "integration/FN-XXX (created by first subtask agent from origin/dev; subtasks branch off this; story PR merges to dev)"
+-->
+_none — single-agent story. Subtask branches off `origin/dev`; subtask branch IS the PR head._
 
 ## Subtasks
 | Key | Summary | Agent | Branch | Files Touched | Status |
