@@ -48,11 +48,25 @@ The argument is the Jira key (e.g., `FN-42`).
 
 Every agent MUST work in its own `git worktree`. Never run `git checkout -b` in a shared working tree — that's how parallel agents collide and lose changes.
 
+**Determine the story shape (subtask path only):**
+
+When implementing a subtask, classify the parent story BEFORE choosing a branch base:
+
+1. Query Jira: list all subtasks under `FN-PARENT` and count those with status != Done AND label != `agent:qa`. Include the current subtask in the count.
+2. Read `docs/stories/FN-PARENT.md` and parse the `## Integration Branch` field — it should contain either `_none — single-agent_`/`_none — standalone_` or `integration/FN-PARENT`.
+3. Reconcile:
+   - **Count = 1 AND doc says single-agent**: SINGLE-AGENT path. Base is `origin/dev` directly. No integration branch.
+   - **Count >= 2 AND doc says integration**: MULTI-AGENT path. Base is `origin/integration/FN-PARENT`.
+   - **Count = 1 AND doc says integration** (subtasks were collapsed/closed after intake): treat as SINGLE-AGENT, but print a note: `autopilot: collapsed integration story FN-PARENT to single-agent path`.
+   - **Count >= 2 AND doc says single-agent** (subtask was added after intake): STOP. Print: `Story FN-PARENT was classified single-agent but now has 2+ non-QA subtasks. Either split the second subtask into a new story, or manually migrate FN-PARENT to integration-branch mode: create integration/FN-PARENT from origin/dev, rebase the existing subtask branch onto it, ff-merge, then re-run.`
+   - **Doc field missing/unparseable**: STOP and ask the TPM to refresh the story doc.
+
 **Determine the base branch:**
 - **Story without subtasks**: base is `origin/dev`
-- **Subtask under a story with subtasks**: base is `origin/integration/FN-PARENT`
+- **Subtask under SINGLE-AGENT story**: base is `origin/dev`
+- **Subtask under MULTI-AGENT story**: base is `origin/integration/FN-PARENT`
 
-**Ensure the integration branch exists (subtask path only):**
+**Ensure the integration branch exists (MULTI-AGENT path only):**
 ```
 git fetch origin
 if ! git rev-parse --verify origin/integration/FN-PARENT >/dev/null 2>&1; then
@@ -62,13 +76,15 @@ if ! git rev-parse --verify origin/integration/FN-PARENT >/dev/null 2>&1; then
 fi
 ```
 
+For SINGLE-AGENT path, skip the integration branch step entirely.
+
 **Create the worktree + branch:**
 ```
 git worktree add .claude/worktrees/$ARGS -b <agent>/$ARGS/<slug> origin/<base>
 cd .claude/worktrees/$ARGS
 ```
 
-Where `<agent>` matches the label (`frontend`, `backend`, `ai`, `database`, `devops`, `qa`), `<slug>` is a short kebab-case description, and `<base>` is `dev` (no-subtask story) or `integration/FN-PARENT` (subtask).
+Where `<agent>` matches the label (`frontend`, `backend`, `ai`, `database`, `devops`, `qa`), `<slug>` is a short kebab-case description, and `<base>` is `dev` (no-subtask story OR single-agent subtask) or `integration/FN-PARENT` (multi-agent subtask).
 
 ### 4. Move to In Progress
 - Transition the Jira issue to "In Progress" using `transitionJiraIssue` (transition ID `31`)
@@ -109,6 +125,31 @@ Stage and commit changes with message: `[$ARGS] <description>`
 
 ### 9. Handle Subtask Completion
 **If Subtask:**
+
+Branch the completion flow on the story shape decided in step 3.
+
+#### 9a. SINGLE-AGENT path (base was `origin/dev`)
+
+1. **Sync with dev (rebase, never merge):**
+   ```
+   git fetch origin dev
+   git rebase origin/dev
+   ```
+   If rebase has conflicts, resolve them (you wrote the code). If too tangled, STOP and report.
+
+2. **Push the subtask branch:**
+   ```
+   git push -u origin HEAD --force-with-lease
+   ```
+   (force-with-lease is needed because the rebase rewrites local history. No one else writes this branch.)
+
+3. **Transition the subtask to "Done"** in Jira (transition ID `41`).
+
+4. **Output:** "Subtask FN-XXX done on single-agent path. Branch `<agent>/FN-XXX/<slug>` is ready to be the PR head. Run `/create-pr FN-PARENT`."
+
+   No integration branch exists; the subtask branch IS the PR head.
+
+#### 9b. MULTI-AGENT path (base was `origin/integration/FN-PARENT`)
 
 1. **Push the subtask branch:**
    ```
