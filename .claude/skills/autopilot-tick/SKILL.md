@@ -1,8 +1,8 @@
 ---
 name: autopilot-tick
-description: Unattended driver — pick next eligible task for one agent type, implement it, open the PR, self-review, and auto-merge only if the diff matches the strict safe-change allowlist.
+description: Unattended driver — pick next eligible task for one agent type, implement it, open the PR, self-review, and auto-merge only if the diff matches the strict safe-change allowlist. Supports optional epic/lane scope.
 user_invocable: true
-args: "<agent-type>"
+args: "<agent-type> [epic:FN-XXX | lane:<slug>]"
 ---
 
 # /autopilot-tick — Unattended Tick (Pick → Implement → PR → Review → Maybe-Merge)
@@ -10,7 +10,12 @@ args: "<agent-type>"
 Designed for scheduled remote runs. Performs **at most one task per tick** and always exits cleanly. If anything is ambiguous or risky, the tick stops and leaves the work for a human.
 
 ## Input
-The argument is the agent type: `frontend`, `backend`, `database`, `devops`, `qa`. (AI-service work falls under `backend` — there is no separate `ai` agent. The `backend/microservices/ai-service/` path stays on the blocklist so AI-service PRs never auto-merge.)
+- **First arg (required)**: agent type — `frontend`, `backend`, `database`, `devops`, `qa`. (AI-service work falls under `backend` — there is no separate `ai` agent. The `backend/microservices/ai-service/` path stays on the blocklist so AI-service PRs never auto-merge.)
+- **Second arg (optional)**: scope filter — `epic:FN-XXX` or `lane:<slug>`. If omitted, the agent's default scope is read from `.agent/autopilot_scope.json`. See `/pick-next-task` §0 for full scope semantics.
+
+The full `$ARGS` (including the scope token if present) is passed through verbatim to `/work-next` in step 2.
+
+**How to set scope per routine:** edit the routine's prompt in the web UI from `/autopilot-tick backend` to `/autopilot-tick backend epic:FN-1090`. Or leave the prompt unchanged and edit `.agent/autopilot_scope.json` in the repo to set per-agent defaults (commit + push to dev).
 
 ## Constants
 - **Jira Cloud ID**: `aff43a9d-6456-476c-9aa5-1b3da163f242`

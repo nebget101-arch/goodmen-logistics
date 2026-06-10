@@ -1,8 +1,8 @@
 ---
 name: work-next
-description: Pick the next eligible task for an agent and immediately implement it. Combines pick-next-task + implement-ticket.
+description: Pick the next eligible task for an agent and immediately implement it. Combines pick-next-task + implement-ticket. Supports optional epic/lane scope.
 user_invocable: true
-args: "<agent-type>"
+args: "<agent-type> [epic:FN-XXX | lane:<slug>]"
 ---
 
 # /work-next — Pick and Implement Next Task
@@ -10,7 +10,10 @@ args: "<agent-type>"
 Combines `/pick-next-task` and `/implement-ticket` into a single workflow.
 
 ## Input
-The argument is the agent type: `frontend`, `backend`, `database`, `devops`, `qa`. (AI-service work falls under `backend` — there is no separate `ai` agent.)
+- **First arg (required)**: agent type — `frontend`, `backend`, `database`, `devops`, `qa`. (AI-service work falls under `backend` — there is no separate `ai` agent.)
+- **Second arg (optional)**: scope filter — `epic:FN-XXX` or `lane:<slug>`. If omitted, the agent's default scope is read from `.agent/autopilot_scope.json` (or no scope if that file is missing/null). See `/pick-next-task` for full scope semantics.
+
+The scope arg is passed through verbatim to `/pick-next-task`. The implement step does not need to know about scope — only the picking step does.
 
 ## Constants
 - **Jira Cloud ID**: `aff43a9d-6456-476c-9aa5-1b3da163f242`
@@ -22,11 +25,11 @@ The argument is the agent type: `frontend`, `backend`, `database`, `devops`, `qa
 ## Steps
 
 ### 1. Find Next Eligible Task
-Execute the same logic as `/pick-next-task $ARGS`:
-- Query Jira for Stories and Subtasks in "Selected for Development" with label `agent:$ARGS`
+Execute the same logic as `/pick-next-task $ARGS` (passing both args through if a scope was provided):
+- Query Jira for Stories and Subtasks in "Selected for Development" with label `agent:<agent>` AND optionally the resolved lane label
 - Check all dependencies are resolved (blocking issues in "Done")
 - Prefer subtasks with sibling momentum (other subtasks already in progress/done)
-- Check for file/module conflicts with in-progress work
+- Apply the same-agent-in-progress guard
 - Select the highest priority, dependency-ready task
 
 ### 2. If No Task Found -> STOP
