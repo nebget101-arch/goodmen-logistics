@@ -66,6 +66,18 @@ When a human types natural-language commands (e.g. "analyze the codebase", "impl
 - **Intentional commits only**: Stage with explicit paths (`git add <files>`) — never `git add .` or `git add -A`. Run `git diff --cached` before `git commit`.
 - **One branch per agent/task**: `agent/frontend/…`, `agent/backend/…`, etc. Never reset or reuse another agent's branch.
 
+## Scoping the agent queue by epic or lane (optional)
+
+By default, agents pick any task in **Selected for Development** matching `agent:<type>`. To narrow further to a specific epic or swimlane, pass a scope token as the second arg to `/pick-next-task`, `/work-next`, or `/autopilot-tick`:
+
+- `epic:FN-1090` — resolved to the epic's `epic:*` lane label
+- `lane:quick-add-part` — uses label `epic:quick-add-part` directly
+
+**Precedence:** CLI arg > `.agent/autopilot_scope.json` per-agent default > no scope. Status filter is always AND-ed on top — scope narrows, never widens.
+
+**Setting scope per routine:** edit the routine prompt in https://claude.ai/code/routines (e.g., `/autopilot-tick backend epic:FN-1090`).
+**Setting scope for all routines of an agent:** edit `.agent/autopilot_scope.json` and push to dev.
+
 ## Jira Status Lifecycle
 
 Agents transition FN issues using `transitionJiraIssue` with these IDs.
