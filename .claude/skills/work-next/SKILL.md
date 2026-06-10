@@ -10,7 +10,7 @@ args: "<agent-type>"
 Combines `/pick-next-task` and `/implement-ticket` into a single workflow.
 
 ## Input
-The argument is the agent type: `frontend`, `backend`, `ai`, `database`, `devops`, `qa`.
+The argument is the agent type: `frontend`, `backend`, `database`, `devops`, `qa`. (AI-service work falls under `backend` — there is no separate `ai` agent.)
 
 ## Constants
 - **Jira Cloud ID**: `aff43a9d-6456-476c-9aa5-1b3da163f242`

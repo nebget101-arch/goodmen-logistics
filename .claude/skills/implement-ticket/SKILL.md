@@ -84,7 +84,7 @@ git worktree add .claude/worktrees/$ARGS -b <agent>/$ARGS/<slug> origin/<base>
 cd .claude/worktrees/$ARGS
 ```
 
-Where `<agent>` matches the label (`frontend`, `backend`, `ai`, `database`, `devops`, `qa`), `<slug>` is a short kebab-case description, and `<base>` is `dev` (no-subtask story OR single-agent subtask) or `integration/FN-PARENT` (multi-agent subtask).
+Where `<agent>` matches the label (`frontend`, `backend`, `database`, `devops`, `qa`), `<slug>` is a short kebab-case description, and `<base>` is `dev` (no-subtask story OR single-agent subtask) or `integration/FN-PARENT` (multi-agent subtask). AI-service work uses `agent:backend` — no separate `ai` agent.
 
 ### 4. Move to In Progress
 - Transition the Jira issue to "In Progress" using `transitionJiraIssue` (transition ID `31`)

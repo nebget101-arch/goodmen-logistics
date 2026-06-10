@@ -10,7 +10,7 @@ args: "<agent-type>"
 Find the next dependency-ready task for the specified agent type.
 
 ## Input
-The argument is the agent type: `frontend`, `backend`, `ai`, `database`, `devops`, `qa`.
+The argument is the agent type: `frontend`, `backend`, `database`, `devops`, `qa`. (AI-service work falls under `backend` — there is no separate `ai` agent.)
 
 ## Constants
 - **Jira Cloud ID**: `aff43a9d-6456-476c-9aa5-1b3da163f242`
@@ -38,37 +38,23 @@ When multiple candidates are eligible, prefer:
 2. **Higher priority tasks**
 3. **Older tasks** (created first)
 
-### 4. Check for Conflicts (file-overlap check — must be mechanical, not vibes)
+### 4. Serial-execution check (same-agent in-progress guard)
 
-For each candidate task in priority order:
+Files Touched declarations have been dropped — they drifted in practice and added ceremony without preventing real conflicts. The replacement is a coarse-grained guard: **don't start a second task for an agent that already has one in flight**.
 
-1. **Get the candidate's declared Files Touched** from the Jira description (`## Files Touched (expected)` section) or the parent story doc subtask table. If the candidate has no declaration:
-   - Skip this candidate
-   - Note in output: "FN-XXX skipped — no Files Touched declaration; ask TPM to add one"
+For the requested agent type `$ARGS`:
 
-2. **List all in-progress sibling tasks** (any agent, any story):
-   ```
-   project = FN AND status = "In Progress"
-   ```
+```
+in_progress_count = count of FN issues where:
+  status = "In Progress" AND labels = "agent:$ARGS"
+```
 
-3. **For each in-progress task**, find its branch from Jira comments (`Branch: <agent>/FN-XXX/<slug>`) and run:
-   ```
-   git fetch origin
-   git diff --name-only origin/dev...origin/<branch>
-   ```
-   This is the actual file-set the in-progress task is modifying.
+If `in_progress_count >= 1`, return NO ELIGIBLE TASKS with reason:
+```
+FN-XXX already In Progress for agent:$ARGS. Wait for it to reach Done or Code Review before picking the next task.
+```
 
-4. **Compare** candidate's declared Files Touched against each in-progress branch's diff:
-   - Literal path match → conflict
-   - Candidate glob (`src/app/foo/**`) matches an in-progress file → conflict
-   - In-progress file matches a candidate glob → conflict
-
-5. **If any overlap, skip the candidate** and move to the next one. Surface the reason:
-   ```
-   FN-XXX skipped — files overlap with in-progress FN-YYY (files: <list>)
-   ```
-
-6. **If no candidate is conflict-free**, return NO ELIGIBLE TASKS with the conflict reasons listed.
+This trades fine-grained conflict prediction for a simple "one task per agent at a time" rule. In practice the autopilot routines already enforce this (one tick at a time, 2h apart), so this check mostly catches human-initiated work overlapping with the queue.
 
 ### 5. Return Result
 

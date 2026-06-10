@@ -10,7 +10,7 @@ args: "<agent-type>"
 Designed for scheduled remote runs. Performs **at most one task per tick** and always exits cleanly. If anything is ambiguous or risky, the tick stops and leaves the work for a human.
 
 ## Input
-The argument is the agent type: `frontend`, `backend`, `ai`, `database`, `devops`, `qa`.
+The argument is the agent type: `frontend`, `backend`, `database`, `devops`, `qa`. (AI-service work falls under `backend` — there is no separate `ai` agent. The `backend/microservices/ai-service/` path stays on the blocklist so AI-service PRs never auto-merge.)
 
 ## Constants
 - **Jira Cloud ID**: `aff43a9d-6456-476c-9aa5-1b3da163f242`
@@ -129,6 +129,61 @@ Then:
 - Do NOT transition Jira (the `/create-pr` step already moved it to Code Review).
 - Print `autopilot: <STORY_KEY> awaits human merge — gate failed: <gate-name>`
 
+### 7. Append to the run log (ALWAYS, even on idle ticks)
+
+Every tick — regardless of outcome — must append one line to a consolidated log on a dedicated `autopilot-log` branch. This is the user's single audit point for unattended activity. Do this AFTER the main work above completes (or STOPs).
+
+**Determine the outcome variables** based on which exit path the tick took:
+
+| OUTCOME | When | TICKET | NOTES |
+|---|---|---|---|
+| `IDLE` | Step 2 returned "No eligible task" | `—` | `No eligible tasks for <agent>` |
+| `IMPLEMENTED_SUBTASK` | Step 2 implemented a subtask; siblings remain | `FN-SUBTASK` | `Subtask done; siblings remain` |
+| `PR_OPENED` | Step 3 succeeded but gates failed (PR awaits human) | `FN-STORY` | `PR #<num>: <gate-name> failed` |
+| `AUTO_MERGED` | Step 6 merged the PR | `FN-STORY` | `PR #<num> merged; category <CAT>` |
+| `STOPPED` | Any flow STOPped at a guard | `FN-XXX or —` | One-line reason |
+| `ERROR` | Anything unexpected | `—` | One-line error summary |
+
+**Append the line:**
+```
+LOG_BRANCH=autopilot-log
+LOG_FILE=docs/autopilot-log.md
+TS=$(date -u '+%Y-%m-%d %H:%MZ')
+LOG_LINE="| $TS | $ARGS | $OUTCOME | $TICKET | $NOTES |"
+
+git fetch origin "$LOG_BRANCH" 2>/dev/null || true
+if git rev-parse --verify "origin/$LOG_BRANCH" >/dev/null 2>&1; then
+  git worktree add /tmp/autopilot-log-wt -B "$LOG_BRANCH" "origin/$LOG_BRANCH"
+else
+  git worktree add /tmp/autopilot-log-wt -b "$LOG_BRANCH" origin/dev
+fi
+
+cd /tmp/autopilot-log-wt
+mkdir -p docs
+if [ ! -f "$LOG_FILE" ]; then
+  cat > "$LOG_FILE" <<'HDR'
+# Autopilot Run Log
+
+One row per tick across all agents. Newest entries at the bottom. This branch (`autopilot-log`) is **never merged into dev** — it exists solely as an append-only audit log.
+
+| Timestamp (UTC) | Agent | Outcome | Ticket | Notes |
+|---|---|---|---|---|
+HDR
+fi
+
+echo "$LOG_LINE" >> "$LOG_FILE"
+git add "$LOG_FILE"
+git commit -m "autopilot-log: $ARGS $OUTCOME"
+git push origin "$LOG_BRANCH"
+
+cd - >/dev/null
+git worktree remove /tmp/autopilot-log-wt
+```
+
+If the log append fails (network, push race), do NOT block the rest of the tick — print `autopilot: log-append failed: <reason>` and continue. The tick output in routine history is still available as a fallback.
+
+**Viewing the log:** `https://github.com/nebget101-arch/goodmen-logistics/blob/autopilot-log/docs/autopilot-log.md`
+
 ## Iron rules
 1. **One ticket per tick.** Never loop within a tick. Never start a second `/work-next` if the first finished.
 2. **Always exit cleanly.** Never crash, never leave the worktree in an unknown state. If something is unexpected, print the situation and STOP.
@@ -136,7 +191,8 @@ Then:
 4. **Self-review is not enough.** Auto-merge requires APPROVE AND a clean allowlist match AND a clean blocklist AND the 24h rate limit.
 5. **No force-pushing to dev.** Ever.
 6. **No `--no-verify` or `--no-gpg-sign` on commits.**
-7. **If anything in the underlying flows STOPs, this skill STOPs.** Do not improvise around it.
+7. **If anything in the underlying flows STOPs, this skill STOPs** — but it still appends a `STOPPED` row to the run log before exiting.
+8. **The run log is append-only.** Never edit, never rewrite history on the `autopilot-log` branch. Never merge it into dev.
 
 ## What this skill explicitly does NOT do
 - Resolve merge conflicts on dev rebase. If `/create-pr` hits conflicts, this skill stops.
