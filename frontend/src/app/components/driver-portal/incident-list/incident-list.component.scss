@@ -1,0 +1,236 @@
+// FN-1259 — Incident list: dark theme, touch targets ≥44px, WCAG 2.1 AA
+$il-bg: #0f1117;
+$il-card-bg: #181c24;
+$il-card-border: rgba(255, 255, 255, 0.08);
+$il-text-primary: #f1f5f9;
+$il-text-secondary: rgba(241, 245, 249, 0.55);
+$il-accent: #3b82f6;
+
+// Status badge palette — all meet WCAG 4.5:1 on their backgrounds
+$badge-new-bg: rgba(59, 130, 246, 0.2);
+$badge-new-text: #93c5fd;
+$badge-triaged-bg: rgba(168, 85, 247, 0.2);
+$badge-triaged-text: #d8b4fe;
+$badge-dispatched-bg: rgba(234, 179, 8, 0.2);
+$badge-dispatched-text: #fde047;
+$badge-resolved-bg: rgba(34, 197, 94, 0.2);
+$badge-resolved-text: #86efac;
+$badge-cancelled-bg: rgba(107, 114, 128, 0.2);
+$badge-cancelled-text: #9ca3af;
+
+:host {
+  display: block;
+}
+
+.il {
+  max-width: 680px;
+}
+
+// ─── Header ───────────────────────────────────────────────────────────────────
+
+.il__header {
+  margin-bottom: 24px;
+}
+
+.il__title {
+  margin: 0 0 16px;
+  font-size: 22px;
+  font-weight: 700;
+  color: $il-text-primary;
+  letter-spacing: 0.01em;
+}
+
+.il__filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+// Touch target ≥ 44px
+.il__filter-btn {
+  min-height: 44px;
+  min-width: 44px;
+  padding: 8px 16px;
+  border: 1px solid $il-card-border;
+  border-radius: 8px;
+  background: $il-card-bg;
+  color: $il-text-secondary;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+  line-height: 1.2;
+
+  &:hover {
+    background: rgba(255, 255, 255, 0.07);
+    color: $il-text-primary;
+  }
+
+  &:focus-visible {
+    outline: 2px solid $il-accent;
+    outline-offset: 2px;
+  }
+
+  &--active {
+    background: rgba(59, 130, 246, 0.18);
+    border-color: $il-accent;
+    color: #93c5fd;
+    font-weight: 600;
+  }
+}
+
+// ─── States ───────────────────────────────────────────────────────────────────
+
+.il__state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 48px 24px;
+  color: $il-text-secondary;
+  font-size: 15px;
+  text-align: center;
+
+  &--loading .il__spinner {
+    width: 32px;
+    height: 32px;
+    border: 3px solid rgba(255, 255, 255, 0.1);
+    border-top-color: $il-accent;
+    border-radius: 50%;
+    animation: il-spin 0.7s linear infinite;
+  }
+
+  &--error {
+    color: #fca5a5;
+  }
+}
+
+.il__state-msg {
+  margin: 0;
+}
+
+// Touch target ≥ 44px
+.il__retry-btn {
+  min-height: 44px;
+  padding: 10px 24px;
+  background: $il-accent;
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+
+  &:hover {
+    background: #2563eb;
+  }
+
+  &:focus-visible {
+    outline: 2px solid #93c5fd;
+    outline-offset: 2px;
+  }
+}
+
+@keyframes il-spin {
+  to { transform: rotate(360deg); }
+}
+
+// ─── List ─────────────────────────────────────────────────────────────────────
+
+.il__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.il__card {
+  background: $il-card-bg;
+  border: 1px solid $il-card-border;
+  border-radius: 12px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.il__card-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+// ─── Badge ────────────────────────────────────────────────────────────────────
+
+.il__badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+
+  &--new {
+    background: $badge-new-bg;
+    color: $badge-new-text;
+  }
+
+  &--triaged {
+    background: $badge-triaged-bg;
+    color: $badge-triaged-text;
+  }
+
+  &--dispatched {
+    background: $badge-dispatched-bg;
+    color: $badge-dispatched-text;
+  }
+
+  &--resolved {
+    background: $badge-resolved-bg;
+    color: $badge-resolved-text;
+  }
+
+  &--cancelled {
+    background: $badge-cancelled-bg;
+    color: $badge-cancelled-text;
+  }
+}
+
+// ─── Card fields ──────────────────────────────────────────────────────────────
+
+.il__time {
+  font-size: 13px;
+  color: $il-text-secondary;
+  white-space: nowrap;
+}
+
+.il__label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: $il-text-secondary;
+  margin-right: 6px;
+}
+
+.il__vehicle,
+.il__description,
+.il__location {
+  margin: 0;
+  font-size: 14px;
+  color: $il-text-primary;
+  line-height: 1.5;
+}
+
+.il__vehicle strong {
+  font-weight: 600;
+}
+
+.il__description {
+  color: $il-text-secondary;
+}
