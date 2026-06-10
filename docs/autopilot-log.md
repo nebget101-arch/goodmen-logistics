@@ -368,3 +368,29 @@
 
 | 2026-06-10 20:28:28Z | backend | IMPLEMENTED_SUBTASK | FN-1279 | Nightly rollup cron + service; integrated into integration/FN-1211; siblings FN-1280 + FN-1281 remain |
 | 2026-06-10 20:28:28Z | backend | TICK_SUMMARY | — | tasks_done=1 refills_done=0 exit=max-tasks-cap max_tasks=1 |
+
+---
+
+## 2026-06-10T20:33 — database tick
+
+**Result:** SUBTASK_DONE FN-1280
+
+**Task:** FN-1280 — [database] Rollup tables (incidents, vendors, payments)
+**Parent story:** FN-1211 — Roadside v2 Story 9.1: nightly rollup tables + cron
+**Branch:** `database/FN-1280/rollup-tables` (ff-merged into `integration/FN-1211`)
+
+**Files changed** (1):
+- `backend/packages/goodmen-database/migrations/20260610000000_create_rollup_tables.js` (new) — creates `daily_incident_metrics`, `daily_vendor_sla`, `daily_payment_metrics` keyed by `UNIQUE (tenant_id, day)`; idempotent `hasTable` guards; `(tenant_id, day DESC)` indexes for dashboard queries; `down` drops all three in reverse order
+
+**Jira:** FN-1280 → In Progress → Done; branch comment added
+
+**Sibling summary:**
+- FN-1279 (backend): ✅ Done
+- FN-1280 (database): ✅ Done (this tick)
+- FN-1281 (devops): Selected for Development (Render cron schedule — pending)
+- FN-1282 (qa): Canceled
+
+**Next step:** FN-1281 must complete before `/create-pr FN-1211`
+
+| 2026-06-10T20:33Z | database | IMPLEMENTED_SUBTASK | FN-1280 | Rollup tables migration; integrated into integration/FN-1211; sibling FN-1281 remains |
+| 2026-06-10T20:33Z | database | TICK_SUMMARY | — | tasks_done=1 refills_done=0 exit=max-tasks-cap max_tasks=1 |
