@@ -1,0 +1,51 @@
+# Render Blueprint fragment — fleetneuron-logistics-gateway
+#
+# Sticky sessions (sessionAffinity: cookie) are required for Socket.IO:
+# without them, Render's load balancer may route the WS upgrade and
+# subsequent HTTP long-poll fallback to different instances, breaking
+# real-time connections.
+#
+# Apply to the existing service in Render Dashboard → Blueprint or via
+# render.yaml at repo root (keep this file in sync with render.yaml).
+#
+# FN-1240 / FN-1242 — Realtime WebSocket + SMS
+
+services:
+  - type: web
+    name: fleetneuron-logistics-gateway
+    runtime: node
+    plan: starter
+    rootDir: backend/gateway
+    buildCommand: npm install
+    startCommand: npm start
+    # Required for Socket.IO: ensures WS upgrade + polling fallback
+    # from the same client always land on the same instance.
+    sessionAffinity: cookie
+    envVars:
+      - key: REPORTING_SERVICE_URL
+        value: https://fleetneuron-reporting-service.onrender.com
+      - key: INTEGRATIONS_SERVICE_URL
+        value: https://fleetneuron-integrations-service.onrender.com
+      - key: AUTH_USERS_SERVICE_URL
+        value: https://fleetneuron-auth-users-service.onrender.com
+      - key: DRIVERS_COMPLIANCE_SERVICE_URL
+        value: https://fleetneuron-drivers-compliance-service.onrender.com
+      - key: VEHICLES_MAINTENANCE_SERVICE_URL
+        value: https://fleetneuron-vehicles-maintenance-service.onrender.com
+      - key: LOGISTICS_SERVICE_URL
+        value: https://fleetneuron-logistics-service.onrender.com
+      - key: INVENTORY_SERVICE_URL
+        value: https://fleetneuron-inventory-service.onrender.com
+      - key: AI_SERVICE_URL
+        value: https://fleetneuron-ai-service.onrender.com
+      - key: CORS_ORIGIN
+        value: https://fleetneuron.ai,https://dev.fleetneuron.ai,https://fleetneuron-logistics-ui.onrender.com,http://localhost:4200
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 10002
+      # FN-1242: Shared secret for the /internal/ws/emit endpoint (FN-811).
+      # Generate: openssl rand -hex 32
+      # Must match INTERNAL_WS_SECRET on fleetneuron-drivers-compliance-service.
+      - key: INTERNAL_WS_SECRET
+        sync: false
