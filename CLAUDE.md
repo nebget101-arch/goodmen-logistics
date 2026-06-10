@@ -130,7 +130,9 @@ Cloud ID: `aff43a9d-6456-476c-9aa5-1b3da163f242`
 - No individual PR — subtask rebases on the integration branch, then ff-merges into `integration/FN-PARENT`
 - Transition to Done when subtask is integrated and pushed
 
-**Story**: `Backlog → Selected for Dev → In Progress → Code Review → QA → Done`
+**Story**: `Backlog → Selected for Dev → In Progress → Code Review → Done`
+- The QA step is **skipped by default** — the user tests manually after Code Review and merges when satisfied.
+- The `In Testing` (51) and QA-style steps only run when a story has a `agent:qa` automation subtask (rare; only when automation must be written as part of the story). See intake skill for when to create one.
 - If story has subtasks: the integration branch `integration/FN-STORY` is the merge target; subtasks merge into it; final PR is `integration/FN-STORY → dev`
 - If story has no subtasks: standard single-branch workflow off `dev`
 - A story with subtasks does **not** have its own implementation branch — the integration branch IS the PR head
@@ -145,7 +147,7 @@ Epic: FN-100
   Story: FN-101 → integration/FN-101 (created by first subtask agent from origin/dev)
     Subtask: FN-102 → frontend/FN-102/<slug> (branched off integration/FN-101)
     Subtask: FN-103 → backend/FN-103/<slug>  (branched off integration/FN-101)
-    Subtask: FN-104 → qa/FN-104/<slug>       (only if automation)
+    Subtask: FN-104 → qa/FN-104/<slug>       (RARE — only when story requires new automation tests; default is NO qa subtask)
 
 Each subtask on completion:
   git fetch origin integration/FN-101
@@ -161,21 +163,24 @@ When all subtasks Done:
 
 **Anti-pattern (forbidden):** branching subtasks off `origin/dev` independently and merging them with `--no-ff` into a fresh story branch at PR time. This is the pattern that caused historical lost-changes incidents — siblings have stale, divergent bases and conflict resolution at PR time has no agent context.
 
-### QA Evidence
-- Screenshots saved to `docs/stories/evidence/FN-XXX/`
-- Committed to repo and linked in Jira comments
-- QA subtasks with automation work get their own branch
-- QA subtasks with manual testing only: evidence + story doc update, no branch
+### QA Evidence (only when an automation QA subtask exists)
+- The default flow has no QA subtask — user tests manually after Code Review and merges. No evidence files required.
+- When an automation QA subtask IS created (e.g., new Cypress/Karate suite):
+  - Screenshots saved to `docs/stories/evidence/FN-XXX/`
+  - Committed to repo and linked in Jira comments
+  - The QA subtask gets its own branch
+  - Manual-only QA subtasks (legacy): evidence + story doc update, no branch
 
 ## Routine after coding (coding agents)
 
 When implementation is complete for a Jira Story:
 
-1. **Transition to In Testing** (`51`) — run all verifications (browser, tests, screenshots).
+1. **Run final self-verification** (build passes, tests pass, manual smoke if a UI change). Optionally transition to **In Testing** (`51`) only if the story has an automation QA subtask that will run next.
 2. **Open a pull request** into `dev` (`gh pr create --base dev`).
 3. **Transition to Code Review** (`61`) — do this immediately after the PR is created.
 4. **Jira — Story comment**: Add a comment with **(1) PR link** and **(2) Render service names** from `.agent/docs/render_services.md`.
 5. **Jira — Sub-tasks**: Transition all completed child issues to **Done** (`41`).
+6. **Stop here.** No QA handoff in the default flow — the user takes over for manual testing and merges when satisfied.
 
 ## After a PR merges
 

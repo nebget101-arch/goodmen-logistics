@@ -9,6 +9,13 @@ args: "<jira-key>"
 
 Validate the implemented ticket against its acceptance criteria.
 
+## When to use this skill
+**Default flow has no automated QA step** — the user tests manually after the story PR reaches Code Review and merges when satisfied. Run `/handoff-qa` only when:
+- The story has an explicit `agent:qa` automation subtask (rare; created by intake only when Cypress/Karate/k6 work is part of the story), OR
+- The user explicitly asks for a structured QA pass on a specific story.
+
+If neither applies, do not invoke this skill — leave manual validation to the user.
+
 ## Input
 The argument is the Jira key (e.g., `FN-42`). Can be a Story or a QA Subtask.
 
