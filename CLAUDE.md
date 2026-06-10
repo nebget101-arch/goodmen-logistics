@@ -45,14 +45,13 @@ The single subtask's branch IS the PR head. No integration branch.
 |------|-----------------------|
 | **TPM** (project management / analysis) | **No** — read-only via Jira MCP |
 | **Frontend developer** | **Yes** — Angular UI scope; branches `agent/frontend/...` |
-| **Backend developer** | **Yes** — Node.js/Express microservices scope (includes AI service work); branches `agent/backend/...` |
+| **Backend developer** | **Yes** — Node.js/Express microservices scope (includes AI service AND infra/Docker/Render work); branches `agent/backend/...` |
 | **Database agent** | **Yes** — PostgreSQL migrations/queries; branches `agent/database/...` |
-| **DevOps agent** | **Yes** — Docker/Render/infra scope; branches `agent/devops/...` |
 | **QA agent** | **Yes** — Cypress/k6/Karate tests; branches `agent/qa/...` |
 
 All **prompt and config** files live in `.agent/`. The TPM agent never creates, edits, or deletes app source files.
 
-**Note on AI service work:** `backend/microservices/ai-service/` is owned by the **backend** agent — no separate `agent:ai` label exists. The autopilot blocklist still blocks auto-merge of ai-service changes (sensitive), so backend agents implementing AI work will still open a PR that waits for human merge.
+**Note on AI service AND infra work:** Both `backend/microservices/ai-service/` and infra (Docker, render.yaml, env files, runbooks) are owned by the **backend** agent — no separate `agent:ai` or `agent:devops` labels exist. The autopilot blocklist still blocks auto-merge of ai-service and infra changes (sensitive), so backend agents implementing those will still open a PR that waits for human merge.
 
 ## Trigger phrases (interactive sessions only)
 

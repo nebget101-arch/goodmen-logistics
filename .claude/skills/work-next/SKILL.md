@@ -10,7 +10,7 @@ args: "<agent-type> [epic:FN-XXX | lane:<slug>]"
 Combines `/pick-next-task` and `/implement-ticket` into a single workflow.
 
 ## Input
-- **First arg (required)**: agent type — `frontend`, `backend`, `database`, `devops`, `qa`. (AI-service work falls under `backend` — there is no separate `ai` agent.)
+- **First arg (required)**: agent type — `frontend`, `backend`, `database`, `qa`. (AI-service AND infra/Docker/Render work both fall under `backend` — there are no separate `ai` or `devops` agents.)
 - **Second arg (optional)**: scope filter — `epic:FN-XXX` or `lane:<slug>`. If omitted, the agent's default scope is read from `.agent/autopilot_scope.json` (or no scope if that file is missing/null). See `/pick-next-task` for full scope semantics.
 
 The scope arg is passed through verbatim to `/pick-next-task`. The implement step does not need to know about scope — only the picking step does.
