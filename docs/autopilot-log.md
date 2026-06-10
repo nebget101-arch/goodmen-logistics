@@ -336,3 +336,35 @@
 - FN-1243 (qa): Canceled
 
 **Next step:** All subtasks complete → run `/create-pr FN-1198` to open `integration/FN-1198 → dev` PR
+
+---
+
+## 2026-06-10 20:28:28Z — backend tick
+
+**Result:** IMPLEMENTED_SUBTASK FN-1279
+
+**Task selected:** FN-1279 `[backend] Nightly rollup cron + service in reporting`
+- Parent story: FN-1211 (Roadside v2 Story 9.1: nightly rollup tables + cron)
+- Reason selected: only eligible `[backend]`-labeled subtask; no blocking dependencies; no file conflicts with in-progress work
+
+**Changes committed to `backend/FN-1279/nightly-rollup`** (5 files, 652 insertions):
+- `backend/microservices/reporting-service/services/rollup.service.js` (new) — `buildRollupService` factory; `rollupTenant(tenantId, day)` + `runForDay(day)`; idempotent `ON CONFLICT (tenant_id, day) DO UPDATE` upserts for `daily_incident_metrics`, `daily_vendor_sla`, `daily_payment_metrics`; per-table error isolation; sequential tenant loop
+- `backend/microservices/reporting-service/cron/rollup.cron.js` (new) — standalone Render Cron Job entry point; `ROLLUP_DATE` env override for backfill; exits non-zero only when all tenants fail
+- `backend/microservices/reporting-service/telemetry/rollup.telemetry.js` (new) — duration, rows-per-table, failure count telemetry
+- `backend/microservices/reporting-service/__tests__/rollup.service.spec.js` (new) — 9 test cases, all passing
+- `docs/stories/FN-1211.md` (new) — story doc with deployment handoff
+
+**Integration:** ff-merged into `integration/FN-1211` (first subtask agent — created integration branch from `origin/dev`)
+
+**Jira:** FN-1279 → In Progress → Done; assignee set to Neb Get; branch comment added
+
+**Sibling summary:**
+- FN-1279 (backend): Done ✓ (this tick)
+- FN-1280 (database): Selected for Development (rollup table migration — pending)
+- FN-1281 (devops): Selected for Development (Render cron schedule — pending)
+- FN-1282 (qa): Canceled
+
+**Next step:** Siblings FN-1280 and FN-1281 must complete before `/create-pr FN-1211`
+
+| 2026-06-10 20:28:28Z | backend | IMPLEMENTED_SUBTASK | FN-1279 | Nightly rollup cron + service; integrated into integration/FN-1211; siblings FN-1280 + FN-1281 remain |
+| 2026-06-10 20:28:28Z | backend | TICK_SUMMARY | — | tasks_done=1 refills_done=0 exit=max-tasks-cap max_tasks=1 |
