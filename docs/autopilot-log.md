@@ -1,5 +1,32 @@
 # Autopilot Log
 
+## 2026-06-10T13:14 — frontend tick
+
+**Result:** SUBTASK_DONE FN-1291
+
+- Queried Jira for `agent:frontend` tasks in Selected for Development — found 1 candidate (FN-1291)
+- No blockers; files `experiments/driver-mobile-poc/**` — no overlap with any in-progress branch
+- FN-1291 is a subtask under FN-1214 (Shape C, 3 non-QA non-canceled subtasks)
+- Created `integration/FN-1214` from `origin/dev` (first subtask agent for this story)
+- Transitioned FN-1291 → In Progress; transitioned epic FN-1168 → In Progress
+- Created worktree `.claude/worktrees/FN-1291` on branch `frontend/FN-1291/driver-mobile-poc` from `origin/integration/FN-1214`
+- Built standalone PWA scaffold: `experiments/driver-mobile-poc/` (index.html, styles.css, app.js, manifest.json, sw.js)
+  - Login screen → `POST /api/auth/login`
+  - Read-only incident list → `GET /api/roadside/calls`
+  - Status filter chips; AI dark-theme; touch targets ≥44px; WCAG contrast
+  - PWA manifest + service worker (shell caching)
+- Created story doc `docs/stories/FN-1214.md`
+- Committed, pushed branch, rebased clean, ff-merged into `integration/FN-1214`
+- Transitioned FN-1291 → Done; added branch comment to Jira
+
+**Sibling summary:**
+- FN-1290 (ai): Selected for Development (remaining)
+- FN-1291 (frontend): Done ✓
+- FN-1292 (devops): Selected for Development (remaining)
+- FN-1293 (qa): Canceled (not blocking)
+
+**Next step:** Siblings FN-1290 and FN-1292 must complete before `/create-pr FN-1214`
+
 ## 2026-06-10T13:13 — frontend tick
 
 **Result:** PR_OPENED FN-1204
