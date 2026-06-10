@@ -10,7 +10,7 @@ args: "<agent-type>"
 Designed for scheduled remote runs. Performs **at most one task per tick** and always exits cleanly. If anything is ambiguous or risky, the tick stops and leaves the work for a human.
 
 ## Input
-The argument is the agent type: `frontend`, `backend`, `ai`, `database`, `devops`, `qa`.
+The argument is the agent type: `frontend`, `backend`, `database`, `devops`, `qa`. (AI-service work falls under `backend` — there is no separate `ai` agent. The `backend/microservices/ai-service/` path stays on the blocklist so AI-service PRs never auto-merge.)
 
 ## Constants
 - **Jira Cloud ID**: `aff43a9d-6456-476c-9aa5-1b3da163f242`

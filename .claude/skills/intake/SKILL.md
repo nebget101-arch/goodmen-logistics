@@ -12,7 +12,7 @@ You are the TPM. Decompose the given requirement into actionable Jira work items
 - **Jira Cloud ID**: `aff43a9d-6456-476c-9aa5-1b3da163f242`
 - **Jira Project Key**: `FN`
 - **Transition IDs**: Selected for Development=`21`, In Progress=`31`, Done=`41`
-- **Agent labels**: `agent:frontend`, `agent:backend`, `agent:ai`, `agent:database`, `agent:devops`, `agent:qa`
+- **Agent labels**: `agent:frontend`, `agent:backend`, `agent:database`, `agent:devops`, `agent:qa` (AI-service work falls under `agent:backend`)
 
 ## Jira issue-creation rules (always apply)
 - Always search Jira (project = FN) before creating any issue — avoid duplicates.
@@ -37,10 +37,11 @@ You are the TPM. Decompose the given requirement into actionable Jira work items
 ### 2. Create Jira Breakdown
 For each work item, create a Jira issue in project **FN** with:
 - **Epic**: Top-level feature/initiative (no agent label — epics are containers)
-- **Story**: User-facing deliverable (assign agent type via label: `agent:frontend`, `agent:backend`, `agent:ai`, `agent:database`, `agent:devops`)
+- **Story**: User-facing deliverable (assign agent type via label: `agent:frontend`, `agent:backend`, `agent:database`, `agent:devops`)
 - **Subtask**: Technical sub-unit under a story. **Each subtask MUST have an agent label** so it can be independently picked:
-  - Implementation subtasks: `agent:frontend`, `agent:backend`, `agent:ai`, `agent:database`, `agent:devops`
+  - Implementation subtasks: `agent:frontend`, `agent:backend`, `agent:database`, `agent:devops`
   - QA subtasks: `agent:qa` — for validation/testing work
+- **AI-service work** (`backend/microservices/ai-service/`) is labeled `agent:backend` — there is no `agent:ai`. The autopilot blocklist still prevents auto-merge of ai-service changes, so AI PRs reach Code Review but wait for human merge.
 - **Bug**: Defect found during analysis
 
 Use the Jira MCP tools:
@@ -88,10 +89,9 @@ Splitting a single agent's work across multiple subtasks (e.g. "Create component
 
 **Default subtask shape for a story:**
 - **At most ONE `agent:frontend` subtask** — covers ALL frontend work for the story (components, services, routing, styles, unit specs).
-- **At most ONE `agent:backend` subtask** — covers ALL backend work for the story (routes, controllers, services, middleware, validation).
+- **At most ONE `agent:backend` subtask** — covers ALL backend work for the story (routes, controllers, services, middleware, validation). **Also covers AI-service work** (`backend/microservices/ai-service/`) — there is no separate AI subtask.
 - **At most ONE `agent:database` subtask** — only if schema/migration/seed work is needed.
 - **At most ONE `agent:devops` subtask** — only if infra/Docker/Render/env config is needed.
-- **At most ONE `agent:ai` subtask** — only if AI service work is needed.
 - **`agent:qa` subtask is OPTIONAL** — only create it when Cypress/Karate/k6 automation tests must be written as part of this story. **By default, do NOT create a QA subtask** — the user tests manually after the story PR reaches Code Review.
 
 If the scope genuinely exceeds what one agent can reasonably deliver in a single pass, that is a signal to **split the Story**, not to fan out subtasks. Create a second Story and sequence them with a "Blocks" link.

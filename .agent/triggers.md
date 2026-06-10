@@ -50,8 +50,6 @@ Implementing agents (frontend / backend / database / devops / qa / ai) running u
 |-----------------|---------------|
 | "implement qa task" / "qa agent" / "write tests" / "write e2e tests" | `.agent/qa/system_prompt.md` then `.agent/qa/prompts/implement_qa_task.md` |
 
-## AI Agent
+## AI service work — routes through Backend Agent
 
-| Trigger phrases | Workflow file |
-|-----------------|---------------|
-| "implement ai task" / "ai agent" / "FleetNeuron AI" / "update ai service" | `.agent/ai/system_prompt.md` then `.agent/ai/prompts/implement_ai_task.md` |
+There is no separate AI agent. Phrases like "implement ai task", "update ai service", or "FleetNeuron AI" map to the **Backend Agent** workflow above. AI-service work (`backend/microservices/ai-service/`) is implemented by backend agents under the `agent:backend` label.
