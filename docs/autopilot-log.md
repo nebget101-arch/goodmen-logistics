@@ -1,5 +1,28 @@
 # Autopilot Log
 
+## 2026-06-10T13:33 — database tick
+
+**Result:** SUBTASK_DONE FN-1241
+
+**Task:** FN-1241 — [database] sms_optin + event_log tables
+**Parent Story:** FN-1198 (Roadside v2 Story 4.1: real-time WebSocket + SMS for no-ETA state changes)
+**Branch:** `database/FN-1241/realtime-tables` off `origin/integration/FN-1198`
+
+**Work done:**
+- Created `20260610120000_create_sms_optin.js` — `sms_optin` table with tenant_id, phone_e164, channel_pref, opted_in_at, opted_out_at; UNIQUE constraint on (tenant_id, phone_e164)
+- Created `20260610120100_create_event_log.js` — `event_log` table with aggregate_id, aggregate_type, event_type, tenant_id, payload JSONB, published_at; unique expression index on (aggregate_id, event_type, state, version) for `ON CONFLICT DO NOTHING` idempotency
+- Updated story doc `docs/stories/FN-1198.md` with FN-1241 implementation notes and deployment handoff
+- FF-merged into `integration/FN-1198`
+- Transitioned FN-1241 → Done; added branch comment to Jira
+
+**Sibling summary:**
+- FN-1240 (backend): Done ✓
+- FN-1241 (database): Done ✓
+- FN-1242 (devops): Selected for Development (pending)
+- FN-1243 (qa): Canceled
+
+**Next step:** FN-1242 (devops) must complete before `create-pr FN-1198` can open the integration-branch PR.
+
 ## 2026-06-10T13:14 — frontend tick
 
 **Result:** SUBTASK_DONE FN-1291
