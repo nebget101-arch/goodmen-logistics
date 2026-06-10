@@ -14,6 +14,7 @@ const { buildAiRouter } = require('./routes/ai');
 const { buildSmartAlertsAggregator } = require('./services/smart-alerts-aggregator');
 const { MemoryDismissalsStore } = require('./services/dismissals-store');
 const { buildAlertsBroadcaster, makeSocketIoEmitter } = require('./services/alerts-ws');
+const { buildIncidentBroadcaster } = require('./services/incident-broadcaster');
 const { buildAlertsRouter } = require('./routes/alerts');
 const { buildAlertGrouper } = require('./services/alert-grouper');
 const { buildComplianceAlertsClient } = require('./services/compliance-alerts-client');
@@ -382,6 +383,10 @@ const smartAlertsAggregator = buildSmartAlertsAggregator({
 });
 const dismissalsStore = new MemoryDismissalsStore();
 const alertsBroadcaster = buildAlertsBroadcaster({
+  emit: makeSocketIoEmitter(() => ioInstance)
+});
+// FN-1240: incident broadcaster — wraps the same emitter for incident.state_changed events
+const incidentBroadcaster = buildIncidentBroadcaster({ // eslint-disable-line no-unused-vars
   emit: makeSocketIoEmitter(() => ioInstance)
 });
 
