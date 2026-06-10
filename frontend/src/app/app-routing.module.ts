@@ -293,6 +293,10 @@ const routes: Routes = [
     path: 'admin/fmcsa-imports',
     loadChildren: () => import('./components/admin/fmcsa-imports/fmcsa-imports.module').then(m => m.FmcsaImportsAdminModule)
   },
+  {
+    path: 'admin/vendors',
+    loadChildren: () => import('./components/admin/vendors/vendors-admin.module').then(m => m.VendorsAdminModule)
+  },
   // FN-1326 — dev-only severity-system preview. Excluded from production builds
   // so the route does not ship to customers; lazy-loaded so it adds zero bundle
   // weight unless explicitly visited in dev.
