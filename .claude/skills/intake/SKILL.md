@@ -116,18 +116,6 @@ A QA automation subtask, when present, follows the parent story's classification
 - **Subtasks branch off `origin/integration/FN-STORY`, NOT `origin/dev`** (integration-branch model — see CLAUDE.md)
 - The integration branch `integration/FN-STORY` is created by the first implementing agent if it doesn't exist; intake just declares its name in the story doc
 
-**Each subtask MUST declare expected Files Touched in its Jira description.** This is consumed by `/pick-next-task` for cross-task conflict detection. Add this section to every subtask description:
-
-```
-## Files Touched (expected)
-- src/app/feature/foo.component.ts
-- src/app/feature/foo.service.ts
-- services/load-service/routes/foo.js
-- (paths or glob patterns; be honest about shared files like modules, routing, index.ts)
-```
-
-The list does not need to be exhaustive — it's a conflict-detection signal. If two subtasks declare overlapping files, `/pick-next-task` will refuse to pick the second one while the first is in progress, forcing serial execution. If you have no files to declare (e.g., pure config), write `_none_`.
-
 ### 4. Define Dependencies
 - Identify which stories/subtasks must complete before others can start
 - Create "Blocks" links between dependent issues
@@ -151,7 +139,7 @@ For each Story, create `docs/stories/FN-XXX.md` using this template:
 - FN-YYY (must complete first)
 
 ## Agent
-[frontend | backend | ai | database | devops]
+[frontend | backend | database | devops]
 
 ## Integration Branch
 <!--
@@ -163,10 +151,10 @@ Fill ONE of the following based on Story Shape Classification (intake skill §3a
 _none — single-agent story. Subtask branches off `origin/dev`; subtask branch IS the PR head._
 
 ## Subtasks
-| Key | Summary | Agent | Branch | Files Touched | Status |
-|-----|---------|-------|--------|---------------|--------|
-| FN-AAA | [subtask description] | frontend | `frontend/FN-AAA/<slug>` | `src/app/foo/**` | Pending |
-| FN-BBB | [subtask description] | backend | `backend/FN-BBB/<slug>` | `services/load-service/routes/foo.js` | Pending |
+| Key | Summary | Agent | Branch | Status |
+|-----|---------|-------|--------|--------|
+| FN-AAA | [subtask description] | frontend | `frontend/FN-AAA/<slug>` | Pending |
+| FN-BBB | [subtask description] | backend | `backend/FN-BBB/<slug>` | Pending |
 <!-- Manual testing: user verifies in browser after PR reaches Code Review. Add a QA subtask row only if automation tests are required for this story. -->
 
 ## Implementation Summary
