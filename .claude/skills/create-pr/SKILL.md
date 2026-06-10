@@ -82,9 +82,10 @@ Run `git log origin/dev..HEAD --oneline` and `git diff origin/dev...HEAD --stat`
 
 **Pre-flight guards — run all of these before touching git:**
 
-1. **All subtasks Done?** If any are not Done:
-   - Print: "Cannot create PR — these subtasks are not Done: FN-XXX (status), FN-YYY (status)"
+1. **All non-QA subtasks Done?** When evaluating this check, **exclude `agent:qa` subtasks entirely** — they default to manual testing post-merge under the current policy and do not block PR creation. If any non-QA subtask is not Done:
+   - Print: "Cannot create PR — these non-QA subtasks are not Done: FN-XXX (status), FN-YYY (status)"
    - STOP
+   - (If a QA subtask is `In Progress` for legitimate automation work, the human running this skill should pause until QA completes — but the skill itself will not block automatically.)
 
 2. **Duplicate-agent guard.** Count subtasks by `agent:*` label, excluding `agent:qa`. If two or more non-QA subtasks share the same agent label:
    - Print: "Story $ARGS has multiple subtasks with label `agent:<label>`. This violates the one-subtask-per-agent rule (.claude/skills/intake/SKILL.md). Split this into separate stories or collapse the subtasks before creating the PR."
