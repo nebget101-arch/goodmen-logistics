@@ -184,3 +184,38 @@
 - FN-1217: Done ✓
 - FN-1218: Done ✓
 - FN-1219: Canceled (not blocking)
+
+---
+
+## 2026-06-10T18:18 — backend tick
+
+**Result:** SUBTASK_DONE FN-1240
+
+- Queried Jira for `agent:backend` tasks in Selected for Development — found 8 candidates (FN-1215, FN-1240, FN-1242, FN-1249, FN-1279, FN-1281, FN-1290, FN-1292)
+- Checked in-progress tasks — only auto-transitioned Epics (no subtask branches); no file conflicts
+- Selected FN-1240 (oldest `[backend]` subtask; parent FN-1198 — no blockers)
+- FN-1240 is a subtask under FN-1198 (Shape C: 3 non-QA subtasks — FN-1240, FN-1241, FN-1242)
+- Created `integration/FN-1198` from `origin/dev` (first subtask agent for this story)
+- Transitioned FN-1240 → In Progress; set assignee (Neb Get)
+- Transitioned FN-1198 story → In Progress
+- Created worktree `.claude/worktrees/FN-1240` on branch `backend/FN-1240/realtime-no-eta` from `origin/integration/FN-1198`
+- Implemented (9 files, 656 insertions):
+  - `backend/gateway/services/incident-broadcaster.js` — `buildIncidentBroadcaster` follows alerts-ws.js pattern
+  - `backend/gateway/index.js` — wires incident broadcaster alongside alerts broadcaster
+  - `backend/gateway/__tests__/incident-ws.test.js` — 8 tests, all passing
+  - `backend/microservices/drivers-compliance-service/services/incident-event-publisher.js` — idempotent HTTP POST to gateway `/internal/ws/emit`; deduplicates via `event_log` table (FN-1241); graceful degradation if table missing
+  - `backend/microservices/drivers-compliance-service/services/incident-sms-notify.js` — SMS via Twilio with `sms_optin` table check
+  - `backend/microservices/drivers-compliance-service/services/incident-events.js` — combined dispatcher + structured telemetry
+  - `backend/microservices/drivers-compliance-service/routes/roadside-realtime.js` — intercepts `PATCH /api/roadside/calls/:id/status` to fire-and-forget dispatch after response
+  - `backend/microservices/drivers-compliance-service/server.js` — mounts roadsideRealtimeRouter before shared router
+  - `docs/stories/FN-1198.md` — story doc with deployment handoff
+- Committed, pushed subtask branch, rebased clean on integration/FN-1198, ff-merged into integration/FN-1198
+- Transitioned FN-1240 → Done; added branch comment to Jira
+
+**Sibling summary:**
+- FN-1240 (backend): Done ✓
+- FN-1241 (database): Selected for Development (pending)
+- FN-1242 (backend/devops): Selected for Development (pending)
+- FN-1243 (qa): Canceled
+
+**Next step:** FN-1241 and FN-1242 siblings must complete before `create-pr FN-1198` can open the integration-branch PR.
