@@ -215,6 +215,31 @@ Jira: $ARGS
 - Add a Jira comment with the PR URL
 - Include Render service names from `.agent/docs/render_services.md` if available
 
+### 6.5 Label the PR with epic + lane labels (for feature-batch review)
+
+After the PR is open, mirror the Jira story's `epic:*` lane labels onto the GitHub PR. This lets the user filter PRs by feature (epic) in the GitHub PR list and review batches naturally — `is:pr is:open label:epic:FN-1140` shows all open PRs for the AI Triage Engine feature.
+
+Get the Jira labels:
+```
+LABELS=$(getJiraIssue $ARGS | jq -r '.fields.labels[]' 2>/dev/null)
+```
+
+Filter to the two label families we care about:
+- `epic:FN-XXX` — story's parent epic key (rarely propagated; intake usually only stamps the slug form)
+- `epic:<slug>` — lane label (e.g., `epic:roadside-v2`); intake's swimlane propagation always sets this
+
+Add each matching label to the PR via gh, creating it on the fly if it doesn't exist (gh handles this with `--add-label` automatically once the label exists in the repo; if not, fall back to creating it first):
+```
+for LABEL in $(echo "$LABELS" | grep -E '^epic:'); do
+  gh label create "$LABEL" --description "Auto-applied by /create-pr from Jira" 2>/dev/null || true
+  gh pr edit $PR_NUMBER --add-label "$LABEL"
+done
+```
+
+If `gh label create` fails because the label already exists, that's fine — the `--add-label` step still runs.
+
+If there are no `epic:*` labels on the Jira story (rare, e.g., legacy stories pre-swimlane propagation), skip this step silently and log a single warning to stdout. Don't fail the PR creation.
+
 ### 7. Output
 Print:
 - PR URL
