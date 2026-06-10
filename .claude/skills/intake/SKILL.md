@@ -14,6 +14,14 @@ You are the TPM. Decompose the given requirement into actionable Jira work items
 - **Transition IDs**: Selected for Development=`21`, In Progress=`31`, Done=`41`
 - **Agent labels**: `agent:frontend`, `agent:backend`, `agent:ai`, `agent:database`, `agent:devops`, `agent:qa`
 
+## Jira issue-creation rules (always apply)
+- Always search Jira (project = FN) before creating any issue — avoid duplicates.
+- Always confirm with the user before bulk-creating more than 5 issues in one pass.
+- Always link subtasks → stories → epics via the `parent` field on `createJiraIssue`, and use `createIssueLink` (type `Blocks`) for cross-story dependencies.
+- Always use the issue templates from `.agent/tpm/system_prompt.md`.
+- Always reference actual file paths from this repo in descriptions (e.g., `frontend/src/app/loads/loads.component.ts`), not made-up paths.
+- Read recent `git log` before analyzing scope so the breakdown reflects current state, not stale assumptions.
+
 ## Steps
 
 ### 1. Analyze the Requirement
