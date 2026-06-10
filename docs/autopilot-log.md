@@ -219,3 +219,31 @@
 - FN-1243 (qa): Canceled
 
 **Next step:** FN-1241 and FN-1242 siblings must complete before `create-pr FN-1198` can open the integration-branch PR.
+
+---
+
+## backend tick — 2026-06-10T18:26 UTC
+
+**Agent:** backend
+**Status:** COMPLETED
+**Task:** FN-1249 — [backend] Vendor CRUD endpoints + service in logistics
+**Parent Story:** FN-1201 (Roadside v2 Story 5.1: vendor onboarding API + admin UI)
+**Branch:** `backend/FN-1249/vendor-crud` off `origin/integration/FN-1201`
+
+**Work done:**
+- Created `roadside_vendors` migration (JSONB base_location — no PostGIS, consistent with geofences)
+- Implemented `roadside-vendors.service.js` with list, getById, create, update, setStatus, stats
+- Implemented `roadside-vendors.js` route with GET/POST/PUT/PATCH + /stats; write ops require admin role; tenant scoping (private + marketplace)
+- Added gateway proxy rule `/api/logistics/vendors` → logistics-service
+- Mounted route in logistics server.js at `/api/logistics/vendors`
+- Added unit tests
+- FF-merged into `integration/FN-1201`
+- Transitioned FN-1249 → Done; added branch comment to Jira
+
+**Sibling summary:**
+- FN-1249 (backend): Done ✓
+- FN-1250 (database): Selected for Development (pending — migration already included in FN-1249)
+- FN-1251 (frontend): Done ✓
+- FN-1252 (qa): Canceled
+
+**Next step:** FN-1250 sibling must complete (or be skipped since migration is included) before `create-pr FN-1201` can open the integration-branch PR.
