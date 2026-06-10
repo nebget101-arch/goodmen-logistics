@@ -1,0 +1,163 @@
+// FN-1259 — Driver portal shell: dark theme, large nav, WCAG 2.1 AA touch targets ≥44px
+$dp-bg: #0f1117;
+$dp-surface: #181c24;
+$dp-border: rgba(255, 255, 255, 0.08);
+$dp-text-primary: #f1f5f9;
+$dp-text-secondary: rgba(241, 245, 249, 0.6);
+$dp-accent: #3b82f6;
+$dp-nav-active-bg: rgba(59, 130, 246, 0.15);
+$dp-nav-active-border: #3b82f6;
+
+:host {
+  display: block;
+  min-height: 100vh;
+  background: $dp-bg;
+  color: $dp-text-primary;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif;
+}
+
+.dp-shell {
+  display: grid;
+  grid-template-rows: 56px auto 1fr;
+  grid-template-areas:
+    'header'
+    'nav'
+    'content';
+  min-height: 100vh;
+
+  @media (min-width: 768px) {
+    grid-template-columns: 220px 1fr;
+    grid-template-rows: 56px 1fr;
+    grid-template-areas:
+      'header header'
+      'nav content';
+  }
+}
+
+// ─── Header ───────────────────────────────────────────────────────────────────
+
+.dp-shell__header {
+  grid-area: header;
+  display: flex;
+  align-items: center;
+  padding: 0 20px;
+  background: $dp-surface;
+  border-bottom: 1px solid $dp-border;
+  height: 56px;
+}
+
+.dp-shell__wordmark {
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: $dp-text-primary;
+  user-select: none;
+}
+
+// ─── Nav ──────────────────────────────────────────────────────────────────────
+
+.dp-shell__nav {
+  grid-area: nav;
+  background: $dp-surface;
+  border-right: 1px solid $dp-border;
+
+  @media (max-width: 767px) {
+    border-right: none;
+    border-bottom: 1px solid $dp-border;
+  }
+}
+
+.dp-shell__nav-list {
+  list-style: none;
+  margin: 0;
+  padding: 8px 0;
+  display: flex;
+  flex-direction: column;
+
+  @media (max-width: 767px) {
+    flex-direction: row;
+    padding: 0;
+  }
+}
+
+.dp-shell__nav-item {
+  display: flex;
+
+  @media (max-width: 767px) {
+    flex: 1;
+  }
+}
+
+// Touch target ≥ 44px (WCAG 2.5.5 AAA / 2.5.8 AA)
+.dp-shell__nav-link {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 44px;
+  padding: 10px 16px;
+  color: $dp-text-secondary;
+  text-decoration: none;
+  border-left: 3px solid transparent;
+  transition: color 0.15s, background 0.15s, border-color 0.15s;
+  border-radius: 0;
+  cursor: pointer;
+
+  &:hover,
+  &:focus-visible {
+    color: $dp-text-primary;
+    background: rgba(255, 255, 255, 0.05);
+    outline: none;
+  }
+
+  &:focus-visible {
+    outline: 2px solid $dp-accent;
+    outline-offset: -2px;
+  }
+
+  &--active {
+    color: $dp-accent;
+    background: $dp-nav-active-bg;
+    border-left-color: $dp-nav-active-border;
+    font-weight: 600;
+
+    [aria-current='page'] & {
+      // already handled by routerLinkActive
+    }
+  }
+
+  @media (max-width: 767px) {
+    justify-content: center;
+    border-left: none;
+    border-bottom: 3px solid transparent;
+
+    &--active {
+      border-left-color: transparent;
+      border-bottom-color: $dp-nav-active-border;
+    }
+  }
+}
+
+.dp-shell__nav-icon {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  color: inherit;
+}
+
+.dp-shell__nav-label {
+  font-size: 15px;
+  white-space: nowrap;
+}
+
+// ─── Content ──────────────────────────────────────────────────────────────────
+
+.dp-shell__content {
+  grid-area: content;
+  padding: 24px 16px;
+  overflow-y: auto;
+
+  @media (min-width: 768px) {
+    padding: 32px 24px;
+  }
+}
