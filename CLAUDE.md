@@ -53,66 +53,9 @@ The single subtask's branch IS the PR head. No integration branch.
 
 All **prompt and config** files live in `.agent/`. The TPM agent never creates, edits, or deletes app source files.
 
-## Trigger phrases → agent workflows
+## Trigger phrases (interactive sessions only)
 
-### TPM Agent
-"analyze the codebase" or "scan FleetNeuron" or "what's in the app"
-→ Read `.agent/tpm/prompts/analyze_codebase.md` and follow exactly.
-
-"create backlog" or "generate tickets" or "create jira stories"
-→ Read `.agent/tpm/system_prompt.md` first, then `.agent/tpm/prompts/create_backlog.md`
-
-"sync docs" or "update confluence" or "update documentation"
-→ Read `.agent/tpm/prompts/sync_docs.md` and follow exactly.
-
-"audit tests" or "find missing tests" or "test coverage"
-→ Read `.agent/tpm/prompts/audit_tests.md` and follow exactly.
-
-"handoff to dev agents" or "add copy-paste prompts for agents"
-→ Read `.agent/tpm/prompts/handoff_to_dev_agents.md`
-
-"process work queue" or "start next task" or "pick up FN work"
-→ Read `.agent/docs/process_work_queue.md`
-
-"process frontend work queue" / "process backend work queue" / "process database work queue"
-"process devops work queue" / "process qa work queue" / "process ai work queue"
-→ Read `.agent/docs/process_work_queue.md` and use the matching queue folder.
-
-### Frontend Agent
-"analyze UI" or "analyze the frontend" or "UI code review" (read-only — no edits or git)
-→ Read `.agent/frontend/system_prompt.md`, then `.agent/frontend/prompts/analyze_frontend_code.md`
-
-"implement UI task" or "frontend agent" or "FleetNeuron frontend" or "polish the UI"
-→ Read `.agent/frontend/system_prompt.md` first, then `.agent/frontend/prompts/implement_frontend_task.md`
-
-### Backend Agent
-"analyze backend" or "backend code review" or "scan the backend" (read-only)
-→ Read `.agent/backend/system_prompt.md`, then `.agent/backend/prompts/analyze_backend_code.md`
-
-"implement backend task" or "backend agent" or "FleetNeuron backend"
-→ Read `.agent/backend/system_prompt.md` first, then `.agent/backend/prompts/implement_backend_task.md`
-
-### Database Agent
-"analyze database" or "database schema review" (read-only)
-→ Read `.agent/database/system_prompt.md`, then `.agent/database/prompts/analyze_database.md`
-
-"implement database task" or "database agent" or "write migration"
-→ Read `.agent/database/system_prompt.md` first, then `.agent/database/prompts/implement_database_task.md`
-
-### DevOps Agent
-"analyze infrastructure" or "devops review" (read-only)
-→ Read `.agent/devops/system_prompt.md`, then `.agent/devops/prompts/analyze_infrastructure.md`
-
-"implement devops task" or "devops agent" or "update docker" or "update render"
-→ Read `.agent/devops/system_prompt.md` first, then `.agent/devops/prompts/implement_devops_task.md`
-
-### QA Agent
-"implement qa task" or "qa agent" or "write tests" or "write e2e tests"
-→ Read `.agent/qa/system_prompt.md` first, then `.agent/qa/prompts/implement_qa_task.md`
-
-### AI Agent
-"implement ai task" or "ai agent" or "FleetNeuron AI" or "update ai service"
-→ Read `.agent/ai/system_prompt.md` first, then `.agent/ai/prompts/implement_ai_task.md`
+When a human types natural-language commands (e.g. "analyze the codebase", "implement UI task"), the trigger-phrase → workflow-file mapping is in **`.agent/triggers.md`**. Read that file only when a human prose request needs to be mapped to a workflow. Remote routines and skill invocations (e.g. `/autopilot-tick`, `/work-next`, `/create-pr`) call skills directly and never need this file.
 
 ## Parallel agents / git safety
 
@@ -160,44 +103,11 @@ Cloud ID: `aff43a9d-6456-476c-9aa5-1b3da163f242`
 - Auto-transitions to In Progress when first child story starts
 - Auto-transitions to Done when ALL child stories are Done
 
-### Subtask Branch & Merge Strategy (by shape)
+### Subtask Branch & Merge Strategy
 
-**Shape B — single-agent story (the common case):**
-```
-Epic: FN-100
-  Story: FN-101 (single-agent — no integration branch)
-    Subtask: FN-102 → frontend/FN-102/<slug> (branched off origin/dev)
+The full step-by-step git commands per shape live in `.claude/skills/implement-ticket/SKILL.md` (§3 branch base, §9 completion) and `.claude/skills/create-pr/SKILL.md` (§2 routing). Implementing agents follow those skills, not free-form recipes here.
 
-Subtask on completion:
-  git fetch origin dev
-  git rebase origin/dev                        # surface conflicts on the subtask side
-  git push --force-with-lease origin HEAD
-
-When subtask Done:
-  /create-pr FN-101 → opens PR with --head frontend/FN-102/<slug> → dev
-```
-
-**Shape C — multi-agent story (integration-branch model):**
-```
-Epic: FN-100
-  Story: FN-201 → integration/FN-201 (created by first subtask agent from origin/dev)
-    Subtask: FN-202 → frontend/FN-202/<slug> (branched off integration/FN-201)
-    Subtask: FN-203 → backend/FN-203/<slug>  (branched off integration/FN-201)
-    Subtask: FN-204 → qa/FN-204/<slug>       (RARE — only when story requires new automation tests; default is NO qa subtask)
-
-Each subtask on completion:
-  git fetch origin integration/FN-201
-  git rebase origin/integration/FN-201         # surface conflicts on the subtask side
-  git push --force-with-lease origin HEAD
-  git checkout integration/FN-201
-  git merge --ff-only <subtask-branch>
-  git push origin integration/FN-201
-
-When all subtasks Done:
-  /create-pr FN-201 → rebases integration/FN-201 on latest dev → single PR: integration/FN-201 → dev
-```
-
-**Anti-pattern (forbidden):** branching multi-agent siblings off `origin/dev` independently and merging them with `--no-ff` into a fresh story branch at PR time. This is the pattern that caused historical lost-changes incidents — siblings have stale, divergent bases and conflict resolution at PR time has no agent context. The Shape B single-subtask off-dev path is **not** this anti-pattern, because there are no siblings to diverge from.
+**Anti-pattern (forbidden):** branching multi-agent siblings off `origin/dev` independently and merging them with `--no-ff` into a fresh story branch at PR time. This caused historical lost-changes incidents — siblings had stale, divergent bases and conflict resolution at PR time had no agent context. The Shape B single-subtask off-dev path is **not** this anti-pattern, because there are no siblings to diverge from.
 
 ### QA Evidence (only when an automation QA subtask exists)
 - The default flow has no QA subtask — user tests manually after Code Review and merges. No evidence files required.
@@ -224,10 +134,6 @@ When implementation is complete for a Jira Story:
 2. Add a follow-up Jira comment if needed (deploy confirmation, Render service names, prod promotion).
 3. Move the work-queue packet to `done/FN-XXX.md`.
 
-## General rules (always apply)
-- Always search Jira (project = FN) before creating any issue
-- Always confirm before bulk-creating more than 5 issues
-- Always link subtasks → stories → epics
-- Always use templates from `.agent/tpm/system_prompt.md` for Jira issues
-- Always reference actual file paths from ~/Desktop/FleetNeuronAPP in issue descriptions
-- Read git log when analyzing to understand recent work
+## Jira issue-creation rules
+
+Apply only when creating Jira issues (TPM / intake work). See `.claude/skills/intake/SKILL.md` for the full ruleset, including: always search FN before creating, confirm before bulk-creating more than 5 issues, link subtasks → stories → epics, use templates from `.agent/tpm/system_prompt.md`, and reference actual file paths from this repo in descriptions.
