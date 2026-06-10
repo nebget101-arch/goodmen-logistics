@@ -27,38 +27,73 @@
 
 **Next step:** QA agent to pick FN-1708, then `/create-pr FN-1702`
 
-## 2026-06-10T12:33 — backend tick
+---
 
-**Result:** COMPLETED SUBTASK  
-**Task:** FN-1217 — [backend] Triage handler endpoints + service in drivers-compliance  
-**Parent Story:** FN-1187 — Roadside v2 Story 1.2: drivers-compliance triage handler + persistence  
-**Epic:** FN-1140 — Roadside AI v2 — Epic 1: AI Triage Engine (Claude integration)  
-**Branch:** `backend/FN-1217/triage-handler`  
-**Files changed:** 8 (5 new src files, 1 new test file, server.js update, story doc)
+## 2026-06-10 — frontend tick — FN-1251 ✅
+
+**Agent:** frontend  
+**Task:** FN-1251 — [frontend] Admin vendor list + form  
+**Parent story:** FN-1201 — Roadside v2 Story 5.1: vendor onboarding API + admin UI  
+**Branch:** `agent/frontend/FN-1251/vendors-admin`  
+**Integration branch:** `integration/FN-1201` (created this tick — first subtask agent)  
+**Files changed:** 12 (1 583 insertions)
 
 **Actions taken:**
-- Queried Jira for `agent:backend` tasks in Selected for Development — found 8 candidates (including some mislabeled `[ai]`/`[devops]` tasks)
-- Checked in-progress tasks for file conflicts — only epics in progress, no branch conflicts
-- Selected FN-1217 (oldest genuine `[backend]` subtask, parent FN-1187)
-- `autopilot_scope.json` absent → no scope filter applied
-- Created `integration/FN-1187` from `origin/dev` (first subtask agent for this story)
-- Created worktree `.claude/worktrees/FN-1217` on branch `backend/FN-1217/triage-handler`
-- Transitioned FN-1217 → In Progress; auto-transitioned epic FN-1140 → In Progress
-- Implemented 6 new files under `backend/microservices/drivers-compliance-service/src/`:
-  - `clients/ai-service.client.js` — fetch-with-timeout HTTP client for ai-service triage endpoint
-  - `controllers/triage.controller.js` — orchestrates AI call + DB persist + telemetry
-  - `services/triage.service.js` — insert-only knex queries against `incident_triage` table (tenant-scoped)
-  - `routes/triage.routes.js` — Express router for POST/GET `/incidents/:id/triage`
-  - `telemetry/triage.telemetry.js` — call count + latency metrics via existing logger
-- Added `test/triage/triage.controller.spec.js` — 7 Jest unit tests (happy path, missing tenant, AI timeout, DB failure, 404)
-- Updated `server.js` to mount `/api/incidents` with `authMiddleware + tenantContextMiddleware + requireActiveSubscription + requireRoadsidePlan`
-- Created `docs/stories/FN-1187.md` with AI service contract, subtask table, deployment handoff
-- Committed, pushed subtask branch, ff-merged into `integration/FN-1187`
-- Added Jira comment on FN-1217 with branch name and file summary; transitioned FN-1217 → Done
+- Queried Jira for `agent:frontend` tasks in Selected for Development — found 3 candidates (FN-1251, FN-1259, FN-1291)
+- All three have no blocking `is-blocked-by` links and no file conflicts with in-progress work
+- Selected FN-1251 (oldest by created timestamp; no sibling momentum on any candidate)
+- Created `integration/FN-1201` from `origin/dev` (first subtask agent for this story)
+- Created worktree `.claude/worktrees/FN-1251` on branch `agent/frontend/FN-1251/vendors-admin`
+- Transitioned FN-1251 → In Progress; auto-transitioned epic FN-1153 → In Progress
+- Extended `VendorsService` with admin CRUD methods (`listVendors`, `createVendor`, `updateVendor`, `setVendorStatus`) at `/logistics/vendors`; legacy MasterEntity search methods preserved unchanged
+- Created `VendorsListComponent`: filterable vendor table (all/active/suspended), edit action, suspend/reactivate with confirmation modal
+- Created `VendorFormComponent`: create/edit modal with name field, capacity field, 10-skill chip picker (Towing, Heavy Duty Towing, Tire Change, Fuel Delivery, Lockout Service, Battery Jump, Accident Recovery, Light Mechanical, Winching, Flatbed Transport), and lat/lng coordinate inputs for base location with range validation
+- Created `VendorsAdminComponent` container, `VendorsAdminModule` (lazy-loaded, guarded by AuthGuard + PermissionGuard ROLES_MANAGE|ACCESS_ADMIN)
+- Added `/admin/vendors` lazy route to `app-routing.module.ts`
+- Created 11-case unit spec for VendorsListComponent
+- Created `docs/stories/FN-1201.md` with subtask table and deployment handoff
+- Committed, pushed subtask branch, ff-merged into `integration/FN-1201`
+- Added Jira comment on FN-1251 with branch name; transitioned FN-1251 → Done
 
 **Sibling subtasks:**
-- FN-1217: Done ✓
-- FN-1218: [database] incident_triage table + indexes — Selected for Development (remaining)
-- FN-1219: [qa] Validate triage handler — Backlog (remaining)
+- FN-1249: [backend] Vendor CRUD endpoints + service in logistics — Selected for Dev (remaining)
+- FN-1250: [database] vendors table + PostGIS extension — Selected for Dev (remaining)
+- FN-1251: Done ✓
+- FN-1252: [qa] Validate vendor CRUD — Backlog (remaining)
 
-**Next step:** database agent to pick FN-1218, then QA agent for FN-1219, then `/create-pr FN-1187`
+**Next step:** Backend and database agents to pick FN-1249 / FN-1250, then `/create-pr FN-1201` when all non-QA subtasks are Done
+
+---
+
+## 2026-06-10 — frontend tick — FN-1251 ✅
+
+**Agent:** frontend  
+**Task:** FN-1251 — [frontend] Admin vendor list + form  
+**Parent story:** FN-1201 — Roadside v2 Story 5.1: vendor onboarding API + admin UI  
+**Branch:** `agent/frontend/FN-1251/vendors-admin`  
+**Integration branch:** `integration/FN-1201` (created this tick — first subtask agent)  
+**Files changed:** 12 (1 583 insertions)
+
+**Actions taken:**
+- Queried Jira for `agent:frontend` tasks in Selected for Development — found 3 candidates (FN-1251, FN-1259, FN-1291)
+- All three have no blocking `is-blocked-by` links and no file conflicts with in-progress work
+- Selected FN-1251 (oldest by created timestamp; no sibling momentum on any candidate)
+- Created `integration/FN-1201` from `origin/dev` (first subtask agent for this story)
+- Created worktree `.claude/worktrees/FN-1251` on branch `agent/frontend/FN-1251/vendors-admin`
+- Transitioned FN-1251 → In Progress; auto-transitioned epic FN-1153 → In Progress
+- Extended `VendorsService` with admin CRUD methods at `/logistics/vendors`; legacy MasterEntity search methods preserved
+- Created `VendorsListComponent`: filterable vendor table, edit + suspend/reactivate with confirmation modal
+- Created `VendorFormComponent`: create/edit modal with name, capacity, 10-skill chip picker, lat/lng location inputs
+- Created `VendorsAdminComponent` container, `VendorsAdminModule` (lazy-loaded, guarded by AuthGuard + PermissionGuard)
+- Added `/admin/vendors` lazy route to `app-routing.module.ts`
+- Created 11-case unit spec; created `docs/stories/FN-1201.md` with deployment handoff
+- Committed, pushed subtask branch, ff-merged into `integration/FN-1201`
+- Added Jira comment on FN-1251; transitioned FN-1251 → Done
+
+**Sibling subtasks:**
+- FN-1249: [backend] Vendor CRUD endpoints — Selected for Dev (remaining)
+- FN-1250: [database] vendors table + PostGIS — Selected for Dev (remaining)
+- FN-1251: Done ✓
+- FN-1252: [qa] Validate vendor CRUD — Backlog (remaining)
+
+**Next step:** Backend and database agents to pick FN-1249 / FN-1250, then `/create-pr FN-1201` when all non-QA subtasks are Done
