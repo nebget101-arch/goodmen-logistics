@@ -178,8 +178,9 @@ Branch the completion flow on the story shape decided in step 3.
 3. **Transition the subtask to "Done"** in Jira (transition ID `41`).
 
 4. **Check sibling subtasks** (other subtasks under the same parent story):
-   - If ALL sibling subtasks are Done: print "All subtasks complete. Run `/create-pr FN-PARENT` to open the integration-branch PR."
-   - If some remain: print "Subtask FN-XXX done, integrated into integration/FN-PARENT. Remaining: FN-YYY (status), FN-ZZZ (status)"
+   - **Exclude `agent:qa` siblings from this check** — QA subtasks default to manual testing post-merge under the current policy, so they don't block PR creation regardless of status. (If a QA subtask is doing real automation work, it'll be `In Progress` — even then, this skill stops on completion of an impl subtask, the user/QA-routine takes over.)
+   - If ALL non-QA sibling subtasks are Done: print "All non-QA subtasks complete. Run `/create-pr FN-PARENT` to open the integration-branch PR." — this is the signal for the autopilot tick to proceed to step 3.
+   - If some non-QA siblings remain: print "Subtask FN-XXX done, integrated into integration/FN-PARENT. Remaining: FN-YYY (status), FN-ZZZ (status)" (list only non-QA siblings)
 
 ### 10. Output
 Print:
