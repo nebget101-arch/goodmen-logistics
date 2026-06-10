@@ -54,6 +54,8 @@ const employerInvestigationsRouter = require('@goodmen/shared/routes/employer-in
 const publicEmployerInvestigationsRouter = require('@goodmen/shared/routes/public-employer-investigations');
 const annualComplianceRouter = require('@goodmen/shared/routes/annual-compliance');
 const addressRouter = require('@goodmen/shared/routes/address');
+// FN-1240: real-time event dispatch for roadside status transitions
+const roadsideRealtimeRouter = require('./routes/roadside-realtime');
 const authMiddleware = require('@goodmen/shared/middleware/auth-middleware');
 const tenantContextMiddleware = require('@goodmen/shared/middleware/tenant-context-middleware');
 const requirePlanAccess = require('@goodmen/shared/middleware/plan-access-middleware');
@@ -73,6 +75,8 @@ app.use('/api/hos', authMiddleware, tenantContextMiddleware, requireActiveSubscr
 app.use('/api/drug-alcohol', authMiddleware, tenantContextMiddleware, requireActiveSubscription, drugAlcoholRouter);
 app.use('/api/onboarding', authMiddleware, tenantContextMiddleware, requireActiveSubscription, onboardingRouter);
 app.use('/api/employment', authMiddleware, tenantContextMiddleware, requireActiveSubscription, employmentApplicationRouter);
+// FN-1240: mount realtime route BEFORE shared router so status PATCH fires events
+app.use('/api/roadside', authMiddleware, tenantContextMiddleware, requireActiveSubscription, requireRoadsidePlan, roadsideRealtimeRouter);
 app.use('/api/roadside', authMiddleware, tenantContextMiddleware, requireActiveSubscription, requireRoadsidePlan, roadsideRouter);
 app.use('/api/safety', authMiddleware, tenantContextMiddleware, requireActiveSubscription, safetyRouter);
 app.use('/api/safety/driver-risk-scores', authMiddleware, tenantContextMiddleware, requireActiveSubscription, safetyRiskEngineRouter);
