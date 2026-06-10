@@ -63,6 +63,7 @@ const expensePaymentCategoriesRouter = require(path.join(sharedRoot, 'routes', '
 const referenceRouter = require(path.join(sharedRoot, 'routes', 'reference'));
 const idleTruckMonitorRouter = require(path.join(sharedRoot, 'routes', 'idle-truck-monitor'));
 const notificationsRouter = require(path.join(sharedRoot, 'routes', 'notifications'));
+const roadsideVendorsRouter = require(path.join(sharedRoot, 'routes', 'roadside-vendors'));
 const authMiddleware = require(path.join(sharedRoot, 'middleware', 'auth-middleware'));
 const tenantContextMiddleware = require(path.join(sharedRoot, 'middleware', 'tenant-context-middleware'));
 const requirePlanAccess = require(path.join(sharedRoot, 'middleware', 'plan-access-middleware'));
@@ -122,6 +123,9 @@ app.use('/api/expense-categories', authMiddleware, tenantContextMiddleware, requ
 app.use('/api/reference', authMiddleware, tenantContextMiddleware, requireActiveSubscription, referenceRouter);
 app.use('/api/idle-truck-monitor', authMiddleware, tenantContextMiddleware, requireActiveSubscription, idleTruckMonitorRouter);
 app.use('/api/notifications', authMiddleware, tenantContextMiddleware, requireActiveSubscription, notificationsRouter);
+// FN-1249: Roadside v2 vendor network — mounted at /api/logistics/vendors to avoid
+// collision with the legacy MasterEntity vendor search at /api/vendors (vehicles-maintenance).
+app.use('/api/logistics/vendors', authMiddleware, tenantContextMiddleware, requireActiveSubscription, roadsideVendorsRouter);
 
 /**
  * @openapi
