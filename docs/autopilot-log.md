@@ -305,3 +305,33 @@
 | Timestamp (UTC) | Agent | Outcome | Ticket | Notes |
 |---|---|---|---|---|
 | 2026-06-10 18:39Z | frontend | IDLE | — | No eligible tasks for frontend |
+| 2026-06-10 18:44Z | backend | SUBTASK_DONE | FN-1242 | Render sticky-session + runbook + env wiring; integrated into integration/FN-1198; all FN-1198 subtasks Done — ready for /create-pr FN-1198 |
+
+---
+
+## 2026-06-10T18:44Z — backend tick
+
+**Result:** SUBTASK_DONE FN-1242
+
+**Task selected:** FN-1242 `[devops] Twilio SMS sender + Render WS sticky-session config`
+- Parent story: FN-1198 (Roadside v2 Story 4.1: real-time WebSocket + SMS)
+- Reason selected: strongest sibling momentum — FN-1240 (backend) Done, FN-1241 (database) Done; FN-1242 was the last non-canceled subtask
+- No blocking dependencies; no file conflicts with in-progress work
+
+**Changes committed to `backend/FN-1242/realtime-infra`:**
+- `infra/render/gateway.yaml` (new) — Render Blueprint fragment for gateway with `sessionAffinity: cookie` (Socket.IO multi-instance safety) and `INTERNAL_WS_SECRET` (sync:false)
+- `docs/runbooks/realtime-ws.md` (new) — operational runbook: env vars, deployment steps, verification, scaling notes (Redis adapter path), troubleshooting table
+- `.env.example` — added `INTERNAL_WS_SECRET` and `INTERNAL_GATEWAY_URL` documentation
+- `docs/stories/FN-1198.md` — marked FN-1242 Done, added implementation notes
+
+**Integration:** rebased on `origin/integration/FN-1198` (no conflicts), ff-merged, pushed
+
+**Jira transitions:** FN-1242 → In Progress → Done
+
+**Sibling summary:**
+- FN-1240 (backend): Done ✓
+- FN-1241 (database): Done ✓
+- FN-1242 (backend/devops): Done ✓ (this tick)
+- FN-1243 (qa): Canceled
+
+**Next step:** All subtasks complete → run `/create-pr FN-1198` to open `integration/FN-1198 → dev` PR
