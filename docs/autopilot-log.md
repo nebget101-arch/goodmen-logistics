@@ -411,3 +411,33 @@
 
 | 2026-06-10T20:45Z | frontend | IDLE | — | No tasks in Selected for Development; all labeled issues are Canceled |
 | 2026-06-10T20:45Z | frontend | TICK_SUMMARY | — | tasks_done=0 refills_done=0 exit=idle max_tasks=1 |
+
+---
+
+## 2026-06-10T22:23 — backend tick
+
+**Result:** SUBTASK_DONE FN-1281
+
+**Task:** FN-1281 — [devops/backend] Render cron job schedule + alert wiring
+**Parent story:** FN-1211 — Roadside v2 Story 9.1: nightly rollup tables + cron
+**Branch:** `backend/FN-1281/reporting-cron` (ff-merged into `integration/FN-1211`)
+
+**Files changed** (3):
+- `render.yaml` (modified) — adds `fleetneuron-nightly-rollup-cron` cron service at `0 2 * * *` UTC; rootDir `backend/microservices/reporting-service`; startCommand `node cron/rollup.cron.js`; DB env vars from `safetyapp-db`; `ROLLUP_DATE` + `ROLLUP_SLACK_WEBHOOK_URL` declared `sync: false`
+- `docs/runbooks/nightly-rollup.md` (new) — operations runbook covering env vars, alert wiring (Render email on exit-1 + optional Slack webhook), monitoring queries, manual backfill procedure, troubleshooting table, deploy order
+- `docs/stories/FN-1211.md` (modified) — marks FN-1281 Done, adds implementation notes, updates Deployment Handoff table
+
+**Jira:** FN-1281 → In Progress → Done; branch comment added
+
+**Sibling summary:**
+- FN-1279 (backend): ✅ Done
+- FN-1280 (database): ✅ Done
+- FN-1281 (backend): ✅ Done (this tick)
+- FN-1282 (qa): Canceled
+
+**Next step:** All subtasks complete. Run `/create-pr FN-1211` to open `integration/FN-1211 → dev`.
+
+**Scope:** no `autopilot_scope.json` found; no scope filter applied.
+
+| 2026-06-10T22:23Z | backend | IMPLEMENTED_SUBTASK | FN-1281 | Render nightly-rollup cron + runbook; integrated into integration/FN-1211; all siblings Done |
+| 2026-06-10T22:23Z | backend | TICK_SUMMARY | — | tasks_done=1 refills_done=0 exit=max-tasks-cap max_tasks=1 |
