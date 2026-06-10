@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="theme-color" content="#0a1628">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="FN Driver">
+  <meta name="description" content="FleetNeuron Driver — read-only incident list POC">
+
+  <title>FN Driver — POC</title>
+  <link rel="manifest" href="./manifest.json">
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+
+  <!-- ── Login screen ──────────────────────────────────────────────────── -->
+  <main id="login-screen" class="screen" role="main" aria-label="Sign in">
+    <div class="login-card">
+
+      <div class="login-logo" aria-hidden="true">
+        <svg width="36" height="36" viewBox="0 0 36 36" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <rect width="36" height="36" rx="10" fill="#1e293b"/>
+          <path d="M8 26L14 14L20 22L24 17L28 26H8Z" fill="#67e8f9" opacity="0.9"/>
+          <circle cx="24" cy="12" r="3" fill="#3b82f6"/>
+        </svg>
+        <div class="login-logo-text">
+          <div class="app-name">FleetNeuron</div>
+          <div class="app-sub">Driver App</div>
+        </div>
+      </div>
+
+      <h1>Sign in</h1>
+      <p class="subtitle">Access your roadside incident list.</p>
+
+      <form id="login-form" novalidate>
+        <div class="field">
+          <label for="username">Username</label>
+          <input
+            id="username"
+            type="text"
+            name="username"
+            autocomplete="username"
+            autocapitalize="none"
+            autocorrect="off"
+            spellcheck="false"
+            placeholder="Your username"
+            required
+          >
+        </div>
+        <div class="field">
+          <label for="password">Password</label>
+          <input
+            id="password"
+            type="password"
+            name="password"
+            autocomplete="current-password"
+            placeholder="Your password"
+            required
+          >
+        </div>
+        <button id="login-btn" class="btn-primary" type="submit">Sign in</button>
+      </form>
+
+      <div id="login-error" class="error-msg" role="alert" aria-live="assertive"></div>
+    </div>
+  </main>
+
+  <!-- ── Incidents screen ───────────────────────────────────────────────── -->
+  <div id="incidents-screen" class="screen" aria-label="Incident list">
+
+    <header class="app-header" role="banner">
+      <div class="header-brand">
+        <svg width="28" height="28" viewBox="0 0 36 36" fill="none" aria-hidden="true">
+          <rect width="36" height="36" rx="10" fill="#1e293b"/>
+          <path d="M8 26L14 14L20 22L24 17L28 26H8Z" fill="#67e8f9" opacity="0.9"/>
+          <circle cx="24" cy="12" r="3" fill="#3b82f6"/>
+        </svg>
+        <div>
+          <div class="brand-name">FN Driver</div>
+          <div class="brand-sub">Incidents</div>
+        </div>
+      </div>
+      <button id="logout-btn" class="btn-icon" aria-label="Sign out">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+             stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+          <polyline points="16 17 21 12 16 7"/>
+          <line x1="21" y1="12" x2="9" y2="12"/>
+        </svg>
+      </button>
+    </header>
+
+    <!-- Filter chips -->
+    <nav class="filter-bar" aria-label="Filter by status">
+      <button class="filter-chip active" data-filter="ALL" aria-pressed="true">All</button>
+      <button class="filter-chip" data-filter="NEW"        aria-pressed="false">New</button>
+      <button class="filter-chip" data-filter="TRIAGED"    aria-pressed="false">Triaged</button>
+      <button class="filter-chip" data-filter="DISPATCHED" aria-pressed="false">Dispatched</button>
+      <button class="filter-chip" data-filter="RESOLVED"   aria-pressed="false">Resolved</button>
+    </nav>
+
+    <div class="section-header">
+      <h2>
+        Open calls
+        <span id="incident-count" class="count-badge" aria-live="polite">…</span>
+      </h2>
+      <button id="refresh-btn" class="refresh-btn" aria-label="Refresh incident list">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+             stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <polyline points="23 4 23 10 17 10"/>
+          <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
+        </svg>
+      </button>
+    </div>
+
+    <ul id="incident-list" class="incident-list" aria-label="Incidents" aria-live="polite"></ul>
+  </div>
+
+  <script src="./app.js"></script>
+</body>
+</html>
