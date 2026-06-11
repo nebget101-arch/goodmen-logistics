@@ -1,0 +1,46 @@
+# FN-1233 — Incident image storage env wiring for the drivers-compliance service.
+#
+# Roadside v2 Story 3.1 (FN-1195) stores incident damage photos in Cloudflare R2
+# (S3-compatible) under tenant-scoped prefixes. The upload/retrieval code lives in
+# backend/packages/goodmen-shared/storage/r2-storage.js +
+# incident-images.service.js and is mounted by the drivers-compliance service
+# (backend/microservices/drivers-compliance-service). Those modules read the env
+# vars declared below.
+#
+# This is a Render Blueprint *fragment* documenting the env contract for the
+# `fleetneuron-drivers-compliance-service` web service. FleetNeuron's Render
+# services are dashboard-managed, so this file is the source-of-truth for which
+# vars to set; copy the `envVars` block into the service's Blueprint or set them
+# under Environment in the dashboard. Secrets are `sync: false` (never committed —
+# set the value in the dashboard). Provision one bucket + scoped R2 API token per
+# environment (see docs/runbooks/incident-image-storage.md).
+services:
+  - type: web
+    name: fleetneuron-drivers-compliance-service
+    runtime: node
+    rootDir: backend/microservices/drivers-compliance-service
+    envVars:
+      # --- Incident image storage (Cloudflare R2, S3-compatible) ---
+      # Cloudflare account id; the S3 endpoint is derived as
+      # https://<R2_ACCOUNT_ID>.r2.cloudflarestorage.com (no separate endpoint var).
+      - key: R2_ACCOUNT_ID
+        sync: false
+      # Bucket for this environment, e.g. fleetneuron-incident-images-dev /
+      # -staging / -prod.
+      - key: R2_BUCKET
+        sync: false
+      # Credentials of the bucket-scoped R2 API token (S3 Access Key pair).
+      - key: R2_ACCESS_KEY_ID
+        sync: false
+      - key: R2_SECRET_ACCESS_KEY
+        sync: false
+      # R2 ignores region; the S3 client requires a value — "auto" is canonical.
+      - key: R2_REGION
+        value: auto
+      # Pre-signed GET URL lifetime (seconds). INCIDENT_IMAGE_SIGNED_URL_TTL is the
+      # incident-image-specific TTL; R2_SIGNED_URL_EXPIRES_SECONDS is the generic
+      # storage fallback. 15 min balances shareability vs. exposure.
+      - key: INCIDENT_IMAGE_SIGNED_URL_TTL
+        value: "900"
+      - key: R2_SIGNED_URL_EXPIRES_SECONDS
+        value: "900"

@@ -1,0 +1,41 @@
+{
+  "_comment": "FN-1233 — Incident image storage access policy (Roadside v2 Story 3.1 / FN-1195). S3-compatible IAM policy document scoping the upload identity to the tenant-prefixed object space `tenants/<tenantId>/incidents/<incidentId>/...`. Replace <BUCKET> with the per-environment bucket (fleetneuron-incident-images-{dev,staging,prod}). This is the canonical statement of intent and is directly applicable to AWS S3; on Cloudflare R2 (the current backend, see backend/packages/goodmen-shared/storage/r2-storage.js) the same scoping is enforced by (1) a bucket-scoped R2 API token and (2) application-level prefix enforcement in incident-images.service.js (buildS3Key + assertCallAccess). See docs/runbooks/incident-image-storage.md.",
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "IncidentImageObjectRW",
+      "Effect": "Allow",
+      "Action": [
+        "s3:PutObject",
+        "s3:GetObject",
+        "s3:DeleteObject"
+      ],
+      "Resource": "arn:aws:s3:::<BUCKET>/tenants/*/incidents/*"
+    },
+    {
+      "Sid": "IncidentImageListScopedToTenantPrefix",
+      "Effect": "Allow",
+      "Action": "s3:ListBucket",
+      "Resource": "arn:aws:s3:::<BUCKET>",
+      "Condition": {
+        "StringLike": {
+          "s3:prefix": [
+            "tenants/*"
+          ]
+        }
+      }
+    },
+    {
+      "Sid": "DenyAccessOutsideTenantPrefix",
+      "Effect": "Deny",
+      "NotAction": [
+        "s3:ListAllMyBuckets",
+        "s3:GetBucketLocation"
+      ],
+      "NotResource": [
+        "arn:aws:s3:::<BUCKET>",
+        "arn:aws:s3:::<BUCKET>/tenants/*"
+      ]
+    }
+  ]
+}
