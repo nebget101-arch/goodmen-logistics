@@ -523,3 +523,5 @@
 
 | 2026-06-11T00:00Z | frontend | IDLE | — | No tasks in "Selected for Development" for agent:frontend |
 | 2026-06-11T00:00Z | frontend | TICK_SUMMARY | — | tasks_done=0 exit=idle |
+| 2026-06-11 02:23:33Z | backend | IMPLEMENTED_SUBTASK | FN-1290 | Subtask done (docs/spikes/driver-mobile-app.md); integrated into integration/FN-1214; sibling FN-1292 remains |
+| 2026-06-11 02:23:33Z | backend | TICK_SUMMARY | — | tasks_done=1 refills_done=0 exit=max-tasks-cap max_tasks=1 |
