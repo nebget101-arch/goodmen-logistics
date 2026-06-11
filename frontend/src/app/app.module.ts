@@ -101,6 +101,8 @@ import { AskBarComponent } from './components/control-center/ask-bar/ask-bar.com
 import { PredictiveInsightsComponent } from './components/control-center/predictive-insights/predictive-insights.component';
 import { ExplainPanelComponent } from './components/control-center/explain-panel/explain-panel.component';
 import { ControlCenterComponent } from './components/control-center/control-center.component';
+import { TriagePanelComponent } from './components/dispatcher-board/triage-panel/triage-panel.component';
+import { OverrideModalComponent } from './components/dispatcher-board/triage-panel/override-modal/override-modal.component';
 
 @NgModule({
   declarations: [
@@ -155,7 +157,9 @@ import { ControlCenterComponent } from './components/control-center/control-cent
     InventoryItemEditDialogComponent,
     AutoReplenishmentComponent,
     AiExtractionFlowComponent,
-    InboundEmailSettingsComponent
+    InboundEmailSettingsComponent,
+    TriagePanelComponent,
+    OverrideModalComponent
   ],
   imports: [
     BrowserModule,

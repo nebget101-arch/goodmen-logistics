@@ -1,0 +1,72 @@
+<div class="triage-panel" data-testid="triage-panel">
+
+  <!-- Loading state -->
+  <div class="triage-panel__loading" *ngIf="loading" data-testid="triage-loading">
+    <div class="triage-panel__spinner" aria-label="Loading triage data"></div>
+    <span class="triage-panel__loading-text">Loading triage…</span>
+  </div>
+
+  <!-- Error state -->
+  <div class="triage-panel__error" *ngIf="!loading && errorMessage" role="alert" data-testid="triage-error">
+    <span class="material-symbols-outlined triage-panel__error-icon">error_outline</span>
+    <span>{{ errorMessage }}</span>
+    <button type="button" class="triage-panel__retry" (click)="loadTriage()">Retry</button>
+  </div>
+
+  <!-- Triage data -->
+  <ng-container *ngIf="!loading && !errorMessage && triage">
+    <div class="triage-panel__header">
+      <h3 class="triage-panel__title">AI Triage</h3>
+      <span class="triage-panel__prompt-badge" [title]="'Model: ' + triage.model_name" data-testid="prompt-version-badge">
+        v{{ triage.prompt_version }}
+      </span>
+    </div>
+
+    <div class="triage-panel__grid">
+      <div class="triage-panel__field">
+        <span class="triage-panel__label">Severity</span>
+        <span [class]="severityClass(triage.severity)" data-testid="severity-badge">{{ triage.severity }}</span>
+      </div>
+      <div class="triage-panel__field">
+        <span class="triage-panel__label">Urgency</span>
+        <span [class]="urgencyClass(triage.urgency)" data-testid="urgency-badge">{{ triage.urgency }}</span>
+      </div>
+      <div class="triage-panel__field triage-panel__field--full">
+        <span class="triage-panel__label">Category</span>
+        <span class="triage-panel__value" data-testid="category-value">{{ triage.category }}</span>
+      </div>
+      <div class="triage-panel__field triage-panel__field--full" *ngIf="triage.vendor_skills?.length">
+        <span class="triage-panel__label">Vendor Skills</span>
+        <div class="triage-panel__skill-chips" data-testid="vendor-skills">
+          <span class="triage-panel__chip" *ngFor="let skill of triage.vendor_skills">{{ skill }}</span>
+        </div>
+      </div>
+      <div class="triage-panel__field triage-panel__field--full">
+        <span class="triage-panel__label">Rationale</span>
+        <p class="triage-panel__rationale" data-testid="rationale-text">{{ triage.rationale }}</p>
+      </div>
+    </div>
+
+    <div class="triage-panel__actions">
+      <button
+        type="button"
+        class="triage-panel__override-btn"
+        (click)="openOverrideModal()"
+        data-testid="override-btn"
+      >
+        <span class="material-symbols-outlined">refresh</span>
+        Override / Re-triage
+      </button>
+    </div>
+  </ng-container>
+
+</div>
+
+<!-- Override modal (portal-style: rendered at component level) -->
+<app-override-modal
+  *ngIf="showOverrideModal"
+  [incidentId]="incidentId"
+  (overrideComplete)="onOverrideComplete($event)"
+  (cancelled)="onOverrideCancelled()"
+  data-testid="override-modal"
+></app-override-modal>
