@@ -1,5 +1,22 @@
 # Autopilot Log
 
+## 2026-06-11T04:29 — database tick
+
+**Result:** IDLE
+
+**Scope:** no `autopilot_scope.json` found; no scope filter applied.
+
+**Reason:** No tasks found in `Selected for Development` with label `agent:database`. JQL: `project = FN AND status = "Selected for Development" AND labels = "agent:database"` returned 0 results.
+
+**Backlog tasks visible (awaiting TPM selection):** FN-1287 (daily_ai_usage table), FN-1273 (payments + payouts tables), FN-1268 (vendor_stripe_account columns), FN-1257 (vendor_responses + vendor_scores), FN-1254 (vendor_positions + PostGIS), FN-1236 (incident_vision_assessments), FN-1232 (incident_images), FN-1229 (voice_transcripts + raw_audio_index), FN-1223 (voice_consent + did_mapping) — all in Backlog status.
+
+**Action required:** TPM should transition at least one database subtask to "Selected for Development" (transition ID `21`) to unblock this agent.
+
+| 2026-06-11T04:29Z | database | IDLE | — | No tasks in Selected for Development; 9 tasks in Backlog awaiting TPM selection |
+| 2026-06-11T04:29Z | database | TICK_SUMMARY | — | tasks_done=0 exit=no-eligible-tasks |
+
+---
+
 ## 2026-06-10T13:44 — database tick
 
 **Result:** SUBTASK_DONE FN-1250 + PR_OPENED FN-1201
