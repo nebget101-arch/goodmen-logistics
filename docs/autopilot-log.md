@@ -526,3 +526,16 @@
 | 2026-06-11 02:23:33Z | backend | IMPLEMENTED_SUBTASK | FN-1290 | Subtask done (docs/spikes/driver-mobile-app.md); integrated into integration/FN-1214; sibling FN-1292 remains |
 | 2026-06-11 02:23:33Z | backend | TICK_SUMMARY | — | tasks_done=1 refills_done=0 exit=max-tasks-cap max_tasks=1 |
 | 2026-06-11 02:30Z | database | IDLE | — | No tasks in "Selected for Development" for agent:database |
+
+---
+
+## 2026-06-11T07:00 — frontend tick
+
+**Result:** IDLE — no eligible tasks
+
+**Reason:** No issues in "Selected for Development" with label `agent:frontend`. JQL returned 0 results. Queried broader set of open frontend-labelled issues — all are in Backlog or Code Review (FN-1204). No scope filter was applied (`autopilot_scope.json` absent).
+
+**Scope:** no `autopilot_scope.json` found; no scope filter applied.
+
+| 2026-06-11T07:00Z | frontend | IDLE | — | No tasks in "Selected for Development" for agent:frontend |
+| 2026-06-11T07:00Z | frontend | TICK_SUMMARY | — | tasks_done=0 exit=idle |
