@@ -10,7 +10,12 @@ const path = require('path');
 const { OpenAI } = require('openai');
 const Anthropic = require('@anthropic-ai/sdk');
 
+const http = require('http');
+const { WebSocketServer } = require('ws');
+
 const { buildAiRouter } = require('./src/ai-router');
+const { buildVoiceRouter } = require('./src/routes/voice.routes');
+const { handleMediaStream } = require('./src/voice/voice.controller');
 
 const PORT = process.env.AI_SERVICE_PORT || 4100;
 
@@ -70,8 +75,22 @@ app.get('/health', (req, res) => {
 });
 
 app.use('/api/ai', buildAiRouter({ openai, anthropic }));
+app.use('/api/voice', buildVoiceRouter());
 
-app.listen(PORT, () => {
+const server = http.createServer(app);
+
+const wss = new WebSocketServer({ noServer: true });
+wss.on('connection', (ws, req) => handleMediaStream(ws, req));
+
+server.on('upgrade', (req, socket, head) => {
+  if (req.url && req.url.startsWith('/api/voice/stream')) {
+    wss.handleUpgrade(req, socket, head, (ws) => wss.emit('connection', ws, req));
+  } else {
+    socket.destroy();
+  }
+});
+
+server.listen(PORT, () => {
   // eslint-disable-next-line no-console
   console.log(`AI service listening on port ${PORT}`);
 });
