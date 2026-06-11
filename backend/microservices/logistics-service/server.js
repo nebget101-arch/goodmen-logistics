@@ -126,6 +126,10 @@ app.use('/api/notifications', authMiddleware, tenantContextMiddleware, requireAc
 // FN-1249: Roadside v2 vendor network — mounted at /api/logistics/vendors to avoid
 // collision with the legacy MasterEntity vendor search at /api/vendors (vehicles-maintenance).
 app.use('/api/logistics/vendors', authMiddleware, tenantContextMiddleware, requireActiveSubscription, roadsideVendorsRouter);
+// FN-1253: GPS heartbeat + matching — same prefix, separate router. /match and /:id/heartbeat
+// are POST-only and don't collide with the CRUD routes above (which use GET/PATCH/DELETE).
+const vendorHeartbeatRouter = require(path.join(sharedRoot, 'routes', 'vendor-heartbeat'));
+app.use('/api/logistics/vendors', authMiddleware, tenantContextMiddleware, requireActiveSubscription, vendorHeartbeatRouter);
 
 /**
  * @openapi
