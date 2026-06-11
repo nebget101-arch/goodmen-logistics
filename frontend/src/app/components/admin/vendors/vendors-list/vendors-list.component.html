@@ -1,0 +1,170 @@
+<div class="vendors-admin ai-admin-shell">
+  <header class="ai-header">
+    <div>
+      <p class="ai-kicker">Admin</p>
+      <h1>
+        <span class="material-symbols-outlined title-icon">handyman</span>
+        Vendor Network
+      </h1>
+      <p class="subtitle">
+        Manage roadside vendors: onboard, edit skills and capacity, suspend, or reactivate.
+      </p>
+    </div>
+    <div class="header-actions">
+      <button type="button" class="btn btn-secondary" [disabled]="loading" (click)="load()">
+        <span class="material-symbols-outlined">refresh</span>
+        Refresh
+      </button>
+      <button type="button" class="btn btn-primary" (click)="createVendor.emit()">
+        <span class="material-symbols-outlined">add</span>
+        Add vendor
+      </button>
+    </div>
+  </header>
+
+  <div *ngIf="message" class="alert alert-success" role="status">
+    <span class="material-symbols-outlined">check_circle</span>
+    <span>{{ message }}</span>
+  </div>
+
+  <div *ngIf="error" class="alert alert-danger" role="alert">
+    <span class="material-symbols-outlined">error</span>
+    <span>{{ error }}</span>
+  </div>
+
+  <section class="panel ai-panel">
+    <div class="panel-header">
+      <h2>
+        <span class="material-symbols-outlined">list</span>
+        Vendors
+      </h2>
+      <div class="filter-group">
+        <button
+          type="button"
+          class="filter-btn"
+          [class.active]="statusFilter === ''"
+          (click)="applyFilter('')"
+        >All</button>
+        <button
+          type="button"
+          class="filter-btn"
+          [class.active]="statusFilter === 'active'"
+          (click)="applyFilter('active')"
+        >Active</button>
+        <button
+          type="button"
+          class="filter-btn"
+          [class.active]="statusFilter === 'suspended'"
+          (click)="applyFilter('suspended')"
+        >Suspended</button>
+      </div>
+    </div>
+
+    <div *ngIf="loading" class="loading ai-loading">Loading vendors…</div>
+
+    <div *ngIf="!loading && vendors.length === 0" class="empty-state">
+      <span class="material-symbols-outlined empty-state__icon">group_off</span>
+      <p>No vendors found{{ statusFilter ? ' for this filter' : '' }}.</p>
+      <p class="empty-state__hint">Click <strong>Add vendor</strong> to onboard the first one.</p>
+    </div>
+
+    <div *ngIf="!loading && vendors.length > 0" class="table-wrap">
+      <table class="vendor-table">
+        <thead>
+          <tr>
+            <th>Name</th>
+            <th>Skills</th>
+            <th>Capacity</th>
+            <th>Base location</th>
+            <th>Status</th>
+            <th class="actions-col">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngFor="let v of vendors" [class.suspended-row]="v.status === 'suspended'">
+            <td class="name-cell">{{ v.name }}</td>
+            <td class="skills-cell">{{ skillsLabel(v) }}</td>
+            <td>{{ v.capacity }}</td>
+            <td class="location-cell">{{ locationLabel(v) }}</td>
+            <td>
+              <span [class]="'status-badge status-' + v.status">
+                <span class="status-dot"></span>
+                {{ v.status === 'active' ? 'Active' : 'Suspended' }}
+              </span>
+            </td>
+            <td class="actions-cell">
+              <button
+                type="button"
+                class="btn btn-icon"
+                [attr.aria-label]="'Edit ' + v.name"
+                (click)="onEdit(v)"
+              >
+                <span class="material-symbols-outlined">edit</span>
+              </button>
+              <button
+                type="button"
+                class="btn btn-icon"
+                [class.btn-suspend]="v.status === 'active'"
+                [class.btn-activate]="v.status === 'suspended'"
+                [disabled]="togglingId === v.vendor_id"
+                [attr.aria-label]="(v.status === 'active' ? 'Suspend ' : 'Reactivate ') + v.name"
+                (click)="openToggleConfirm(v)"
+              >
+                <span class="material-symbols-outlined">
+                  {{ v.status === 'active' ? 'block' : 'check_circle' }}
+                </span>
+              </button>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- Suspend / reactivate confirmation modal -->
+  <div *ngIf="confirmOpen && confirmTarget" class="modal-backdrop" (click)="closeConfirm()">
+    <div
+      class="modal"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="vendorConfirmTitle"
+      (click)="$event.stopPropagation()"
+    >
+      <header class="modal__header">
+        <h3 id="vendorConfirmTitle">
+          <span class="material-symbols-outlined">
+            {{ confirmTarget.status === 'active' ? 'block' : 'check_circle' }}
+          </span>
+          {{ confirmTarget.status === 'active' ? 'Suspend vendor?' : 'Reactivate vendor?' }}
+        </h3>
+        <button
+          type="button"
+          class="modal__close"
+          aria-label="Close"
+          (click)="closeConfirm()"
+        >
+          <span class="material-symbols-outlined">close</span>
+        </button>
+      </header>
+      <div class="modal__body">
+        <p>
+          {{ confirmTarget.status === 'active'
+              ? 'Suspending ' + confirmTarget.name + ' will prevent new dispatch assignments.'
+              : 'Reactivating ' + confirmTarget.name + ' will allow new dispatch assignments.' }}
+        </p>
+      </div>
+      <footer class="modal__footer">
+        <button type="button" class="btn btn-secondary" (click)="closeConfirm()">Cancel</button>
+        <button
+          type="button"
+          class="btn"
+          [class.btn-danger]="confirmTarget.status === 'active'"
+          [class.btn-primary]="confirmTarget.status === 'suspended'"
+          (click)="confirmToggle()"
+        >
+          {{ confirmTarget.status === 'active' ? 'Suspend' : 'Reactivate' }}
+        </button>
+      </footer>
+    </div>
+  </div>
+</div>

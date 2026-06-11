@@ -520,6 +520,9 @@ app.use(
 app.use('/api/parts', buildProxy(VEHICLES_MAINTENANCE_SERVICE_URL, 'vehicles'));
 app.use('/api/manufacturers', buildProxy(VEHICLES_MAINTENANCE_SERVICE_URL, 'vehicles'));
 app.use('/api/vendors', buildProxy(VEHICLES_MAINTENANCE_SERVICE_URL, 'vehicles'));
+// FN-1249: Roadside v2 vendor network — /api/logistics/vendors → logistics-service.
+// Must be registered before the generic /api/logistics catch-all (if any).
+app.use('/api/logistics/vendors', buildProxy(LOGISTICS_SERVICE_URL, 'logistics'));
 // Proxy /api/health, /api/health/db, /api/health/db/diagnostic to logistics (path can be /db when mounted)
 app.use(
   '/api/health',
