@@ -2158,5 +2158,14 @@ export class ApiService {
   markAllNotificationsRead(): Observable<any> {
     return this.http.patch(`${this.baseUrl}/notifications/read-all`, {});
   }
+
+  // FN-1261 — Upload a photo for a driver-portal incident (Story 3.1 endpoint).
+  // The server is in drivers-compliance service; endpoint may not exist yet —
+  // the UI guards behind PhotoUploaderComponent[available] input.
+  uploadIncidentImage(incidentId: string, file: File): Observable<any> {
+    const form = new FormData();
+    form.append('file', file);
+    return this.http.post(`${this.baseUrl}/incidents/${encodeURIComponent(incidentId)}/images`, form);
+  }
 }
 

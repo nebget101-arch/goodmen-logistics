@@ -73,6 +73,10 @@ import { InboundEmailSettingsComponent } from './components/admin/inbound-email-
 // (lazy-loaded at /employment-application).
 import { RoadsideBoardComponent } from './components/roadside-board/roadside-board.component';
 import { PublicRoadsideComponent } from './components/public-roadside/public-roadside.component';
+// FN-1261 — Driver portal: incident detail + photo uploader + feedback form
+import { IncidentDetailComponent } from './components/driver-portal/incident-detail/incident-detail.component';
+import { PhotoUploaderComponent } from './components/driver-portal/photo-uploader/photo-uploader.component';
+import { FeedbackFormComponent } from './components/driver-portal/feedback-form/feedback-form.component';
 import { EmployerResponseComponent } from './public/components/employer-response/employer-response.component';
 import { RoadsideAiCallerComponent } from './components/roadside-ai-caller/roadside-ai-caller.component';
 import { PaymentMethodFormComponent } from './billing/payment-method-form/payment-method-form.component';
@@ -155,7 +159,10 @@ import { ControlCenterComponent } from './components/control-center/control-cent
     InventoryItemEditDialogComponent,
     AutoReplenishmentComponent,
     AiExtractionFlowComponent,
-    InboundEmailSettingsComponent
+    InboundEmailSettingsComponent,
+    IncidentDetailComponent,
+    PhotoUploaderComponent,
+    FeedbackFormComponent,
   ],
   imports: [
     BrowserModule,
