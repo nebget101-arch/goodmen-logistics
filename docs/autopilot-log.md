@@ -588,3 +588,4 @@ All non-canceled subtasks of FN-1214 are Done. Story FN-1214 is ready for `/crea
 | 2026-06-11T23:24Z | backend | TICK_SUMMARY | — | tasks_done=1 exit=max-tasks-cap max_tasks=1 |
 | 2026-06-11T10:10Z | frontend | IDLE | — | No eligible tasks for frontend in Selected for Development — JQL returned 0 results |
 | 2026-06-11T10:18Z | backend | IDLE | — | No eligible tasks for backend in Selected for Development — JQL returned 0 results |
+| 2026-06-11T10:28Z | database | IDLE | — | No eligible tasks for database in Selected for Development — JQL returned 0 results |
