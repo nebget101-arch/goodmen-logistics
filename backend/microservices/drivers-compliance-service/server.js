@@ -30,6 +30,7 @@ const swaggerOptions = buildSwaggerOptions({
   description: 'API documentation for the Drivers Compliance microservice.',
   apis: [
     path.join(__dirname, '../../packages/goodmen-shared/routes/*.js'),
+    path.join(__dirname, 'src/routes/*.js'),
     __filename
   ]
 });
@@ -56,6 +57,7 @@ const annualComplianceRouter = require('@goodmen/shared/routes/annual-compliance
 const addressRouter = require('@goodmen/shared/routes/address');
 // FN-1240: real-time event dispatch for roadside status transitions
 const roadsideRealtimeRouter = require('./routes/roadside-realtime');
+const incidentsTriageRouter = require('./src/routes/triage.routes');
 const authMiddleware = require('@goodmen/shared/middleware/auth-middleware');
 const tenantContextMiddleware = require('@goodmen/shared/middleware/tenant-context-middleware');
 const requirePlanAccess = require('@goodmen/shared/middleware/plan-access-middleware');
@@ -88,6 +90,7 @@ app.use('/public/roadside', publicRoadsideRouter);
 app.use('/public/consents', publicConsentsRouter);
 app.use('/public/employer-investigations', publicEmployerInvestigationsRouter);
 app.use('/api/address', addressRouter);
+app.use('/api/incidents', authMiddleware, tenantContextMiddleware, requireActiveSubscription, requireRoadsidePlan, incidentsTriageRouter);
 
 /**
  * @openapi
