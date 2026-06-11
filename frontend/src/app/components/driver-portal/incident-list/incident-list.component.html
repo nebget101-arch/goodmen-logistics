@@ -1,4 +1,4 @@
-<section class="il" aria-label="Incident list" aria-live="polite" aria-busy="{{ loading }}">
+<section class="il" aria-label="Incident list" aria-live="polite" [attr.aria-busy]="loading">
 
   <!-- Header + filter bar -->
   <div class="il__header">
@@ -64,7 +64,7 @@
           class="il__time"
           [attr.datetime]="incident.created_at"
           [title]="incident.created_at"
-          aria-label="Opened {{ timeSince(incident.created_at) }}"
+          [attr.aria-label]="'Opened ' + timeSince(incident.created_at)"
         >
           {{ timeSince(incident.created_at) }}
         </time>

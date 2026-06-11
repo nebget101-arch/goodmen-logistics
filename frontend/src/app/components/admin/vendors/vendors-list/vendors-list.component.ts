@@ -28,7 +28,8 @@ export class VendorsListComponent implements OnInit, OnDestroy {
 
   private listSub: Subscription | null = null;
   private toggleSub: Subscription | null = null;
-  private confirmTarget: Vendor | null = null;
+  // Public: referenced by the confirm-dialog template (AOT requires non-private).
+  confirmTarget: Vendor | null = null;
   confirmOpen = false;
 
   constructor(private readonly svc: VendorsService) {}
