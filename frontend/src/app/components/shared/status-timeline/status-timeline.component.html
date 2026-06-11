@@ -1,0 +1,41 @@
+<div class="status-timeline" role="list" aria-label="Incident timeline">
+
+  <ng-container *ngFor="let event of displayEvents; trackBy: trackById">
+    <div class="status-timeline__entry" role="listitem">
+      <div class="status-timeline__rail">
+        <span class="status-timeline__icon material-icons" aria-hidden="true">
+          {{ iconFor(event.event_type) }}
+        </span>
+        <span class="status-timeline__connector" aria-hidden="true"></span>
+      </div>
+      <div class="status-timeline__content">
+        <span class="status-timeline__label">{{ labelFor(event.event_type) }}</span>
+        <span *ngIf="metaSummary(event) as summary" class="status-timeline__meta">
+          {{ summary }}
+        </span>
+        <span class="status-timeline__time">
+          {{ event.occurred_at | date: 'MMM d, h:mm a' }}
+        </span>
+        <span *ngIf="event.actor" class="status-timeline__actor">{{ event.actor }}</span>
+      </div>
+    </div>
+  </ng-container>
+
+  <!-- Vendor-ETA placeholder: shown until Story 4.3 ships the actual event -->
+  <div *ngIf="!hasVendorEta" class="status-timeline__entry status-timeline__entry--placeholder" role="listitem" aria-label="Vendor ETA pending">
+    <div class="status-timeline__rail">
+      <span class="status-timeline__icon status-timeline__icon--pending material-icons" aria-hidden="true">schedule</span>
+      <span class="status-timeline__connector status-timeline__connector--dashed" aria-hidden="true"></span>
+    </div>
+    <div class="status-timeline__content">
+      <span class="status-timeline__label status-timeline__label--pending">Vendor ETA</span>
+      <span class="status-timeline__meta">Awaiting vendor confirmation</span>
+    </div>
+  </div>
+
+  <div *ngIf="displayEvents.length === 0" class="status-timeline__empty">
+    <span class="material-icons status-timeline__empty-icon" aria-hidden="true">timeline</span>
+    <span>No events yet</span>
+  </div>
+
+</div>
