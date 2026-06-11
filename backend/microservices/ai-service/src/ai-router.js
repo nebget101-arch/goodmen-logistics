@@ -1,5 +1,6 @@
 const express = require('express');
 
+const { buildTriageRouter } = require('./routes/triage.routes');
 const { handleChat } = require('./handlers/chat-handler');
 const { handleWorkOrderTriage } = require('./handlers/work-order-triage-handler');
 const { handleInventoryRecommendations } = require('./handlers/inventory-recommendations-handler');
@@ -39,6 +40,8 @@ const { loadAuthContext } = require('./services/auth-context');
 
 function buildAiRouter(deps) {
   const router = express.Router();
+
+  router.use('/roadside/triage', buildTriageRouter(deps));
 
   /**
    * @openapi
