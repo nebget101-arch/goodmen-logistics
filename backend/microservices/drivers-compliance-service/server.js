@@ -58,6 +58,7 @@ const addressRouter = require('@goodmen/shared/routes/address');
 // FN-1240: real-time event dispatch for roadside status transitions
 const roadsideRealtimeRouter = require('./routes/roadside-realtime');
 const incidentsTriageRouter = require('./src/routes/triage.routes');
+const incidentImagesRouter = require('@goodmen/shared/routes/incident-images');
 const authMiddleware = require('@goodmen/shared/middleware/auth-middleware');
 const tenantContextMiddleware = require('@goodmen/shared/middleware/tenant-context-middleware');
 const requirePlanAccess = require('@goodmen/shared/middleware/plan-access-middleware');
@@ -91,6 +92,7 @@ app.use('/public/consents', publicConsentsRouter);
 app.use('/public/employer-investigations', publicEmployerInvestigationsRouter);
 app.use('/api/address', addressRouter);
 app.use('/api/incidents', authMiddleware, tenantContextMiddleware, requireActiveSubscription, requireRoadsidePlan, incidentsTriageRouter);
+app.use('/api/incidents', authMiddleware, tenantContextMiddleware, requireActiveSubscription, requireRoadsidePlan, incidentImagesRouter);
 
 /**
  * @openapi
