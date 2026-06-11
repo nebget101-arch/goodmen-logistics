@@ -1,0 +1,165 @@
+<!-- Loading skeleton -->
+<div *ngIf="loading" class="incident-detail" aria-busy="true" aria-label="Loading incident details">
+  <div class="detail-header skeleton-header">
+    <div class="skeleton skeleton-line short"></div>
+    <div class="skeleton skeleton-line medium"></div>
+  </div>
+  <div class="detail-body">
+    <div class="skeleton skeleton-block"></div>
+    <div class="skeleton skeleton-block short-block"></div>
+  </div>
+</div>
+
+<!-- Error state -->
+<div *ngIf="!loading && errorMessage" class="incident-detail">
+  <div class="inline-error" role="alert">
+    <span class="material-icons" aria-hidden="true">error_outline</span>
+    {{ errorMessage }}
+  </div>
+  <button class="btn-back" (click)="goBack()">
+    <span class="material-icons" aria-hidden="true">arrow_back</span>
+    Back to My Incidents
+  </button>
+</div>
+
+<!-- Loaded state -->
+<div *ngIf="!loading && !errorMessage && incident" class="incident-detail">
+
+  <!-- Back nav -->
+  <button class="btn-back" (click)="goBack()" aria-label="Back to incident list">
+    <span class="material-icons" aria-hidden="true">arrow_back</span>
+    My Incidents
+  </button>
+
+  <!-- Header -->
+  <header class="detail-header">
+    <div class="header-kicker">Incident Report</div>
+    <h1 class="header-title">
+      <span class="material-icons title-icon" aria-hidden="true">local_fire_department</span>
+      {{ incident.incident_number || ('INC-' + incident.id.slice(-6).toUpperCase()) }}
+    </h1>
+    <div class="header-meta">
+      <span
+        class="status-badge"
+        [ngClass]="getStatusClass(incident.status)"
+        role="status"
+        [attr.aria-label]="'Status: ' + getStatusLabel(incident.status)"
+      >
+        {{ getStatusLabel(incident.status) }}
+      </span>
+      <span class="meta-dot" aria-hidden="true">·</span>
+      <span class="meta-date">
+        Reported {{ incident.created_at | date:'mediumDate' }}
+      </span>
+      <ng-container *ngIf="incident.vehicle_unit">
+        <span class="meta-dot" aria-hidden="true">·</span>
+        <span class="meta-vehicle">
+          <span class="material-icons meta-icon" aria-hidden="true">local_shipping</span>
+          {{ incident.vehicle_unit }}
+        </span>
+      </ng-container>
+    </div>
+  </header>
+
+  <!-- Summary card -->
+  <section class="detail-section" *ngIf="incident.incident_summary || incident.issue_type">
+    <h2 class="section-heading">Summary</h2>
+    <div class="summary-card">
+      <div *ngIf="incident.issue_type" class="summary-field">
+        <span class="field-label">Type</span>
+        <span class="field-value">{{ incident.issue_type | titlecase }}</span>
+      </div>
+      <div *ngIf="incident.incident_summary" class="summary-field">
+        <span class="field-label">Description</span>
+        <span class="field-value">{{ incident.incident_summary }}</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- Status timeline -->
+  <section class="detail-section" aria-label="Incident status timeline">
+    <h2 class="section-heading">
+      <span class="material-icons section-icon" aria-hidden="true">timeline</span>
+      Status Timeline
+    </h2>
+    <app-status-stepper
+      [steps]="stepperSteps"
+      [activeKey]="activeStepKey"
+    ></app-status-stepper>
+  </section>
+
+  <!-- Photos section -->
+  <section class="detail-section" aria-label="Incident photos">
+    <h2 class="section-heading">
+      <span class="material-icons section-icon" aria-hidden="true">photo_library</span>
+      Photos
+      <span class="count-badge" *ngIf="images.length">{{ images.length }}</span>
+    </h2>
+
+    <div class="photo-grid" *ngIf="images.length" role="list" aria-label="Uploaded photos">
+      <div *ngFor="let img of images; trackBy: trackImageById" class="photo-card" role="listitem">
+        <a [href]="img.url" target="_blank" rel="noopener noreferrer" [attr.aria-label]="'View photo uploaded ' + (img.uploaded_at | date:'short')">
+          <img
+            [src]="img.url"
+            [alt]="'Incident photo uploaded ' + (img.uploaded_at | date:'mediumDate')"
+            class="photo-thumb"
+            loading="lazy"
+          />
+        </a>
+        <div class="photo-date">{{ img.uploaded_at | date:'shortDate' }}</div>
+      </div>
+    </div>
+
+    <p *ngIf="!images.length && !showFeedbackForm" class="empty-photos">
+      No photos uploaded yet.
+    </p>
+
+    <div class="uploader-row">
+      <app-photo-uploader
+        [incidentId]="incidentId"
+        [available]="!isClosed"
+        (uploaded)="onPhotoUploaded()"
+      ></app-photo-uploader>
+    </div>
+  </section>
+
+  <!-- Feedback section: shown when closed and no feedback yet -->
+  <section
+    *ngIf="showFeedbackForm"
+    class="detail-section feedback-section"
+    aria-label="Submit feedback"
+  >
+    <h2 class="section-heading">
+      <span class="material-icons section-icon" aria-hidden="true">rate_review</span>
+      Close-Out Feedback
+    </h2>
+    <p class="section-desc">Your incident has been resolved. Let us know how we did.</p>
+    <app-feedback-form
+      [incidentId]="incidentId"
+      (submitted)="onFeedbackSubmitted()"
+    ></app-feedback-form>
+  </section>
+
+  <!-- Feedback display: shown when already submitted -->
+  <section *ngIf="hasFeedback" class="detail-section" aria-label="Your submitted feedback">
+    <h2 class="section-heading">
+      <span class="material-icons section-icon" aria-hidden="true">rate_review</span>
+      Your Feedback
+    </h2>
+    <div class="feedback-display">
+      <div *ngIf="incident.driver_rating" class="feedback-stars" role="img" [attr.aria-label]="incident.driver_rating + ' out of 5 stars'">
+        <span
+          *ngFor="let star of stars"
+          class="material-icons star-icon"
+          [class.filled]="(incident.driver_rating || 0) >= star"
+          aria-hidden="true"
+        >
+          {{ (incident.driver_rating || 0) >= star ? 'star' : 'star_border' }}
+        </span>
+      </div>
+      <p class="feedback-text">{{ incident.driver_feedback }}</p>
+      <p class="feedback-thanks">Thank you for your feedback!</p>
+    </div>
+  </section>
+
+</div>
