@@ -589,3 +589,4 @@ All non-canceled subtasks of FN-1214 are Done. Story FN-1214 is ready for `/crea
 | 2026-06-11T10:10Z | frontend | IDLE | — | No eligible tasks for frontend in Selected for Development — JQL returned 0 results |
 | 2026-06-11T10:18Z | backend | IDLE | — | No eligible tasks for backend in Selected for Development — JQL returned 0 results |
 | 2026-06-11T10:28Z | database | IDLE | — | No eligible tasks for database in Selected for Development — JQL returned 0 results |
+| 2026-06-11T23:50Z | frontend | IDLE | — | No eligible tasks in Selected for Development (JQL: 0 results). 2 stories in Code Review: FN-1204 (driver portal shell), FN-1689 (billing redesign). Scope filter: none (autopilot_scope.json absent). autopilot-tick/SKILL.md absent — executed work-next fallback. |
