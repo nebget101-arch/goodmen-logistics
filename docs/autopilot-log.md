@@ -467,3 +467,33 @@
 
 | 2026-06-11T00:00Z | frontend | IDLE | — | No tasks in "Selected for Development" for agent:frontend |
 | 2026-06-11T00:00Z | frontend | TICK_SUMMARY | — | tasks_done=0 exit=idle |
+
+---
+
+## 2026-06-11T00:28Z — backend tick
+
+**Result:** DONE — completed subtask FN-1215
+
+**Task:** FN-1215 — [ai] Triage module: Anthropic SDK integration with prompt caching  
+**Parent Story:** FN-1184 — Roadside v2 Story 1.1: ai-service triage module (Claude integration)  
+**Branch:** `backend/FN-1215/triage-module`  
+**Integration Branch:** `integration/FN-1184`
+
+**Scope:** no `autopilot_scope.json` found; no scope filter applied.
+
+**Files added (10):**
+- `backend/microservices/ai-service/src/triage/triage.service.js` — Claude triage service, Anthropic SDK, ephemeral prompt caching
+- `backend/microservices/ai-service/src/triage/triage.controller.js` — HTTP handler
+- `backend/microservices/ai-service/src/routes/triage.routes.js` — sub-router mounted at `/api/ai/roadside/triage`
+- `backend/microservices/ai-service/src/triage/redactor.js` — PII scrubber
+- `backend/microservices/ai-service/src/telemetry/triage.telemetry.js` — emitSuccess/emitFailure
+- `backend/microservices/ai-service/src/triage/prompts/triage.system.md` — system prompt
+- `backend/microservices/ai-service/src/triage/prompts/triage.policy.md` — policy block
+- `backend/microservices/ai-service/src/ai-router.js` — wired triage router (modified)
+- `backend/microservices/ai-service/src/handlers/__tests__/triage/triage.service.spec.js` — 10 specs
+- `backend/microservices/ai-service/src/handlers/__tests__/triage/triage.controller.spec.js` — 7 specs
+
+**Sibling subtasks:** FN-1216 (Canceled) — all non-canceled subtasks done. Next: `/create-pr FN-1184`.
+
+| 2026-06-11T00:28Z | backend | TASK | FN-1215 | Triage module: Anthropic SDK + prompt caching |
+| 2026-06-11T00:28Z | backend | TICK_SUMMARY | FN-1215 | tasks_done=1 exit=done |
