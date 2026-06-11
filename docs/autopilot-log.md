@@ -510,3 +510,16 @@
 
 | 2026-06-11T00:00Z | database | IDLE | — | No tasks in "Selected for Development" for agent:database |
 | 2026-06-11T00:00Z | database | TICK_SUMMARY | — | tasks_done=0 exit=idle |
+
+---
+
+## 2026-06-11T00:00 — frontend tick
+
+**Result:** IDLE — no eligible tasks
+
+**Reason:** No issues in "Selected for Development" with label `agent:frontend`. JQL query returned 0 results. The only 2 issues in "Selected for Development" across all agents are FN-1290 and FN-1292 (both labeled `agent:backend`, not `agent:frontend`).
+
+**Scope:** no `autopilot_scope.json` found; no scope filter applied.
+
+| 2026-06-11T00:00Z | frontend | IDLE | — | No tasks in "Selected for Development" for agent:frontend |
+| 2026-06-11T00:00Z | frontend | TICK_SUMMARY | — | tasks_done=0 exit=idle |
