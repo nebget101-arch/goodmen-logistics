@@ -539,3 +539,33 @@
 
 | 2026-06-11T07:00Z | frontend | IDLE | — | No tasks in "Selected for Development" for agent:frontend |
 | 2026-06-11T07:00Z | frontend | TICK_SUMMARY | — | tasks_done=0 exit=idle |
+
+---
+
+## 2026-06-11T23:24Z — backend tick
+
+**Result:** COMPLETED — FN-1292
+
+**Task:** FN-1292 (Subtask) — [devops] App Store / Play Store account research + CI cost estimate  
+**Parent Story:** FN-1214 — Roadside v2 Story 10.1: native vs PWA driver-app spike + POC  
+**Branch:** `backend/FN-1292/mobile-distribution-research` (off `integration/FN-1214`)
+
+**Scope:** no `autopilot_scope.json` found; no scope filter applied.
+
+**Candidate selection:** Only one backend task in "Selected for Development" — FN-1292. Sibling check: FN-1290 (Done), FN-1291 (Done) — strong momentum. No "is blocked by" links. File overlap check: `origin/backend/FN-1290/driver-mobile-spike` touches `docs/spikes/driver-mobile-app.md` but FN-1290 is Done and already merged into integration/FN-1214, so no active conflict.
+
+**Files changed (3):**
+- `docs/spikes/mobile-distribution-research.md` *(new, 253 lines)* — full research: Apple Developer Program requirements, Google Play account, distribution mechanics (public store/MDM/TestFlight/sideload), MDM implications for fleet tablets, CI cost comparison (GitHub Actions ~$74/mo recommended vs Bitrise $115/mo vs Codemagic $95/mo), code-signing secrets inventory
+- `docs/spikes/driver-mobile-app.md` *(updated)* — App Store Implications and Cost-of-Ownership sections filled with concrete data from FN-1292 research; status header updated to Complete
+- `docs/stories/FN-1214.md` *(updated)* — FN-1292 marked Done in subtask table; FN-1292 implementation notes appended
+
+**Subtask sibling status after completion:**
+- FN-1290: Done ✓
+- FN-1291: Done ✓
+- FN-1292: Done ✓ (this tick)
+- FN-1293: Canceled
+
+All non-canceled subtasks of FN-1214 are Done. Story FN-1214 is ready for `/create-pr FN-1214`.
+
+| 2026-06-11T23:24Z | backend | IMPLEMENTED_SUBTASK | FN-1292 | Subtask done (mobile-distribution-research.md + spike doc update); integrated into integration/FN-1214; all siblings done — story FN-1214 ready for create-pr |
+| 2026-06-11T23:24Z | backend | TICK_SUMMARY | — | tasks_done=1 exit=max-tasks-cap max_tasks=1 |
