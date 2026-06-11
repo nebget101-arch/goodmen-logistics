@@ -1,7 +1,7 @@
 # Driver Mobile App — Architecture Spike & Recommendation
 
-**Spike:** FN-1290 | **Story:** FN-1214 | **Date:** 2026-06-11
-**Status:** Draft — pending FN-1292 (App Store / CI cost section)
+**Spike:** FN-1290, FN-1292 | **Story:** FN-1214 | **Date:** 2026-06-11
+**Status:** Complete — FN-1290 (architecture + stack), FN-1291 (POC), FN-1292 (distribution + CI costs)
 
 ---
 
@@ -67,38 +67,42 @@ that React Native fills over Capacitor for this use case.
 
 ## App Store Implications
 
-> **Note:** FN-1292 will contribute the detailed App Store / Play Store account
-> provisioning checklist and CI cost breakdown. This section captures architectural
-> decision points only.
+> Full research, account requirements, distribution mechanics, and CI cost breakdown are
+> in [`docs/spikes/mobile-distribution-research.md`](./mobile-distribution-research.md) (FN-1292).
+> This section summarises the key decisions.
 
 ### iOS (App Store)
 
-- Requires an Apple Developer Program account ($99/year).
-- App Review applies to every build that changes native plugin versions or iOS entitlements;
-  JS-only changes can be shipped over-the-air (Ionic Appflow or a self-hosted live-update
-  mechanism) without re-review.
-- APNs push certificate (`.p8` key) must be provisioned and stored as a secret in the CI
-  pipeline.
-- For fleet-managed deployments (MDM), `.ipa` can be distributed via Apple Business
-  Manager or a third-party MDM without a public App Store listing.
+- Apple Developer Program: **$99/year**. Requires D-U-N-S number for org enrollment (5–14 business days if not on file).
+- App Review applies only when native plugin versions or iOS entitlements change; JS-only
+  updates ship over-the-air without re-review.
+- APNs `.p8` key (push notifications) is provisioned once per team, never expires — store as
+  `APNS_KEY_P8_BASE64` in CI secrets vault.
+- For fleet tablets: use an **Ad Hoc provisioning profile** (up to 100 UDIDs) distributed
+  via MDM. No public App Store listing required for Phase 1.
+- Scale path: above 100 tablets → Apple Developer Enterprise Program ($299/year) or
+  Apple Business Manager (ABM) Managed Distribution.
 
 ### Android (Google Play)
 
-- Requires a Google Play Developer account ($25 one-time fee).
-- Play Store review is faster (~24h typical) and less strict than App Store.
-- FCM sender ID and `google-services.json` must be wired into the build.
-- For fleet tablets, an `.apk` sideload or private Play track (internal/alpha) is an
-  option — avoids public listing review entirely.
+- Google Play Developer: **$25 one-time fee**.
+- For Phase 1: use the **Internal testing track** (100 testers, no review, near-instant)
+  or sideload the signed `.apk` via MDM. No public listing, no review delays.
+- FCM (`google-services.json`) is free and committed to the repo (non-secret).
+- Android keystore is irreplaceable — back it up to the org password manager immediately.
 
 ### MDM Path (Recommended for Fleet Tablets)
 
 Given that FleetNeuron's primary driver device is an in-cab tablet managed by a fleet's
 IT team:
 
-1. Build a signed `.ipa` / `.apk` via CI.
-2. Distribute via the fleet's MDM (AirWatch, Jamf, Intune, etc.) as a managed app.
-3. No public App Store listing needed for Phase 1 — avoids app review delays during
-   rapid iteration.
+1. CI builds a signed `.ipa` (Ad Hoc profile) / `.apk` on every release tag.
+2. Artifact uploaded to MDM (Jamf, Intune, Workspace ONE, SOTI) as a managed app.
+3. MDM silently pushes the app to enrolled tablets — no user interaction, no store review.
+4. Kiosk / single-app mode locks tablets to FleetNeuron only (standard MDM feature).
+
+No public App Store listing needed for Phase 1 — avoids app review delays during
+rapid iteration. Move to a public listing in Phase 2 if non-MDM driver adoption is needed.
 
 ---
 
@@ -260,27 +264,33 @@ All telemetry events follow the existing `audit_logs` pattern where applicable, 
 
 ## Cost-of-Ownership Estimate
 
-> **Note:** Detailed App Store account costs and CI pipeline pricing are in FN-1292.
-> This section covers the broader picture.
+> Full CI cost comparison (GitHub Actions vs Bitrise vs Codemagic) and code-signing secrets
+> inventory are in [`docs/spikes/mobile-distribution-research.md`](./mobile-distribution-research.md) (FN-1292).
 
 ### One-time setup costs
 
 | Item | Estimate |
 |------|---------|
 | Apple Developer Program | $99/year |
-| Google Play Developer | $25 (one-time) |
+| Google Play Developer | $25 (one-time, lifetime) |
 | Capacitor + plugin integration | 2–3 engineer-days |
-| CI pipeline for iOS / Android builds | 1–2 engineer-days (FN-1292 scope) |
-| App Store submission + review | 1–3 business days elapsed |
+| CI pipeline for iOS / Android builds (GitHub Actions) | 1–2 engineer-days |
+| App Store submission + review (if public listing) | 1–3 business days elapsed |
+| D-U-N-S number (org enrollment) | Free; 5–14 business days if not on file |
 
 ### Ongoing costs
 
 | Item | Estimate |
 |------|---------|
 | Apple Developer Program renewal | $99/year |
-| CI build minutes (Bitrise / Codemagic / GitHub Actions self-hosted) | $0–$150/month depending on volume (FN-1292 scope) |
-| Push notification infrastructure | FCM is free; APNs is free (included in Apple dev account) |
+| CI build minutes — GitHub Actions macOS (30 builds/month) | ~$74/month |
+| CI build minutes — GitHub Actions macOS (90 builds/month) | ~$222/month |
+| CI build minutes — self-hosted Mac mini (> 50 builds/month) | ~$0/month (HW amortized ~$700 one-time) |
+| CI build minutes — Bitrise Org Standard (flat) | $115/month |
+| Push notification infrastructure | FCM free; APNs free (included in Dev Program) |
 | Over-the-air JS updates (optional) | Ionic Appflow $49–$499/month or self-hosted |
+
+**Recommended CI choice:** GitHub Actions hosted macOS — no new vendor, ~$74/month at 30 iOS builds/month. See `mobile-distribution-research.md §4` for full comparison.
 
 ### Staffing impact
 
