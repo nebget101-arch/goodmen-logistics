@@ -257,13 +257,16 @@ export class LoadWizardComponent implements OnInit, OnDestroy {
     return this.mode === 'ai-extract' && !this.extractionComplete;
   }
 
+  /** Forward step order — single source of truth for "which step is invalid". */
+  private readonly stepOrder: LoadWizardStepId[] = ['basics', 'stops', 'driver', 'attachments'];
+
   /**
-   * Per-step gating. Final step's value also drives whether Submit is enabled.
-   * Only `basics` has required fields at this stage — later stories tighten
-   * the rules on stops / driver / attachments.
+   * Per-step validity. Shared by `canProceed` (forward navigation gate) and
+   * `firstInvalidStepId` (submit jump-to-invalid) so there is exactly one
+   * definition of what makes each step valid — FN-1727.
    */
-  get canProceed(): boolean {
-    switch (this.currentStepId) {
+  private isStepValid(stepId: LoadWizardStepId): boolean {
+    switch (stepId) {
       case 'basics':
         return this.basics.valid;
       case 'stops':
@@ -271,10 +274,45 @@ export class LoadWizardComponent implements OnInit, OnDestroy {
       case 'driver':
         return this.driverEquipment.valid;
       case 'attachments':
-        return this.attachmentsGroup.valid && !this.submitting;
+        return this.attachmentsGroup.valid;
       default:
         return false;
     }
+  }
+
+  /**
+   * The first step (in wizard order) whose sub-group is invalid, or `null` when
+   * the entire form is submit-ready. Drives the FN-1727 jump-to-invalid behavior.
+   */
+  private firstInvalidStepId(): LoadWizardStepId | null {
+    return this.stepOrder.find((id) => !this.isStepValid(id)) ?? null;
+  }
+
+  /** The FormGroup/FormArray backing a given step (for `markAllAsTouched`). */
+  private groupForStep(stepId: LoadWizardStepId): FormGroup | FormArray {
+    switch (stepId) {
+      case 'basics':
+        return this.basics;
+      case 'stops':
+        return this.stops;
+      case 'driver':
+        return this.driverEquipment;
+      case 'attachments':
+        return this.attachmentsGroup;
+    }
+  }
+
+  /**
+   * Per-step gating for forward navigation and the final-step Submit button.
+   * Uses {@link isStepValid} so the button's enabled state stays in lock-step
+   * with the submit guard. On `attachments` the Submit button stays enabled
+   * whenever the attachments group is valid; an invalid *earlier* step no longer
+   * silently disables submission — `onSubmit` jumps to that step with a message
+   * instead (FN-1727), so the button is never "enabled but does nothing".
+   */
+  get canProceed(): boolean {
+    if (this.currentStepId === 'attachments' && this.submitting) return false;
+    return this.isStepValid(this.currentStepId);
   }
 
   // ─── Step navigation ────────────────────────────────────────────────────
@@ -282,12 +320,18 @@ export class LoadWizardComponent implements OnInit, OnDestroy {
   onStepChange(stepId: string): void {
     if (this.isValidStepId(stepId)) {
       this.currentStepId = stepId;
+      // FN-1727: a navigation away from the jumped-to step clears the stale
+      // "complete the highlighted fields" banner once the user moves on.
+      this.errorMessage = '';
     }
   }
 
   onBack(): void {
     const idx = this.steps.findIndex(s => s.id === this.currentStepId);
-    if (idx > 0) this.currentStepId = this.steps[idx - 1].id as LoadWizardStepId;
+    if (idx > 0) {
+      this.currentStepId = this.steps[idx - 1].id as LoadWizardStepId;
+      this.errorMessage = '';
+    }
   }
 
   onNext(): void {
@@ -295,6 +339,7 @@ export class LoadWizardComponent implements OnInit, OnDestroy {
     const idx = this.steps.findIndex(s => s.id === this.currentStepId);
     if (idx < this.steps.length - 1) {
       this.currentStepId = this.steps[idx + 1].id as LoadWizardStepId;
+      this.errorMessage = '';
     }
   }
 
@@ -569,11 +614,22 @@ export class LoadWizardComponent implements OnInit, OnDestroy {
   // ─── Submit ─────────────────────────────────────────────────────────────
 
   onSubmit(): void {
-    if (this.submitting || !this.form.valid) {
-      this.form.markAllAsTouched();
+    if (this.submitting) return;
+
+    // FN-1727: never silently swallow a Submit click. If any step has an
+    // invalid required control, jump to the first such step, highlight its
+    // fields, and surface an actionable message instead of bailing quietly.
+    const invalidStep = this.firstInvalidStepId();
+    if (invalidStep) {
+      this.currentStepId = invalidStep;
+      this.groupForStep(invalidStep).markAllAsTouched();
+      this.errorMessage =
+        'Please complete the highlighted fields before creating the load.';
+      this.cdr.markForCheck();
       return;
     }
 
+    this.errorMessage = '';
     if (this.mode === 'create' || this.mode === 'ai-extract') {
       this.submitCreate();
     } else if (this.mode === 'edit' && this.loadId) {
