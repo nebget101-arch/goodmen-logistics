@@ -160,6 +160,12 @@ services:
         sync: false
       - key: PUBLIC_APP_BASE_URL
         sync: false
+      # FN-1729: full URL of the deployed reset-password page. Without this the
+      # emailed reset link falls back to http://localhost:4200/reset-password
+      # (a dead link for users). Public, non-secret URL — hardcoded like CORS_ORIGIN
+      # so the deploy is self-correcting. Frontend host from the CORS allowlist.
+      - key: PASSWORD_RESET_URL_BASE
+        value: https://fleetneuron.ai/reset-password
       - key: TRIAL_PUBLIC_BASE_URL
         sync: false
       - key: TRIAL_SIGNUP_URL_TEMPLATE

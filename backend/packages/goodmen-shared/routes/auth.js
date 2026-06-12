@@ -14,10 +14,30 @@ const { PLANS, normalizePlanId } = require('../config/plans');
 // Secret for JWT (in production, use env var)
 const JWT_SECRET = process.env.JWT_SECRET || 'dev_secret';
 const RESET_TOKEN_TTL_MINUTES = Number(process.env.PASSWORD_RESET_TTL_MINUTES || 60);
+
+// FN-1729: resolve the base URL of the deployed reset-password page.
+//  1. PASSWORD_RESET_URL_BASE / FRONTEND_URL — explicit, full URL incl. the path.
+//  2. Derive `${frontend-origin}/reset-password` from the same PUBLIC_APP_BASE_URL
+//     / APP_BASE_URL the other email-link builders use (e.g. roadside.service.js),
+//     so the link is correct even when the explicit var is unset — provided the
+//     service has a frontend base configured.
+//  3. localhost — dev-only last resort.
+const FRONTEND_ORIGIN = process.env.PUBLIC_APP_BASE_URL || process.env.APP_BASE_URL || '';
 const RESET_LINK_BASE_URL =
   process.env.PASSWORD_RESET_URL_BASE
   || process.env.FRONTEND_URL
+  || (FRONTEND_ORIGIN ? `${FRONTEND_ORIGIN.replace(/\/+$/, '')}/reset-password` : '')
   || 'http://localhost:4200/reset-password';
+
+// Fail loudly instead of silently emailing dead links: a localhost reset base in
+// production means the deploy is missing PASSWORD_RESET_URL_BASE / APP_BASE_URL.
+if (process.env.NODE_ENV === 'production' && /localhost/i.test(RESET_LINK_BASE_URL)) {
+  console.warn(
+    '[auth] PASSWORD RESET misconfig: reset link base resolves to localhost in production '
+    + `(${RESET_LINK_BASE_URL}). Set PASSWORD_RESET_URL_BASE (or APP_BASE_URL / PUBLIC_APP_BASE_URL) `
+    + 'on fleetneuron-auth-users-service — until then reset emails contain dead links.'
+  );
+}
 
 function buildResetLink(token) {
   const separator = RESET_LINK_BASE_URL.includes('?') ? '&' : '?';
