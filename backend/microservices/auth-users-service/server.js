@@ -34,6 +34,7 @@ const permissionsRouter = require('@goodmen/shared/routes/permissions');
 const authMiddleware = require('@goodmen/shared/middleware/auth-middleware');
 const tenantContextMiddleware = require('@goodmen/shared/middleware/tenant-context-middleware');
 const { startTrialConversionJob } = require('@goodmen/shared/jobs/processTrialConversions');
+const stripe = require('@goodmen/shared/config/stripe');
 
 const app = express();
 const PORT = process.env.PORT || 5003;
@@ -99,6 +100,8 @@ app.listen(PORT, async () => {
     console.error('⚠️  Migration error (non-fatal):', err.message);
   }
   console.log(`🔐 Auth/Users service running on http://localhost:${PORT}`);
+  // Validate Stripe configuration (logs missing keys; never crashes the service)
+  stripe.validateStripeConfig();
   // Start the daily trial conversion job
   startTrialConversionJob();
 });

@@ -48,6 +48,9 @@ const warehouseSupplyRulesRouter = require('@goodmen/shared/routes/warehouse-sup
 const authMiddleware = require('@goodmen/shared/middleware/auth-middleware');
 const tenantContextMiddleware = require('@goodmen/shared/middleware/tenant-context-middleware');
 const requirePlanAccess = require('@goodmen/shared/middleware/plan-access-middleware');
+// FN-1694: block expired-no-card / past-grace tenants (after tenant context,
+// before plan checks). super_admin + billing routes exempt.
+const requireActiveSubscription = require('@goodmen/shared/middleware/trial-enforcement-middleware')();
 
 const requirePartsPlan = requirePlanAccess('/parts');
 const requireReceivingPlan = requirePlanAccess('/receiving');
@@ -56,15 +59,15 @@ const requireBarcodesPlan = requirePlanAccess('/barcodes');
 app.get('/api-docs-json', (_req, res) => res.json(swaggerSpec));
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 
-app.use('/api/inventory', authMiddleware, tenantContextMiddleware, requirePartsPlan, inventoryRouter);
-app.use('/api/adjustments', authMiddleware, tenantContextMiddleware, requirePartsPlan, adjustmentsRouter);
-app.use('/api/cycle-counts', authMiddleware, tenantContextMiddleware, requirePartsPlan, cycleCountsRouter);
-app.use('/api/receiving', authMiddleware, tenantContextMiddleware, requireReceivingPlan, receivingRouter);
-app.use('/api/barcodes', authMiddleware, tenantContextMiddleware, requireBarcodesPlan, barcodesRouter);
-app.use('/api/shop-clients', authMiddleware, tenantContextMiddleware, customerBulkUploadRouter);
-app.use('/api/shop-clients', authMiddleware, tenantContextMiddleware, shopClientsRouter);
-app.use('/api/locations/:locationId/bins', authMiddleware, tenantContextMiddleware, locationBinsRouter);
-app.use('/api/locations/:id/supply-rules', authMiddleware, tenantContextMiddleware, warehouseSupplyRulesRouter);
+app.use('/api/inventory', authMiddleware, tenantContextMiddleware, requireActiveSubscription, requirePartsPlan, inventoryRouter);
+app.use('/api/adjustments', authMiddleware, tenantContextMiddleware, requireActiveSubscription, requirePartsPlan, adjustmentsRouter);
+app.use('/api/cycle-counts', authMiddleware, tenantContextMiddleware, requireActiveSubscription, requirePartsPlan, cycleCountsRouter);
+app.use('/api/receiving', authMiddleware, tenantContextMiddleware, requireActiveSubscription, requireReceivingPlan, receivingRouter);
+app.use('/api/barcodes', authMiddleware, tenantContextMiddleware, requireActiveSubscription, requireBarcodesPlan, barcodesRouter);
+app.use('/api/shop-clients', authMiddleware, tenantContextMiddleware, requireActiveSubscription, customerBulkUploadRouter);
+app.use('/api/shop-clients', authMiddleware, tenantContextMiddleware, requireActiveSubscription, shopClientsRouter);
+app.use('/api/locations/:locationId/bins', authMiddleware, tenantContextMiddleware, requireActiveSubscription, locationBinsRouter);
+app.use('/api/locations/:id/supply-rules', authMiddleware, tenantContextMiddleware, requireActiveSubscription, warehouseSupplyRulesRouter);
 
 /**
  * @openapi

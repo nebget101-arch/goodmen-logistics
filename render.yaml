@@ -164,6 +164,22 @@ services:
         sync: false
       - key: TRIAL_SIGNUP_URL_TEMPLATE
         sync: false
+      # Stripe billing — secrets + per-plan price IDs (FN-1686 go-live).
+      # See docs/deploy/stripe-go-live.md for how to obtain each value.
+      - key: STRIPE_SECRET_KEY
+        sync: false
+      - key: STRIPE_WEBHOOK_SECRET
+        sync: false
+      - key: STRIPE_PRICE_BASIC
+        sync: false
+      - key: STRIPE_PRICE_MULTI_MC
+        sync: false
+      - key: STRIPE_PRICE_END_TO_END
+        sync: false
+      - key: STRIPE_PRICE_ENTERPRISE
+        sync: false
+      - key: STRIPE_PRICE_EXTRA_USER_SEAT
+        sync: false
       - key: NODE_ENV
         value: production
       - key: PORT

@@ -7,7 +7,7 @@
         Live Map
       </h1>
       <p class="subtitle">
-        Real-time fleet positions with breadcrumb trails and geofence overlays.
+        Real-time 3D fleet positions with animated truck icons, breadcrumb trails and geofence overlays.
       </p>
     </div>
 
@@ -68,6 +68,18 @@
     <section class="ai-panel map-panel">
       <p class="muted map-loading" *ngIf="loading">Loading positions…</p>
       <div #mapContainer class="map-container" aria-label="Live vehicle map"></div>
+
+      <!-- Follow-the-unit affordance — overlays the map (FN-1723). -->
+      <button
+        *ngIf="followVehicleId"
+        type="button"
+        class="follow-chip"
+        (click)="stopFollow()"
+        aria-label="Stop following vehicle"
+      >
+        <span class="material-symbols-outlined">my_location</span>
+        Following {{ followUnitLabel }} · Stop
+      </button>
     </section>
 
     <!-- Side panel → collapses to a bottom sheet on mobile (see SCSS). -->
@@ -113,6 +125,14 @@
 
         <dt>Position</dt>
         <dd>{{ selected.lat | number: '1.4-4' }}, {{ selected.lng | number: '1.4-4' }}</dd>
+
+        <dt>Open in Maps</dt>
+        <dd>
+          <a class="maps-link" [href]="mapsUrl(selected)" target="_blank" rel="noopener">
+            Google Maps
+            <span class="material-symbols-outlined">open_in_new</span>
+          </a>
+        </dd>
       </dl>
     </aside>
   </div>

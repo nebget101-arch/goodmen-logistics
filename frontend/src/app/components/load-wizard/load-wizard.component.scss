@@ -170,6 +170,13 @@
   font-size: 0.85rem;
 }
 
+/* FN-1727: banner variant rendered above the step body (not after it), so the
+   validation/jump message reads as a header on whichever step the user lands on. */
+.submit-error--global {
+  margin-top: 0;
+  margin-bottom: 18px;
+}
+
 .submitting-hint {
   margin-top: 14px;
   color: #94a3b8;

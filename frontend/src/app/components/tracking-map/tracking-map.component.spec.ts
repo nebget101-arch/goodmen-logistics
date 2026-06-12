@@ -142,4 +142,105 @@ describe('TrackingMapComponent', () => {
     component.onFiltersChanged();
     expect(component.selected).toBeNull();
   });
+
+  it('builds vehicle GeoJSON features carrying status + heading props (FN-1725)', () => {
+    // Seed two positions and mark them as rendered (in the tween set).
+    const a = pos({ vehicleId: 'v1', unitNumber: 'Unit 1', movementStatus: 'moving', headingDeg: 90 });
+    const b = pos({ vehicleId: 'v2', unitNumber: 'Unit 2', movementStatus: 'idle', headingDeg: 270, lat: 40, lng: -88 });
+    (component as any).positions.set('v1', a);
+    (component as any).positions.set('v2', b);
+    (component as any).tweens.set('v1', (component as any).newTween(a.lng, a.lat));
+    (component as any).tweens.set('v2', (component as any).newTween(b.lng, b.lat));
+
+    const fc = (component as any).buildVehicleFeatures() as GeoJSON.FeatureCollection;
+    expect(fc.type).toBe('FeatureCollection');
+    expect(fc.features.length).toBe(2);
+
+    const f1 = fc.features.find((f) => f.properties?.['vehicleId'] === 'v1')!;
+    expect(f1.geometry.type).toBe('Point');
+    expect((f1.geometry as GeoJSON.Point).coordinates).toEqual([-87.6, 41.8]);
+    expect(f1.properties?.['unitNumber']).toBe('Unit 1');
+    expect(f1.properties?.['status']).toBe('moving');
+    expect(f1.properties?.['heading']).toBe(90);
+
+    const f2 = fc.features.find((f) => f.properties?.['vehicleId'] === 'v2')!;
+    expect(f2.properties?.['status']).toBe('idle');
+    expect(f2.properties?.['heading']).toBe(270);
+  });
+
+  it('vehicle features default status to offline and heading to 0 when missing (FN-1725)', () => {
+    const p = pos({ vehicleId: 'v9', movementStatus: undefined, headingDeg: null });
+    (component as any).positions.set('v9', p);
+    (component as any).tweens.set('v9', (component as any).newTween(p.lng, p.lat));
+
+    const fc = (component as any).buildVehicleFeatures() as GeoJSON.FeatureCollection;
+    const f = fc.features.find((x) => x.properties?.['vehicleId'] === 'v9')!;
+    expect(f.properties?.['status']).toBe('offline');
+    expect(f.properties?.['heading']).toBe(0);
+  });
+
+  it('rebuildLayer only renders filtered-in vehicles (FN-1725)', () => {
+    (component as any).positions.set('v1', pos({ vehicleId: 'v1', driverId: 'd1' }));
+    (component as any).positions.set('v2', pos({ vehicleId: 'v2', driverId: 'd2' }));
+    component.filterDriverId = 'd1';
+    (component as any).rebuildLayer();
+
+    const ids = [...(component as any).tweens.keys()];
+    expect(ids).toEqual(['v1']);
+    expect(component.visibleCount).toBe(1);
+  });
+
+  it('approximates a circle geofence as a closed lng/lat ring (FN-1720)', () => {
+    const ring = (component as any).circleRing(41.8, -87.6, 1000, 64) as number[][];
+    expect(ring.length).toBe(65); // steps + 1, closed
+    // First and last points coincide (closed ring).
+    expect(ring[0][0]).toBeCloseTo(ring[64][0], 6);
+    expect(ring[0][1]).toBeCloseTo(ring[64][1], 6);
+    // Every vertex is roughly the requested radius from the centre.
+    const dist = (component as any).haversineMeters(41.8, -87.6, ring[10][1], ring[10][0]) as number;
+    expect(dist).toBeCloseTo(1000, -1); // within ~10m
+  });
+
+  it('builds a geofence FeatureCollection carrying the geofence name (FN-1720)', () => {
+    (component as any).geofences = [
+      { id: 'g1', name: 'Yard', kind: 'circle', center: { lat: 41.8, lng: -87.6 }, radiusMeters: 500 },
+      { id: 'p1', name: 'Box', kind: 'polygon', vertices: [
+        { lat: 0, lng: 0 }, { lat: 0, lng: 1 }, { lat: 1, lng: 1 },
+      ] },
+    ];
+    const fc = (component as any).geofenceFeatureCollection();
+    expect(fc.features.length).toBe(2);
+    expect(fc.features[0].properties.name).toBe('Yard');
+    expect(fc.features[1].geometry.type).toBe('Polygon');
+    // Polygon ring is closed (first === last vertex).
+    const ring = fc.features[1].geometry.coordinates[0];
+    expect(ring[0]).toEqual(ring[ring.length - 1]);
+  });
+
+  it('builds a Google Maps deep-link for a vehicle coordinate (FN-1723)', () => {
+    expect(component.mapsUrl(pos({ lat: 41.8, lng: -87.6 })))
+      .toBe('https://www.google.com/maps?q=41.8,-87.6');
+    expect(component.mapsUrl(pos({ lat: null as any, lng: null as any }))).toBe('');
+    expect(component.mapsUrl(null)).toBe('');
+  });
+
+  it('follow-the-unit: enter sets the follow target + label, stop clears it (FN-1723)', () => {
+    (component as any).positions.set('v1', pos({ vehicleId: 'v1', unitNumber: 'Unit 1' }));
+    (component as any).enterFollow('v1');
+    expect(component.followVehicleId).toBe('v1');
+    expect(component.followUnitLabel).toBe('Unit 1');
+
+    component.stopFollow();
+    expect(component.followVehicleId).toBeNull();
+    expect(component.followUnitLabel).toBeNull();
+  });
+
+  it('closing the side panel also stops following (FN-1723)', () => {
+    component.followVehicleId = 'v1';
+    component.followUnitLabel = 'Unit 1';
+    component.selected = pos();
+    component.closePanel();
+    expect(component.selected).toBeNull();
+    expect(component.followVehicleId).toBeNull();
+  });
 });

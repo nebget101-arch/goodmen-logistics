@@ -9,7 +9,9 @@
 ## FleetNeuronAPP integration branch: `dev`
 **ALWAYS** branch from `origin/dev` and create PRs targeting `dev`. Never target `main` unless the user explicitly says otherwise.
 
-### Branching workflow — Story WITHOUT subtasks (or single-agent task):
+There are three story shapes. Pick the one that matches the planned subtask count.
+
+### Shape A — STANDALONE (story has no subtasks)
 1. `git fetch origin dev` — get latest dev
 2. `git worktree add .claude/worktrees/<slug> -b <agent>/<jira-key>/<slug> origin/dev` — isolated worktree per agent
 3. Make changes, commit (stage explicit paths: `git add <file>`)
@@ -17,13 +19,25 @@
 5. `gh pr create --base dev` — PR always targets dev
 6. If `dev` advances mid-work: `git fetch origin dev && git rebase origin/dev` — **NEVER `git merge origin/dev`** (merge can silently absorb uncommitted work during conflict resolution; rebase fails loudly)
 
-### Branching workflow — Story WITH subtasks (integration-branch model):
+### Shape B — SINGLE-AGENT story (exactly one non-QA subtask)
+The single subtask's branch IS the PR head. No integration branch.
+1. `git fetch origin dev`
+2. `git worktree add .claude/worktrees/<slug> -b <agent>/FN-SUBTASK/<slug> origin/dev` — base off `dev` directly
+3. Implement, commit, push
+4. When subtask is Done: `git fetch && git rebase origin/dev`, then `git push --force-with-lease origin HEAD`
+5. `/create-pr FN-STORY` opens the PR with `--head <agent>/FN-SUBTASK/<slug>` (the subtask branch is the PR head)
+
+### Shape C — MULTI-AGENT story (2+ non-QA subtasks, integration-branch model)
 1. **First subtask agent** creates `integration/FN-STORY` from `origin/dev` if it doesn't exist (see `.claude/skills/implement-ticket/SKILL.md`)
 2. Each subtask: `git worktree add .claude/worktrees/<slug> -b <agent>/FN-XXX/<slug> origin/integration/FN-STORY`
 3. When subtask is done: `git fetch && git rebase origin/integration/FN-STORY` (resolve conflicts here, where the agent knows the code), then ff-merge into `integration/FN-STORY` and push
 4. When all subtasks Done: `/create-pr FN-STORY` rebases the integration branch on latest `dev` and opens **one PR**: `integration/FN-STORY → dev`
 
-**Why integration branch:** siblings share a base, so each subtask sees prior subtasks' changes. Conflicts surface incrementally and are resolved by the agent who wrote the code, not at PR-assembly time when no one has full context.
+**Why integration branch (Shape C only):** siblings share a base, so each subtask sees prior subtasks' changes. Conflicts surface incrementally and are resolved by the agent who wrote the code, not at PR-assembly time when no one has full context.
+
+**Why no integration branch for Shape B:** with only one subtask, there are no siblings to share a base with. The integration branch is pure overhead — extra refs, extra ff-merges, no benefit.
+
+**Classification source of truth:** intake records the shape in the story doc's `## Integration Branch` field. Implement-ticket and create-pr re-verify by counting subtasks at runtime; if the count contradicts the doc (e.g., a 2nd subtask was added to a Shape B story after intake), they STOP rather than guess.
 
 ## Which agent may edit FleetNeuronAPP?
 
@@ -31,74 +45,17 @@
 |------|-----------------------|
 | **TPM** (project management / analysis) | **No** — read-only via Jira MCP |
 | **Frontend developer** | **Yes** — Angular UI scope; branches `agent/frontend/...` |
-| **Backend developer** | **Yes** — Node.js/Express microservices scope; branches `agent/backend/...` |
+| **Backend developer** | **Yes** — Node.js/Express microservices scope (includes AI service AND infra/Docker/Render work); branches `agent/backend/...` |
 | **Database agent** | **Yes** — PostgreSQL migrations/queries; branches `agent/database/...` |
-| **DevOps agent** | **Yes** — Docker/Render/infra scope; branches `agent/devops/...` |
 | **QA agent** | **Yes** — Cypress/k6/Karate tests; branches `agent/qa/...` |
-| **AI agent** | **Yes** — AI service, Claude API; branches `agent/ai/...` |
 
 All **prompt and config** files live in `.agent/`. The TPM agent never creates, edits, or deletes app source files.
 
-## Trigger phrases → agent workflows
+**Note on AI service AND infra work:** Both `backend/microservices/ai-service/` and infra (Docker, render.yaml, env files, runbooks) are owned by the **backend** agent — no separate `agent:ai` or `agent:devops` labels exist. The autopilot blocklist still blocks auto-merge of ai-service and infra changes (sensitive), so backend agents implementing those will still open a PR that waits for human merge.
 
-### TPM Agent
-"analyze the codebase" or "scan FleetNeuron" or "what's in the app"
-→ Read `.agent/tpm/prompts/analyze_codebase.md` and follow exactly.
+## Trigger phrases (interactive sessions only)
 
-"create backlog" or "generate tickets" or "create jira stories"
-→ Read `.agent/tpm/system_prompt.md` first, then `.agent/tpm/prompts/create_backlog.md`
-
-"sync docs" or "update confluence" or "update documentation"
-→ Read `.agent/tpm/prompts/sync_docs.md` and follow exactly.
-
-"audit tests" or "find missing tests" or "test coverage"
-→ Read `.agent/tpm/prompts/audit_tests.md` and follow exactly.
-
-"handoff to dev agents" or "add copy-paste prompts for agents"
-→ Read `.agent/tpm/prompts/handoff_to_dev_agents.md`
-
-"process work queue" or "start next task" or "pick up FN work"
-→ Read `.agent/docs/process_work_queue.md`
-
-"process frontend work queue" / "process backend work queue" / "process database work queue"
-"process devops work queue" / "process qa work queue" / "process ai work queue"
-→ Read `.agent/docs/process_work_queue.md` and use the matching queue folder.
-
-### Frontend Agent
-"analyze UI" or "analyze the frontend" or "UI code review" (read-only — no edits or git)
-→ Read `.agent/frontend/system_prompt.md`, then `.agent/frontend/prompts/analyze_frontend_code.md`
-
-"implement UI task" or "frontend agent" or "FleetNeuron frontend" or "polish the UI"
-→ Read `.agent/frontend/system_prompt.md` first, then `.agent/frontend/prompts/implement_frontend_task.md`
-
-### Backend Agent
-"analyze backend" or "backend code review" or "scan the backend" (read-only)
-→ Read `.agent/backend/system_prompt.md`, then `.agent/backend/prompts/analyze_backend_code.md`
-
-"implement backend task" or "backend agent" or "FleetNeuron backend"
-→ Read `.agent/backend/system_prompt.md` first, then `.agent/backend/prompts/implement_backend_task.md`
-
-### Database Agent
-"analyze database" or "database schema review" (read-only)
-→ Read `.agent/database/system_prompt.md`, then `.agent/database/prompts/analyze_database.md`
-
-"implement database task" or "database agent" or "write migration"
-→ Read `.agent/database/system_prompt.md` first, then `.agent/database/prompts/implement_database_task.md`
-
-### DevOps Agent
-"analyze infrastructure" or "devops review" (read-only)
-→ Read `.agent/devops/system_prompt.md`, then `.agent/devops/prompts/analyze_infrastructure.md`
-
-"implement devops task" or "devops agent" or "update docker" or "update render"
-→ Read `.agent/devops/system_prompt.md` first, then `.agent/devops/prompts/implement_devops_task.md`
-
-### QA Agent
-"implement qa task" or "qa agent" or "write tests" or "write e2e tests"
-→ Read `.agent/qa/system_prompt.md` first, then `.agent/qa/prompts/implement_qa_task.md`
-
-### AI Agent
-"implement ai task" or "ai agent" or "FleetNeuron AI" or "update ai service"
-→ Read `.agent/ai/system_prompt.md` first, then `.agent/ai/prompts/implement_ai_task.md`
+When a human types natural-language commands (e.g. "analyze the codebase", "implement UI task"), the trigger-phrase → workflow-file mapping is in **`.agent/triggers.md`**. Read that file only when a human prose request needs to be mapped to a workflow. Remote routines and skill invocations (e.g. `/autopilot-tick`, `/work-next`, `/create-pr`) call skills directly and never need this file.
 
 ## Parallel agents / git safety
 
@@ -107,6 +64,18 @@ All **prompt and config** files live in `.agent/`. The TPM agent never creates, 
 - **Clean tree before branch switches**: Run `git status` first. If not clean, stash and tell the user.
 - **Intentional commits only**: Stage with explicit paths (`git add <files>`) — never `git add .` or `git add -A`. Run `git diff --cached` before `git commit`.
 - **One branch per agent/task**: `agent/frontend/…`, `agent/backend/…`, etc. Never reset or reuse another agent's branch.
+
+## Scoping the agent queue by epic or lane (optional)
+
+By default, agents pick any task in **Selected for Development** matching `agent:<type>`. To narrow further to a specific epic or swimlane, pass a scope token as the second arg to `/pick-next-task`, `/work-next`, or `/autopilot-tick`:
+
+- `epic:FN-1090` — resolved to the epic's `epic:*` lane label
+- `lane:quick-add-part` — uses label `epic:quick-add-part` directly
+
+**Precedence:** CLI arg > `.agent/autopilot_scope.json` per-agent default > no scope. Status filter is always AND-ed on top — scope narrows, never widens.
+
+**Setting scope per routine:** edit the routine prompt in https://claude.ai/code/routines (e.g., `/autopilot-tick backend epic:FN-1090`).
+**Setting scope for all routines of an agent:** edit `.agent/autopilot_scope.json` and push to dev.
 
 ## Jira Status Lifecycle
 
@@ -126,56 +95,50 @@ Cloud ID: `aff43a9d-6456-476c-9aa5-1b3da163f242`
 ### Lifecycle by Issue Type
 
 **Subtask**: `Backlog → Selected for Dev → In Progress → Done`
-- Each subtask gets its own branch: `<agent>/FN-XXX/<slug>` branched from `origin/integration/FN-PARENT` (NOT `origin/dev`)
-- No individual PR — subtask rebases on the integration branch, then ff-merges into `integration/FN-PARENT`
-- Transition to Done when subtask is integrated and pushed
+- Each subtask gets its own branch: `<agent>/FN-XXX/<slug>`
+- Branch base depends on parent story shape:
+  - **Shape B (single-agent story)**: branched from `origin/dev` directly; the subtask branch IS the eventual PR head
+  - **Shape C (multi-agent story)**: branched from `origin/integration/FN-PARENT`
+- No individual PR — Shape B subtasks rebase on `origin/dev`; Shape C subtasks rebase on the integration branch then ff-merge into it
+- Transition to Done when subtask is rebased and pushed
 
-**Story**: `Backlog → Selected for Dev → In Progress → Code Review → QA → Done`
-- If story has subtasks: the integration branch `integration/FN-STORY` is the merge target; subtasks merge into it; final PR is `integration/FN-STORY → dev`
-- If story has no subtasks: standard single-branch workflow off `dev`
-- A story with subtasks does **not** have its own implementation branch — the integration branch IS the PR head
+**Story**: `Backlog → Selected for Dev → In Progress → Code Review → Done`
+- The QA step is **skipped by default** — the user tests manually after Code Review and merges when satisfied.
+- The `In Testing` (51) and QA-style steps only run when a story has a `agent:qa` automation subtask (rare; only when automation must be written as part of the story). See intake skill for when to create one.
+- PR head depends on shape (see "Branching workflow" above):
+  - **Shape A (no subtasks)**: PR head is the story's own branch
+  - **Shape B (1 non-QA subtask)**: PR head is the subtask's branch — no integration branch involved
+  - **Shape C (2+ non-QA subtasks)**: PR head is `integration/FN-STORY` — the integration branch is the merge target for siblings
+- For Shape C only: a story with multiple subtasks does **not** have its own implementation branch — the integration branch IS the PR head
 
 **Epic**: `Backlog → In Progress (auto) → Done (auto)`
 - Auto-transitions to In Progress when first child story starts
 - Auto-transitions to Done when ALL child stories are Done
 
-### Subtask Branch & Merge Strategy (integration-branch model)
-```
-Epic: FN-100
-  Story: FN-101 → integration/FN-101 (created by first subtask agent from origin/dev)
-    Subtask: FN-102 → frontend/FN-102/<slug> (branched off integration/FN-101)
-    Subtask: FN-103 → backend/FN-103/<slug>  (branched off integration/FN-101)
-    Subtask: FN-104 → qa/FN-104/<slug>       (only if automation)
+### Subtask Branch & Merge Strategy
 
-Each subtask on completion:
-  git fetch origin integration/FN-101
-  git rebase origin/integration/FN-101         # surface conflicts on the subtask side
-  git push --force-with-lease origin HEAD
-  git checkout integration/FN-101
-  git merge --ff-only <subtask-branch>
-  git push origin integration/FN-101
+The full step-by-step git commands per shape live in `.claude/skills/implement-ticket/SKILL.md` (§3 branch base, §9 completion) and `.claude/skills/create-pr/SKILL.md` (§2 routing). Implementing agents follow those skills, not free-form recipes here.
 
-When all subtasks Done:
-  /create-pr FN-101 → rebases integration/FN-101 on latest dev → single PR: integration/FN-101 → dev
-```
+**Anti-pattern (forbidden):** branching multi-agent siblings off `origin/dev` independently and merging them with `--no-ff` into a fresh story branch at PR time. This caused historical lost-changes incidents — siblings had stale, divergent bases and conflict resolution at PR time had no agent context. The Shape B single-subtask off-dev path is **not** this anti-pattern, because there are no siblings to diverge from.
 
-**Anti-pattern (forbidden):** branching subtasks off `origin/dev` independently and merging them with `--no-ff` into a fresh story branch at PR time. This is the pattern that caused historical lost-changes incidents — siblings have stale, divergent bases and conflict resolution at PR time has no agent context.
-
-### QA Evidence
-- Screenshots saved to `docs/stories/evidence/FN-XXX/`
-- Committed to repo and linked in Jira comments
-- QA subtasks with automation work get their own branch
-- QA subtasks with manual testing only: evidence + story doc update, no branch
+### QA Evidence (only when an automation QA subtask exists)
+- The default flow has no QA subtask — user tests manually after Code Review and merges. No evidence files required.
+- When an automation QA subtask IS created (e.g., new Cypress/Karate suite):
+  - Screenshots saved to `docs/stories/evidence/FN-XXX/`
+  - Committed to repo and linked in Jira comments
+  - The QA subtask gets its own branch
+  - Manual-only QA subtasks (legacy): evidence + story doc update, no branch
 
 ## Routine after coding (coding agents)
 
 When implementation is complete for a Jira Story:
 
-1. **Transition to In Testing** (`51`) — run all verifications (browser, tests, screenshots).
+1. **Run final self-verification** (build passes, tests pass, manual smoke if a UI change). Optionally transition to **In Testing** (`51`) only if the story has an automation QA subtask that will run next.
 2. **Open a pull request** into `dev` (`gh pr create --base dev`).
 3. **Transition to Code Review** (`61`) — do this immediately after the PR is created.
 4. **Jira — Story comment**: Add a comment with **(1) PR link** and **(2) Render service names** from `.agent/docs/render_services.md`.
 5. **Jira — Sub-tasks**: Transition all completed child issues to **Done** (`41`).
+6. **Stop here.** No QA handoff in the default flow — the user takes over for manual testing and merges when satisfied.
 
 ## After a PR merges
 
@@ -183,10 +146,6 @@ When implementation is complete for a Jira Story:
 2. Add a follow-up Jira comment if needed (deploy confirmation, Render service names, prod promotion).
 3. Move the work-queue packet to `done/FN-XXX.md`.
 
-## General rules (always apply)
-- Always search Jira (project = FN) before creating any issue
-- Always confirm before bulk-creating more than 5 issues
-- Always link subtasks → stories → epics
-- Always use templates from `.agent/tpm/system_prompt.md` for Jira issues
-- Always reference actual file paths from ~/Desktop/FleetNeuronAPP in issue descriptions
-- Read git log when analyzing to understand recent work
+## Jira issue-creation rules
+
+Apply only when creating Jira issues (TPM / intake work). See `.claude/skills/intake/SKILL.md` for the full ruleset, including: always search FN before creating, confirm before bulk-creating more than 5 issues, link subtasks → stories → epics, use templates from `.agent/tpm/system_prompt.md`, and reference actual file paths from this repo in descriptions.

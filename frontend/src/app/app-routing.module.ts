@@ -46,6 +46,8 @@ import { IdleTruckAlertsComponent } from './components/idle-truck-alerts/idle-tr
 import { LocationsListComponent } from './components/locations-admin/locations-list/locations-list.component';
 import { AutoReplenishmentComponent } from './components/auto-replenishment/auto-replenishment.component';
 import { environment } from '../environments/environment';
+// FN-1261 — Driver portal incident detail
+import { IncidentDetailComponent } from './components/driver-portal/incident-detail/incident-detail.component';
 
 const routes: Routes = [
   { path: '', redirectTo: '/home', pathMatch: 'full' },
@@ -139,6 +141,8 @@ const routes: Routes = [
     canActivate: [AuthGuard, PlanGuard, PermissionGuard],
     data: { anyPermission: [PERMISSIONS.ROADSIDE_VIEW, PERMISSIONS.ROADSIDE_MANAGE], planPath: '/roadside' }
   },
+  // FN-1261 — Driver portal incident detail (shell route /driver-portal added by FN-1204)
+  { path: 'driver-portal/incidents/:id', component: IncidentDetailComponent, canActivate: [AuthGuard] },
   { path: 'audit', component: AuditComponent, canActivate: [AuthGuard, PlanGuard], data: { planPath: '/audit' } },
   { path: 'parts', component: PartsCatalogComponent, canActivate: [AuthGuard, PlanGuard], data: { planPath: '/parts' } },
   {
@@ -292,6 +296,10 @@ const routes: Routes = [
   {
     path: 'admin/fmcsa-imports',
     loadChildren: () => import('./components/admin/fmcsa-imports/fmcsa-imports.module').then(m => m.FmcsaImportsAdminModule)
+  },
+  {
+    path: 'admin/vendors',
+    loadChildren: () => import('./components/admin/vendors/vendors-admin.module').then(m => m.VendorsAdminModule)
   },
   // FN-1326 — dev-only severity-system preview. Excluded from production builds
   // so the route does not ship to customers; lazy-loaded so it adds zero bundle

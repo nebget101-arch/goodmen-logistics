@@ -1,3 +1,4 @@
+.claude/worktrees/
 node_modules/
 .DS_Store
 .env
@@ -18,3 +19,6 @@ DerivedData/
 *.mode1v3
 *.mode2v3
 .vscode/tasks.json
+
+# Claude Code worktrees (ephemeral agent working directories)
+.claude/worktrees/

@@ -1473,6 +1473,32 @@ export class ApiService {
       return this.http.post(`${this.baseUrl}/billing/extra-seats/purchase`, { quantity });
     }
 
+    // FN-1698 — Self-service subscription management (API contract: FN-1688)
+    /** Current subscription: plan, status, period, next renewal, cancel flag, line items. */
+    getBillingSubscription(): Observable<any> {
+      return this.http.get(`${this.baseUrl}/billing/subscription`);
+    }
+
+    /** Stripe invoice history with hosted-invoice + PDF links. */
+    getBillingInvoices(): Observable<any> {
+      return this.http.get(`${this.baseUrl}/billing/invoices`);
+    }
+
+    /** Create a Stripe Customer Portal session; returns `{ url }` to redirect to. */
+    createBillingPortalSession(): Observable<any> {
+      return this.http.post(`${this.baseUrl}/billing/portal-session`, {});
+    }
+
+    /** Upgrade/downgrade the subscription plan with proration. */
+    changeBillingPlan(planId: 'basic' | 'multi_mc' | 'end_to_end' | 'enterprise'): Observable<any> {
+      return this.http.post(`${this.baseUrl}/billing/change-plan`, { planId });
+    }
+
+    /** Cancel the subscription at period end. */
+    cancelBillingSubscription(): Observable<any> {
+      return this.http.post(`${this.baseUrl}/billing/cancel`, {});
+    }
+
   // ========== INVENTORY MANAGEMENT (PHASE 2) ==========
 
   // Parts Catalog
@@ -2131,6 +2157,15 @@ export class ApiService {
 
   markAllNotificationsRead(): Observable<any> {
     return this.http.patch(`${this.baseUrl}/notifications/read-all`, {});
+  }
+
+  // FN-1261 — Upload a photo for a driver-portal incident (Story 3.1 endpoint).
+  // The server is in drivers-compliance service; endpoint may not exist yet —
+  // the UI guards behind PhotoUploaderComponent[available] input.
+  uploadIncidentImage(incidentId: string, file: File): Observable<any> {
+    const form = new FormData();
+    form.append('file', file);
+    return this.http.post(`${this.baseUrl}/incidents/${encodeURIComponent(incidentId)}/images`, form);
   }
 }
 

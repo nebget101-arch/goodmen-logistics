@@ -104,6 +104,11 @@ function randomSpeedMph() {
 /**
  * Load the active demo loads with their pickup/delivery coordinates resolved from
  * zip_codes. Skips (with a warning) any load missing a truck, stops, or zip coords.
+ *
+ * FN-1718: batched — exactly THREE queries regardless of fleet size (loads, then
+ * all their stops, then all referenced zips), instead of the original 1 + 2·N. At
+ * 50 trucks this is the difference between 3 round-trips and 100+ per tick, which
+ * keeps each tick comfortably under the interval.
  */
 async function loadDemoRoutes() {
   const loads = await knex('loads')
@@ -111,24 +116,47 @@ async function loadDemoRoutes() {
     .where('load_number', 'like', `${DEMO_PREFIX}%`)
     .whereNotNull('truck_id')
     .select('id', 'load_number', 'truck_id');
+  if (loads.length === 0) return [];
+
+  // All PICKUP/DELIVERY stops for these loads in one query.
+  const loadIds = loads.map((l) => l.id);
+  const stops = await knex('load_stops')
+    .whereIn('load_id', loadIds)
+    .whereIn('stop_type', ['PICKUP', 'DELIVERY'])
+    .select('load_id', 'stop_type', 'zip');
+
+  const stopsByLoad = new Map(); // loadId -> { PICKUP: zip, DELIVERY: zip }
+  for (const s of stops) {
+    let entry = stopsByLoad.get(s.load_id);
+    if (!entry) {
+      entry = {};
+      stopsByLoad.set(s.load_id, entry);
+    }
+    entry[s.stop_type] = s.zip;
+  }
+
+  // All referenced zip coords in one query.
+  const zipSet = new Set();
+  for (const e of stopsByLoad.values()) {
+    if (e.PICKUP) zipSet.add(e.PICKUP);
+    if (e.DELIVERY) zipSet.add(e.DELIVERY);
+  }
+  const zipRows = zipSet.size
+    ? await knex('zip_codes').whereIn('zip', [...zipSet]).select('zip', 'latitude', 'longitude')
+    : [];
+  const coordByZip = new Map(zipRows.map((z) => [z.zip, z]));
 
   const routes = [];
   for (const load of loads) {
-    const stops = await knex('load_stops')
-      .where('load_id', load.id)
-      .whereIn('stop_type', ['PICKUP', 'DELIVERY'])
-      .select('stop_type', 'zip');
-    const pickup = stops.find((s) => s.stop_type === 'PICKUP');
-    const delivery = stops.find((s) => s.stop_type === 'DELIVERY');
-    if (!pickup || !delivery || !pickup.zip || !delivery.zip) {
+    const entry = stopsByLoad.get(load.id);
+    const pickupZip = entry && entry.PICKUP;
+    const deliveryZip = entry && entry.DELIVERY;
+    if (!pickupZip || !deliveryZip) {
       console.warn(`⚠  ${load.load_number}: missing pickup/delivery stop — skipping.`);
       continue;
     }
-    const zips = await knex('zip_codes')
-      .whereIn('zip', [pickup.zip, delivery.zip])
-      .select('zip', 'latitude', 'longitude');
-    const p = zips.find((z) => z.zip === pickup.zip);
-    const d = zips.find((z) => z.zip === delivery.zip);
+    const p = coordByZip.get(pickupZip);
+    const d = coordByZip.get(deliveryZip);
     if (!p || !d || p.latitude == null || d.latitude == null) {
       console.warn(`⚠  ${load.load_number}: zip coords not in zip_codes (re-run the seed) — skipping.`);
       continue;
@@ -150,7 +178,7 @@ async function main() {
   const mode = args.mode === 'once' ? 'once' : 'loop';
   const fractionStep = intervalMs / TRIP_DURATION_MS;
 
-  console.log('— Demo tracking simulator (FN-1683) —');
+  console.log('— Demo tracking simulator (FN-1716: 50-truck scale) —');
   console.log(`interval=${intervalMs}ms  mode=${mode}  trip≈${Math.round(TRIP_DURATION_MS / 1000)}s/leg`);
 
   // Per-load progress state (in memory). Keyed by loadId.
@@ -168,8 +196,10 @@ async function main() {
         console.log('… no DEMO- IN_TRANSIT loads — run the seed script first.');
         return;
       }
-      const now = Date.now();
+      const tickStart = Date.now();
+      const now = tickStart;
       const pings = [];
+      const deliveredIds = []; // once-mode arrivals, flushed in one UPDATE below
 
       for (const r of routes) {
         let st = state.get(r.loadId);
@@ -197,20 +227,30 @@ async function main() {
 
         const distToDelivery = haversineKm(lat, lng, delivery.lat, delivery.lng);
         if (st.fraction >= 1 || distToDelivery <= ARRIVAL_KM) {
-          // Arrived. Mark DELIVERED.
-          await knex('loads').where('id', r.loadId).update({ status: 'DELIVERED', updated_at: knex.fn.now() });
-          console.log(`✓ ${r.loadNumber} reached delivery — marked DELIVERED.`);
+          // Arrived at delivery.
+          console.log(`✓ ${r.loadNumber} reached delivery.`);
           if (mode === 'loop') {
+            // Loop mode keeps the load IN_TRANSIT (no DB status churn): just sit at
+            // delivery for the pause, then restart from pickup. With 50 trucks all
+            // arriving on the same tick, skipping the DELIVERED↔IN_TRANSIT writes
+            // keeps the tick cheap.
             st.fraction = 0;
             st.pausedUntil = now + LOOP_PAUSE_MS;
-            // Reset to IN_TRANSIT so the next tick (after the pause) keeps moving it.
-            await knex('loads').where('id', r.loadId).update({ status: 'IN_TRANSIT', updated_at: knex.fn.now() });
           } else {
-            state.delete(r.loadId); // once-mode: stop simulating this load
+            deliveredIds.push(r.loadId); // once-mode: flush all DELIVERED in one query
+            state.delete(r.loadId); // stop simulating this load
           }
         } else {
           st.fraction = Math.min(1, st.fraction + fractionStep);
         }
+      }
+
+      // once-mode: a single batched UPDATE for everything that arrived this tick.
+      if (deliveredIds.length) {
+        await knex('loads')
+          .whereIn('id', deliveredIds)
+          .update({ status: 'DELIVERED', updated_at: knex.fn.now() });
+        console.log(`  marked ${deliveredIds.length} load(s) DELIVERED.`);
       }
 
       if (pings.length) {
@@ -221,7 +261,12 @@ async function main() {
           .insert(pings)
           .onConflict(['vehicle_id', 'source_event_id', 'ts'])
           .ignore();
-        console.log(`tick: inserted ${pings.length} ping(s) @ ${new Date(now).toISOString()}`);
+        // tookMs lets QA confirm the tick stays comfortably under the interval at
+        // 50 trucks (one bulk INSERT + ~3 SELECTs per tick).
+        const tookMs = Date.now() - tickStart;
+        console.log(
+          `tick: inserted ${pings.length} ping(s) in ${tookMs}ms @ ${new Date(now).toISOString()}`
+        );
       }
     } catch (err) {
       console.error('tick error:', err.message);

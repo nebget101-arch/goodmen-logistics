@@ -1,0 +1,142 @@
+<div class="modal-backdrop" (click)="cancel()">
+  <div
+    class="modal"
+    role="dialog"
+    aria-modal="true"
+    [attr.aria-labelledby]="'vendorFormTitle'"
+    (click)="$event.stopPropagation()"
+  >
+    <header class="modal__header">
+      <h3 id="vendorFormTitle">
+        <span class="material-symbols-outlined">
+          {{ isEdit ? 'edit' : 'add_circle' }}
+        </span>
+        {{ title }}
+      </h3>
+      <button
+        type="button"
+        class="modal__close"
+        aria-label="Close"
+        [disabled]="submitting"
+        (click)="cancel()"
+      >
+        <span class="material-symbols-outlined">close</span>
+      </button>
+    </header>
+
+    <div class="modal__body">
+      <div *ngIf="error" class="alert alert-danger" role="alert">
+        <span class="material-symbols-outlined">error</span>
+        <span>{{ error }}</span>
+      </div>
+
+      <!-- Name -->
+      <div class="field">
+        <label class="field__label" for="vendorName">Vendor name <span class="required">*</span></label>
+        <input
+          id="vendorName"
+          type="text"
+          class="field__input"
+          [(ngModel)]="name"
+          [disabled]="submitting"
+          placeholder="e.g. Ace Towing & Recovery"
+          maxlength="200"
+          autocomplete="off"
+        />
+      </div>
+
+      <!-- Capacity -->
+      <div class="field">
+        <label class="field__label" for="vendorCapacity">Capacity (concurrent jobs) <span class="required">*</span></label>
+        <input
+          id="vendorCapacity"
+          type="number"
+          class="field__input field__input--narrow"
+          [(ngModel)]="capacity"
+          [disabled]="submitting"
+          min="1"
+          max="999"
+          step="1"
+        />
+      </div>
+
+      <!-- Skills -->
+      <div class="field">
+        <span class="field__label">Skills</span>
+        <div class="skills-grid">
+          <label
+            *ngFor="let skill of skillOptions"
+            class="skill-chip"
+            [class.selected]="selectedSkills[skill]"
+          >
+            <input
+              type="checkbox"
+              [checked]="selectedSkills[skill]"
+              [disabled]="submitting"
+              (change)="toggleSkill(skill)"
+            />
+            <span class="material-symbols-outlined chip-check">check</span>
+            {{ skill }}
+          </label>
+        </div>
+        <p class="field__hint">
+          {{ selectedSkillsList().length }} skill{{ selectedSkillsList().length !== 1 ? 's' : '' }} selected
+        </p>
+      </div>
+
+      <!-- Base location -->
+      <div class="field">
+        <span class="field__label">Base location (optional)</span>
+        <p class="field__hint field__hint--top">
+          Enter the vendor's primary operating location. Leave blank if unknown.
+        </p>
+        <div class="location-inputs">
+          <div class="location-field">
+            <label class="location-field__label" for="vendorLat">Latitude</label>
+            <input
+              id="vendorLat"
+              type="text"
+              class="field__input"
+              [(ngModel)]="latInput"
+              [disabled]="submitting"
+              placeholder="e.g. 29.7604"
+              inputmode="decimal"
+            />
+          </div>
+          <div class="location-field">
+            <label class="location-field__label" for="vendorLng">Longitude</label>
+            <input
+              id="vendorLng"
+              type="text"
+              class="field__input"
+              [(ngModel)]="lngInput"
+              [disabled]="submitting"
+              placeholder="e.g. -95.3698"
+              inputmode="decimal"
+            />
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <footer class="modal__footer">
+      <button
+        type="button"
+        class="btn btn-secondary"
+        [disabled]="submitting"
+        (click)="cancel()"
+      >
+        Cancel
+      </button>
+      <button
+        type="button"
+        class="btn btn-primary"
+        [disabled]="submitting"
+        (click)="submit()"
+      >
+        <span class="material-symbols-outlined" *ngIf="!submitting">save</span>
+        {{ submitting ? 'Saving…' : (isEdit ? 'Save changes' : 'Add vendor') }}
+      </button>
+    </footer>
+  </div>
+</div>

@@ -1,6 +1,6 @@
 import { Injectable } from '@angular/core';
-import { BehaviorSubject } from 'rxjs';
-import { forkJoin } from 'rxjs';
+import { BehaviorSubject, forkJoin, of } from 'rxjs';
+import { catchError } from 'rxjs/operators';
 import { ApiService } from '../../services/api.service';
 
 export interface TrialState {
@@ -16,6 +16,19 @@ export interface TrialState {
   cardLast4: string | null;
   cardExpMonth: number | null;
   cardExpYear: number | null;
+  /**
+   * Stripe subscription status from FN-1688 `GET /api/billing/subscription`,
+   * e.g. 'active' | 'past_due' | 'canceled' | 'trialing' | 'unpaid'. Null when
+   * the endpoint is unavailable (Story C not yet deployed) — the page degrades
+   * gracefully to trial-only state.
+   */
+  subscriptionStatus: string | null;
+  /** True when the subscription is set to cancel at the end of the current period. */
+  cancelAtPeriodEnd: boolean;
+  /** End of the current billing period (also the cancellation effective date). */
+  currentPeriodEnd: Date | null;
+  /** Next renewal date (null when cancelling at period end). */
+  nextRenewal: Date | null;
 }
 
 @Injectable({ providedIn: 'root' })
@@ -51,11 +64,15 @@ export class TrialStateService {
 
     forkJoin({
       status: this.api.getBillingTrialStatus(),
-      payment: this.api.getBillingPaymentMethod()
+      payment: this.api.getBillingPaymentMethod(),
+      // Resilient: FN-1688 subscription endpoint may not be deployed yet —
+      // a failure here must not blank out the trial/payment state.
+      subscription: this.api.getBillingSubscription().pipe(catchError(() => of(null)))
     }).subscribe({
-      next: ({ status, payment }) => {
+      next: ({ status, payment, subscription }) => {
         const s = status?.data || {};
         const p = payment?.data || {};
+        const sub = subscription?.data || subscription || {};
 
         this._state$.next({
           trialStatus: s.trial_status ?? null,
@@ -70,7 +87,11 @@ export class TrialStateService {
           cardBrand: p.brand ? String(p.brand) : null,
           cardLast4: p.last4 ? String(p.last4) : null,
           cardExpMonth: Number.isFinite(Number(p.expMonth)) ? Number(p.expMonth) : null,
-          cardExpYear: Number.isFinite(Number(p.expYear)) ? Number(p.expYear) : null
+          cardExpYear: Number.isFinite(Number(p.expYear)) ? Number(p.expYear) : null,
+          subscriptionStatus: sub.status ? String(sub.status) : null,
+          cancelAtPeriodEnd: Boolean(sub.cancelAtPeriodEnd),
+          currentPeriodEnd: sub.currentPeriodEnd ? new Date(sub.currentPeriodEnd) : null,
+          nextRenewal: sub.nextRenewal ? new Date(sub.nextRenewal) : null
         });
         this.fetchInProgress = false;
       },

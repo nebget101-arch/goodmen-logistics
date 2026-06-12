@@ -160,18 +160,117 @@ async function createSubscription(stripeCustomerId, stripePriceId) {
 /**
  * Cancel a subscription at the end of current billing period.
  * @param {string} stripeSubscriptionId Stripe subscription ID.
+ * @param {string} [idempotencyKey] Optional Stripe idempotency key for the write.
  * @returns {Promise<import('stripe').Stripe.Subscription>} Updated Stripe subscription.
  */
-async function cancelSubscription(stripeSubscriptionId) {
+async function cancelSubscription(stripeSubscriptionId, idempotencyKey) {
   try {
     assertStripeConfigured();
-    return await stripe.subscriptions.update(stripeSubscriptionId, {
-      cancel_at_period_end: true
-    });
+    return await stripe.subscriptions.update(
+      stripeSubscriptionId,
+      { cancel_at_period_end: true },
+      idempotencyKey ? { idempotencyKey } : undefined
+    );
   } catch (error) {
     throw stripeError('STRIPE_CANCEL_SUBSCRIPTION_FAILED', 'Failed to cancel subscription', error, {
       stripeSubscriptionId
     });
+  }
+}
+
+/**
+ * Create a Stripe Billing Customer Portal session and return its redirect URL.
+ * @param {string} stripeCustomerId Stripe customer ID.
+ * @param {string} returnUrl URL Stripe returns the customer to after the portal.
+ * @returns {Promise<{id: string, url: string}>}
+ */
+async function createBillingPortalSession(stripeCustomerId, returnUrl) {
+  try {
+    assertStripeConfigured();
+    const session = await stripe.billingPortal.sessions.create({
+      customer: stripeCustomerId,
+      return_url: returnUrl
+    });
+    return { id: session.id, url: session.url };
+  } catch (error) {
+    throw stripeError('STRIPE_PORTAL_SESSION_FAILED', 'Failed to create billing portal session', error, {
+      stripeCustomerId
+    });
+  }
+}
+
+/**
+ * Retrieve a subscription with its line-item prices expanded.
+ * @param {string} stripeSubscriptionId Stripe subscription ID.
+ * @returns {Promise<import('stripe').Stripe.Subscription>}
+ */
+async function getSubscription(stripeSubscriptionId) {
+  try {
+    assertStripeConfigured();
+    return await stripe.subscriptions.retrieve(stripeSubscriptionId, {
+      expand: ['items.data.price']
+    });
+  } catch (error) {
+    throw stripeError('STRIPE_GET_SUBSCRIPTION_FAILED', 'Failed to fetch subscription', error, {
+      stripeSubscriptionId
+    });
+  }
+}
+
+/**
+ * Change the base plan on a subscription with proration. Updates the existing
+ * base-plan line item (the item that is NOT the extra-seat add-on) to the new
+ * price and leaves any extra-seat item untouched.
+ * @param {string} stripeSubscriptionId Stripe subscription ID.
+ * @param {string} newPriceId Stripe Price ID for the target plan.
+ * @param {string|null} [extraSeatPriceId] Extra-seat add-on Price ID, so it is not mistaken for the base item.
+ * @param {string} [idempotencyKey] Optional Stripe idempotency key for the write.
+ * @returns {Promise<import('stripe').Stripe.Subscription>} Updated subscription.
+ */
+async function changePlan(stripeSubscriptionId, newPriceId, extraSeatPriceId = null, idempotencyKey) {
+  try {
+    assertStripeConfigured();
+    const sub = await stripe.subscriptions.retrieve(stripeSubscriptionId, { expand: ['items.data.price'] });
+    const items = sub.items?.data || [];
+    const baseItem = items.find((item) => !extraSeatPriceId || item.price?.id !== extraSeatPriceId) || items[0];
+
+    if (!baseItem) {
+      throw stripeError('STRIPE_CHANGE_PLAN_FAILED', 'Subscription has no plan item to change', null, {
+        stripeSubscriptionId
+      });
+    }
+
+    return await stripe.subscriptions.update(
+      stripeSubscriptionId,
+      {
+        items: [{ id: baseItem.id, price: newPriceId }],
+        proration_behavior: 'create_prorations'
+      },
+      idempotencyKey ? { idempotencyKey } : undefined
+    );
+  } catch (error) {
+    if (error?.code === 'STRIPE_CHANGE_PLAN_FAILED') throw error;
+    throw stripeError('STRIPE_CHANGE_PLAN_FAILED', 'Failed to change subscription plan', error, {
+      stripeSubscriptionId,
+      newPriceId
+    });
+  }
+}
+
+/**
+ * List a customer's Stripe invoices, most recent first.
+ * @param {string} stripeCustomerId Stripe customer ID.
+ * @param {number} [limit] Max invoices to return (1-100, default 24).
+ * @returns {Promise<import('stripe').Stripe.Invoice[]>}
+ */
+async function listInvoices(stripeCustomerId, limit = 24) {
+  try {
+    assertStripeConfigured();
+    const bounded = Math.min(100, Math.max(1, Math.floor(Number(limit) || 24)));
+    const result = await stripe.invoices.list({ customer: stripeCustomerId, limit: bounded });
+    return result?.data || [];
+  } catch (error) {
+    throw stripeError('STRIPE_LIST_INVOICES_FAILED', 'Failed to list invoices', error, { stripeCustomerId });
   }
 }
 
@@ -220,5 +319,9 @@ module.exports = {
   createSetupIntent,
   createSubscription,
   cancelSubscription,
+  createBillingPortalSession,
+  getSubscription,
+  changePlan,
+  listInvoices,
   applyExtraSeatPurchase
 };

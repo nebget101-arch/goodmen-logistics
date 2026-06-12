@@ -1,0 +1,10 @@
+{
+  "_comment": "Per-agent default scope for the autopilot routines. CLI args to /autopilot-tick override these. To activate a change, commit + push to dev.",
+  "_format": "Values are null (no scope) OR 'epic:FN-XXX' OR 'lane:<slug>'. Example: 'backend': 'epic:FN-1090' or 'frontend': 'lane:billing-redesign'.",
+  "_see_also": ".claude/skills/pick-next-task/SKILL.md §0 for full semantics.",
+  "_active_focus": "Roadside AI v2 — Epic 1: AI Triage Engine (FN-1140). Foundation epic; unblocks Voice Intake (FN-1144), Vision (FN-1147), Real-time Status (FN-1150). All 3 active agents focus here until Epic 1 is Done, then shift to the next active epic (likely FN-1153 Vendor Network or FN-1157 Driver Portal UX).",
+  "frontend": "epic:FN-1140",
+  "backend":  "epic:FN-1140",
+  "database": "epic:FN-1140",
+  "qa":       null
+}

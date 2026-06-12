@@ -1,0 +1,89 @@
+<section class="il" aria-label="Incident list" aria-live="polite" [attr.aria-busy]="loading">
+
+  <!-- Header + filter bar -->
+  <div class="il__header">
+    <h1 class="il__title">My Incidents</h1>
+
+    <div class="il__filters" role="group" aria-label="Filter by status">
+      <button
+        *ngFor="let opt of filterOptions"
+        class="il__filter-btn"
+        [class.il__filter-btn--active]="filterStatus === opt.value"
+        (click)="setFilter(opt.value)"
+        [attr.aria-pressed]="filterStatus === opt.value"
+        type="button"
+      >
+        {{ opt.label }}
+      </button>
+    </div>
+  </div>
+
+  <!-- Loading -->
+  <div *ngIf="loading" class="il__state il__state--loading" aria-label="Loading incidents">
+    <div class="il__spinner" aria-hidden="true"></div>
+    <p>Loading incidents…</p>
+  </div>
+
+  <!-- Error -->
+  <div *ngIf="!loading && error" class="il__state il__state--error" role="alert">
+    <p class="il__state-msg">{{ error }}</p>
+    <button class="il__retry-btn" (click)="reload()" type="button">
+      Retry
+    </button>
+  </div>
+
+  <!-- Empty -->
+  <div
+    *ngIf="!loading && !error && filteredIncidents.length === 0"
+    class="il__state il__state--empty"
+    role="status"
+  >
+    <p class="il__state-msg">No incidents found.</p>
+  </div>
+
+  <!-- Incident list -->
+  <ul
+    *ngIf="!loading && !error && filteredIncidents.length > 0"
+    class="il__list"
+    role="list"
+    aria-label="Incidents"
+  >
+    <li
+      *ngFor="let incident of filteredIncidents"
+      class="il__card"
+      role="listitem"
+    >
+      <div class="il__card-top">
+        <span
+          class="il__badge il__badge--{{ incident.status | lowercase }}"
+          [attr.aria-label]="'Status: ' + statusLabel(incident.status)"
+        >
+          {{ statusLabel(incident.status) }}
+        </span>
+        <time
+          class="il__time"
+          [attr.datetime]="incident.created_at"
+          [title]="incident.created_at"
+          [attr.aria-label]="'Opened ' + timeSince(incident.created_at)"
+        >
+          {{ timeSince(incident.created_at) }}
+        </time>
+      </div>
+
+      <p class="il__vehicle" *ngIf="incident.vehicle">
+        <span class="il__label" aria-hidden="true">Unit</span>
+        <strong>{{ incident.vehicle }}</strong>
+      </p>
+
+      <p class="il__description" *ngIf="incident.description">
+        {{ incident.description }}
+      </p>
+
+      <p class="il__location" *ngIf="incident.location">
+        <span class="il__label" aria-hidden="true">Location</span>
+        {{ incident.location }}
+      </p>
+    </li>
+  </ul>
+
+</section>

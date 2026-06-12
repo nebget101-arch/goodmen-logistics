@@ -14,6 +14,7 @@ const { buildAiRouter } = require('./routes/ai');
 const { buildSmartAlertsAggregator } = require('./services/smart-alerts-aggregator');
 const { MemoryDismissalsStore } = require('./services/dismissals-store');
 const { buildAlertsBroadcaster, makeSocketIoEmitter } = require('./services/alerts-ws');
+const { buildIncidentBroadcaster } = require('./services/incident-broadcaster');
 const { buildAlertsRouter } = require('./routes/alerts');
 const { buildAlertGrouper } = require('./services/alert-grouper');
 const { buildComplianceAlertsClient } = require('./services/compliance-alerts-client');
@@ -384,6 +385,10 @@ const dismissalsStore = new MemoryDismissalsStore();
 const alertsBroadcaster = buildAlertsBroadcaster({
   emit: makeSocketIoEmitter(() => ioInstance)
 });
+// FN-1240: incident broadcaster — wraps the same emitter for incident.state_changed events
+const incidentBroadcaster = buildIncidentBroadcaster({ // eslint-disable-line no-unused-vars
+  emit: makeSocketIoEmitter(() => ioInstance)
+});
 
 // FN-1330: Action Queue endpoint — merges Smart Alerts + Compliance Alerts
 // into one severity-ranked, grouped feed. Mounted before /api/dashboard
@@ -515,6 +520,9 @@ app.use(
 app.use('/api/parts', buildProxy(VEHICLES_MAINTENANCE_SERVICE_URL, 'vehicles'));
 app.use('/api/manufacturers', buildProxy(VEHICLES_MAINTENANCE_SERVICE_URL, 'vehicles'));
 app.use('/api/vendors', buildProxy(VEHICLES_MAINTENANCE_SERVICE_URL, 'vehicles'));
+// FN-1249: Roadside v2 vendor network — /api/logistics/vendors → logistics-service.
+// Must be registered before the generic /api/logistics catch-all (if any).
+app.use('/api/logistics/vendors', buildProxy(LOGISTICS_SERVICE_URL, 'logistics'));
 // Proxy /api/health, /api/health/db, /api/health/db/diagnostic to logistics (path can be /db when mounted)
 app.use(
   '/api/health',

@@ -1,0 +1,131 @@
+:host {
+  display: block;
+  width: 100%;
+}
+
+.status-timeline {
+  display: flex;
+  flex-direction: column;
+  padding: 0.25rem 0;
+}
+
+// ── Entry row ──────────────────────────────────────────────────────────────
+
+.status-timeline__entry {
+  display: flex;
+  gap: 0.75rem;
+  min-height: 2.75rem;
+}
+
+.status-timeline__entry--placeholder {
+  opacity: 0.45;
+}
+
+// ── Left rail (icon + connector line) ─────────────────────────────────────
+
+.status-timeline__rail {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex: 0 0 auto;
+  width: 1.75rem;
+}
+
+.status-timeline__icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.75rem;
+  height: 1.75rem;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: rgba(30, 41, 59, 0.95);
+  border: 1px solid rgba(71, 85, 105, 0.8);
+  color: rgba(148, 163, 184, 1);
+  font-size: 0.9rem;
+}
+
+.status-timeline__icon--pending {
+  color: rgba(100, 116, 139, 0.7);
+  border-color: rgba(71, 85, 105, 0.4);
+}
+
+.status-timeline__connector {
+  flex: 1 1 auto;
+  width: 1px;
+  min-height: 0.5rem;
+  background: rgba(71, 85, 105, 0.5);
+  margin: 2px 0;
+}
+
+.status-timeline__connector--dashed {
+  background: repeating-linear-gradient(
+    to bottom,
+    rgba(71, 85, 105, 0.4) 0,
+    rgba(71, 85, 105, 0.4) 4px,
+    transparent 4px,
+    transparent 8px
+  );
+}
+
+// ── Content area ──────────────────────────────────────────────────────────
+
+.status-timeline__content {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.25rem 0.5rem;
+  padding: 0.3rem 0 0.75rem;
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.status-timeline__label {
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: rgba(226, 232, 240, 1);
+  flex: 0 0 auto;
+}
+
+.status-timeline__label--pending {
+  color: rgba(100, 116, 139, 0.7);
+}
+
+.status-timeline__meta {
+  font-size: 0.78rem;
+  color: rgba(148, 163, 184, 1);
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.status-timeline__time {
+  font-size: 0.72rem;
+  color: rgba(100, 116, 139, 1);
+  flex: 0 0 auto;
+  margin-left: auto;
+}
+
+.status-timeline__actor {
+  font-size: 0.72rem;
+  color: rgba(100, 116, 139, 0.8);
+  flex: 0 0 100%;
+}
+
+// ── Empty state ────────────────────────────────────────────────────────────
+
+.status-timeline__empty {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 1rem 0.25rem;
+  font-size: 0.82rem;
+  color: rgba(100, 116, 139, 1);
+}
+
+.status-timeline__empty-icon {
+  font-size: 1.1rem;
+  opacity: 0.6;
+}

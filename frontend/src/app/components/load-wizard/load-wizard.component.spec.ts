@@ -322,6 +322,79 @@ describe('LoadWizardComponent (FN-862)', () => {
     });
   });
 
+  // ─── FN-1727: submit never silently no-ops ─────────────────────────────
+  describe('FN-1727 submit validation guard', () => {
+    beforeEach(() => {
+      component.mode = 'create';
+      // Land on the final step, as a user would when clicking Submit.
+      component.currentStepId = 'attachments';
+    });
+
+    it('(a) valid form on the final step calls createLoad', () => {
+      loadsService.createLoad.and.returnValue(of({ success: true, data: mockCreatedLoad }));
+
+      component.onSubmit();
+
+      expect(loadsService.createLoad).toHaveBeenCalledTimes(1);
+      expect(component.errorMessage).toBe('');
+    });
+
+    it('(b) an invalid earlier-step control blocks the API, sets an error, and jumps to that step', () => {
+      // Basics.rate is required — clearing it makes an *earlier*, non-visible
+      // step invalid while the user sits on the attachments step.
+      component.basics.get('rate')!.setValue(null);
+
+      component.onSubmit();
+
+      // No silent no-op: API is NOT called, an actionable error is shown, and
+      // the wizard navigates to the first invalid step with its fields touched.
+      expect(loadsService.createLoad).not.toHaveBeenCalled();
+      expect(component.errorMessage).toContain('highlighted fields');
+      expect(component.currentStepId).toBe('basics');
+      expect(component.basics.get('rate')!.touched).toBe(true);
+    });
+
+    it('jumps to the stops step when stops are the first invalid group', () => {
+      // Basics stays valid; drop below the 2-stop minimum to invalidate stops.
+      component.stops.removeAt(1);
+
+      component.onSubmit();
+
+      expect(loadsService.createLoad).not.toHaveBeenCalled();
+      expect(component.currentStepId).toBe('stops');
+      expect(component.errorMessage).toContain('highlighted fields');
+    });
+
+    it('keeps the Submit button enabled even when an earlier step is invalid (no dead button)', () => {
+      component.basics.get('rate')!.setValue(null);
+      // canProceed gates the shell Submit button; it must stay enabled so the
+      // click reaches onSubmit and produces feedback rather than doing nothing.
+      expect(component.canProceed).toBe(true);
+    });
+
+    it('renders the error banner in the DOM after jumping to the invalid step', () => {
+      component.basics.get('rate')!.setValue(null);
+
+      component.onSubmit();
+      fixture.detectChanges();
+
+      const banner = fixture.nativeElement.querySelector('[data-testid="submit-error"]');
+      expect(banner).toBeTruthy();
+      expect(banner.textContent).toContain('highlighted fields');
+    });
+
+    it('clears the validation banner once the user navigates to another step', () => {
+      component.basics.get('rate')!.setValue(null);
+      component.onSubmit();
+      expect(component.errorMessage).toContain('highlighted fields');
+
+      // Fix the field and move forward — the stale banner should clear.
+      component.basics.get('rate')!.setValue(1000);
+      component.onNext();
+      expect(component.errorMessage).toBe('');
+    });
+  });
+
   // ─── FN-867 / S7: Edit-mode prefill + updateLoad submit ────────────────
   describe('edit-mode prefill (FN-867)', () => {
     /** Build a fresh component instance in edit mode with the given hooks. */

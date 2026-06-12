@@ -43,6 +43,9 @@ const authMiddleware = require('@goodmen/shared/middleware/auth-middleware');
 const tenantContextMiddleware = require('@goodmen/shared/middleware/tenant-context-middleware');
 const { loadUserRbac } = require('@goodmen/shared/middleware/rbac-middleware');
 const requirePlanAccess = require('@goodmen/shared/middleware/plan-access-middleware');
+// FN-1694: block expired-no-card / past-grace tenants (after tenant context,
+// before plan checks). super_admin + billing routes exempt.
+const requireActiveSubscription = require('@goodmen/shared/middleware/trial-enforcement-middleware')();
 
 const { buildTrendCache } = require('./services/trend-cache');
 const { buildTrendAggregator } = require('./services/trend-aggregator');
@@ -53,9 +56,9 @@ const requireReportsPlan = requirePlanAccess('/reports');
 app.get('/api-docs-json', (_req, res) => res.json(swaggerSpec));
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 
-app.use('/api/dashboard', authMiddleware, tenantContextMiddleware, dashboardRouter);
-app.use('/api/reports', authMiddleware, tenantContextMiddleware, requireReportsPlan, reportsRouter);
-app.use('/api/audit', authMiddleware, tenantContextMiddleware, loadUserRbac, auditRouter);
+app.use('/api/dashboard', authMiddleware, tenantContextMiddleware, requireActiveSubscription, dashboardRouter);
+app.use('/api/reports', authMiddleware, tenantContextMiddleware, requireActiveSubscription, requireReportsPlan, reportsRouter);
+app.use('/api/audit', authMiddleware, tenantContextMiddleware, requireActiveSubscription, loadUserRbac, auditRouter);
 
 // FN-1306: Predictive Insights & Trends — relocated from gateway. Caches per-tenant
 // trend bundles for 10 min in-memory; sparse-data tolerant (returns nulls, not errors).

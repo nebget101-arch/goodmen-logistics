@@ -12,7 +12,15 @@ You are the TPM. Decompose the given requirement into actionable Jira work items
 - **Jira Cloud ID**: `aff43a9d-6456-476c-9aa5-1b3da163f242`
 - **Jira Project Key**: `FN`
 - **Transition IDs**: Selected for Development=`21`, In Progress=`31`, Done=`41`
-- **Agent labels**: `agent:frontend`, `agent:backend`, `agent:ai`, `agent:database`, `agent:devops`, `agent:qa`
+- **Agent labels**: `agent:frontend`, `agent:backend`, `agent:database`, `agent:devops`, `agent:qa` (AI-service work falls under `agent:backend`)
+
+## Jira issue-creation rules (always apply)
+- Always search Jira (project = FN) before creating any issue — avoid duplicates.
+- Always confirm with the user before bulk-creating more than 5 issues in one pass.
+- Always link subtasks → stories → epics via the `parent` field on `createJiraIssue`, and use `createIssueLink` (type `Blocks`) for cross-story dependencies.
+- Always use the issue templates from `.agent/tpm/system_prompt.md`.
+- Always reference actual file paths from this repo in descriptions (e.g., `frontend/src/app/loads/loads.component.ts`), not made-up paths.
+- Read recent `git log` before analyzing scope so the breakdown reflects current state, not stale assumptions.
 
 ## Steps
 
@@ -29,15 +37,49 @@ You are the TPM. Decompose the given requirement into actionable Jira work items
 ### 2. Create Jira Breakdown
 For each work item, create a Jira issue in project **FN** with:
 - **Epic**: Top-level feature/initiative (no agent label — epics are containers)
-- **Story**: User-facing deliverable (assign agent type via label: `agent:frontend`, `agent:backend`, `agent:ai`, `agent:database`, `agent:devops`)
+- **Story**: User-facing deliverable (assign agent type via label: `agent:frontend`, `agent:backend`, `agent:database`)
 - **Subtask**: Technical sub-unit under a story. **Each subtask MUST have an agent label** so it can be independently picked:
-  - Implementation subtasks: `agent:frontend`, `agent:backend`, `agent:ai`, `agent:database`, `agent:devops`
+  - Implementation subtasks: `agent:frontend`, `agent:backend`, `agent:database`
   - QA subtasks: `agent:qa` — for validation/testing work
+- **AI-service work AND infra/Docker/Render/env work** both fall under `agent:backend` — there are no `agent:ai` or `agent:devops` labels. The autopilot blocklist still prevents auto-merge of ai-service and infra changes, so those PRs reach Code Review but wait for human merge.
 - **Bug**: Defect found during analysis
 
 Use the Jira MCP tools:
 - `createJiraIssue` for each item (use `parent` field to link subtasks to stories, stories to epics)
 - `createIssueLink` for cross-story dependencies (use "Blocks" link type)
+
+### 2.5 Swimlane Lane-Label Propagation
+
+Every Story and Subtask MUST inherit the parent Epic's `epic:*` lane label so new work lands in the correct board swimlane automatically. The FN board has swimlanes wired to JQL `labels = "epic:<slug>"` — without this propagation, items fall into the default lane and need to be hand-tagged.
+
+**Lane registry (source of truth — keep current):**
+
+| Parent Epic(s) | Lane Label | Swimlane |
+|----------------|-----------|----------|
+| FN-1090 | `epic:quick-add-part` | Parts Catalog |
+| FN-1122 | `epic:control-center` | AI Control Center |
+| FN-1113 | `epic:reports-center` | AI Reports Center |
+| FN-1140, FN-1144, FN-1147, FN-1150, FN-1153, FN-1157, FN-1158, FN-1162, FN-1164, FN-1168 | `epic:roadside-v2` | Roadside AI v2 |
+| FN-1321 | `epic:control-center-redesign` | Control Center Redesign |
+| FN-1351 | `epic:ux-redesign` | UX Redesign |
+| FN-1379, FN-1652 | `epic:fleet-equipment-redesign` | Fleet Equipment Redesign |
+| FN-1411 | `epic:fmcsa-reference` | FMCSA Reference Dataset |
+| FN-1429 | `epic:ai-tools-phase-1` | AI Tools Phase 1 |
+| FN-1477 | `epic:warehouse-receiving` | Warehouse Receiving Redesign |
+| FN-1515 | `epic:wo-create-fixes` | Work Order Page Bug Bash |
+| FN-679 | `epic:locations-admin` | Locations Admin |
+| FN-1583 | `epic:loads-import` | Loads Spreadsheet Import |
+| FN-1617 | `epic:ai-tools-phase-2` | AI Tools Phase 2 |
+| FN-1685 | `epic:billing-redesign` | Billing & Subscription |
+| FN-1701 | `epic:session-management` | Session Management |
+
+**Propagation rule:**
+- Before creating a **Story** under an Epic: read the Epic's `labels`, find any `epic:*` label, and include it in the Story's `labels` array (alongside the `agent:*` label).
+- Before creating a **Subtask** under a Story: include any `epic:*` label that's on the Story (or look up the grandparent Epic if absent).
+- If the parent Epic has multiple `epic:*` labels, copy them all.
+- If the parent Epic has **none**: stop and ask the user to register the lane — add a row to the registry above, apply the label to the Epic, then resume.
+
+**New Epic creation:** when intake creates a *new* Epic, propose a lane label following the `epic:<short-slug>` convention, add it to the new Epic's labels, and add a row to the registry table in this file in the same change.
 
 ### 3. Subtask Guidelines
 
@@ -47,39 +89,37 @@ Splitting a single agent's work across multiple subtasks (e.g. "Create component
 
 **Default subtask shape for a story:**
 - **At most ONE `agent:frontend` subtask** — covers ALL frontend work for the story (components, services, routing, styles, unit specs).
-- **At most ONE `agent:backend` subtask** — covers ALL backend work for the story (routes, controllers, services, middleware, validation).
+- **At most ONE `agent:backend` subtask** — covers ALL backend work for the story (routes, controllers, services, middleware, validation). **Also covers AI-service work** (`backend/microservices/ai-service/`) **AND infra/Docker/Render/env work** (`infra/`, `docker-compose*.yml`, `render.yaml`, `.env*`, `docs/runbooks/`) — there are no separate AI or DevOps subtasks.
 - **At most ONE `agent:database` subtask** — only if schema/migration/seed work is needed.
-- **At most ONE `agent:devops` subtask** — only if infra/Docker/Render/env config is needed.
-- **At most ONE `agent:ai` subtask** — only if AI service work is needed.
-- **Exactly ONE `agent:qa` subtask** — always included, covers all validation/evidence for the story.
+- **`agent:qa` subtask is OPTIONAL** — only create it when Cypress/Karate/k6 automation tests must be written as part of this story. **By default, do NOT create a QA subtask** — the user tests manually after the story PR reaches Code Review.
 
 If the scope genuinely exceeds what one agent can reasonably deliver in a single pass, that is a signal to **split the Story**, not to fan out subtasks. Create a second Story and sequence them with a "Blocks" link.
 
 **Do not create multiple subtasks of the same agent type under one story.** If you catch yourself writing `FN-102 (frontend): component` and `FN-103 (frontend): service`, collapse them into one frontend subtask.
 
+### 3a. Story Shape Classification (single-agent fast path vs integration-branch)
+
+After deciding the subtask shape, classify the story by **non-QA subtask count**:
+
+- **0 non-QA subtasks** → **Standalone story**. No subtasks at all. Branch directly off `origin/dev`; one PR off that branch.
+- **1 non-QA subtask** → **Single-agent story** (the common case after dropping mandatory QA). The single subtask branches **off `origin/dev` directly**. No integration branch. The subtask branch IS the PR head when `/create-pr` runs.
+- **2+ non-QA subtasks** → **Multi-agent story**. Integration-branch model applies: subtasks branch off `origin/integration/FN-STORY`, ff-merge into it, final PR is `integration/FN-STORY → dev`.
+
+A QA automation subtask, when present, follows the parent story's classification. It is treated as a sibling for branching base but is excluded from the count that decides single-vs-multi shape.
+
+**Stamp the classification into the story doc** (in the `## Integration Branch` field — see Section 5 template). Implement-ticket and create-pr read this field, but also re-verify by counting subtasks at runtime. If the doc says single-agent and a 2nd impl subtask appears later, implement-ticket will STOP with a "story shape changed — split the story or migrate manually" message rather than guess.
+
 **Other requirements:**
-- QA subtasks should describe what to validate and what evidence to capture. If automation tests are needed, specify that in the description.
+- If a QA subtask is created (only when automation is required), its description must specify exactly which test files/suites it will add (`cypress/e2e/*.cy.ts`, `karate/features/*.feature`, etc.). If no automation is needed, do not create a QA subtask — leave manual validation to the user.
 - Subtask branch naming: `<agent>/FN-XXX/<slug>` where FN-XXX is the subtask key
 - **Subtasks branch off `origin/integration/FN-STORY`, NOT `origin/dev`** (integration-branch model — see CLAUDE.md)
 - The integration branch `integration/FN-STORY` is created by the first implementing agent if it doesn't exist; intake just declares its name in the story doc
-
-**Each subtask MUST declare expected Files Touched in its Jira description.** This is consumed by `/pick-next-task` for cross-task conflict detection. Add this section to every subtask description:
-
-```
-## Files Touched (expected)
-- src/app/feature/foo.component.ts
-- src/app/feature/foo.service.ts
-- services/load-service/routes/foo.js
-- (paths or glob patterns; be honest about shared files like modules, routing, index.ts)
-```
-
-The list does not need to be exhaustive — it's a conflict-detection signal. If two subtasks declare overlapping files, `/pick-next-task` will refuse to pick the second one while the first is in progress, forcing serial execution. If you have no files to declare (e.g., pure config), write `_none_`.
 
 ### 4. Define Dependencies
 - Identify which stories/subtasks must complete before others can start
 - Create "Blocks" links between dependent issues
 - **Avoid internal subtask chains.** With one subtask per agent type, cross-agent dependencies should be rare. Only link backend → frontend if the frontend subtask literally cannot start without the backend contract (and even then, prefer defining the API shape up front in the story doc so both can start in parallel).
-- The QA subtask is always blocked by all implementation subtasks under the same story.
+- If a QA subtask exists (automation case only), it is blocked by all implementation subtasks under the same story. In the default no-QA-subtask case, the story moves to Code Review as soon as all implementation subtasks are Done, and the user takes over for manual testing.
 - Document the dependency chain in the story doc
 
 ### 5. Create Story Doc Stubs
@@ -98,17 +138,23 @@ For each Story, create `docs/stories/FN-XXX.md` using this template:
 - FN-YYY (must complete first)
 
 ## Agent
-[frontend | backend | ai | database | devops]
+[frontend | backend | database]
 
 ## Integration Branch
-`integration/FN-XXX` (created by first subtask agent from `origin/dev`; subtasks branch off this; story PR merges to `dev`)
+<!--
+Fill ONE of the following based on Story Shape Classification (intake skill §3a):
+  - "_none — standalone story, no subtasks. Branch off origin/dev."
+  - "_none — single-agent story. Subtask branches off origin/dev; subtask branch IS the PR head."
+  - "integration/FN-XXX (created by first subtask agent from origin/dev; subtasks branch off this; story PR merges to dev)"
+-->
+_none — single-agent story. Subtask branches off `origin/dev`; subtask branch IS the PR head._
 
 ## Subtasks
-| Key | Summary | Agent | Branch | Files Touched | Status |
-|-----|---------|-------|--------|---------------|--------|
-| FN-AAA | [subtask description] | frontend | `frontend/FN-AAA/<slug>` | `src/app/foo/**` | Pending |
-| FN-BBB | [subtask description] | backend | `backend/FN-BBB/<slug>` | `services/load-service/routes/foo.js` | Pending |
-| FN-CCC | QA validation | qa | _manual_ | — | Pending |
+| Key | Summary | Agent | Branch | Status |
+|-----|---------|-------|--------|--------|
+| FN-AAA | [subtask description] | frontend | `frontend/FN-AAA/<slug>` | Pending |
+| FN-BBB | [subtask description] | backend | `backend/FN-BBB/<slug>` | Pending |
+<!-- Manual testing: user verifies in browser after PR reaches Code Review. Add a QA subtask row only if automation tests are required for this story. -->
 
 ## Implementation Summary
 _To be filled by implementing agent_
@@ -144,7 +190,7 @@ _To be filled by QA_
 - Epic stays In Progress until ALL stories are Done, then auto-transition to Done
 
 ### 8. Output Summary
-Print a summary table. Note the shape: ONE subtask per agent type (no splitting frontend into multiple subtasks).
+Print a summary table. Note the shape: ONE subtask per agent type (no splitting frontend into multiple subtasks). No QA subtask by default — user tests manually after Code Review.
 ```
 | Jira Key | Type    | Summary                    | Agent    | Parent  | Dependencies | Status           |
 |----------|---------|----------------------------|----------|---------|-------------|------------------|
@@ -152,7 +198,8 @@ Print a summary table. Note the shape: ONE subtask per agent type (no splitting 
 | FN-101   | Story   | User-facing work           | frontend | FN-100  | None        | Backlog          |
 | FN-102   | Subtask | Frontend implementation    | frontend | FN-101  | None        | Selected for Dev |
 | FN-103   | Subtask | Backend implementation     | backend  | FN-101  | None        | Selected for Dev |
-| FN-104   | Subtask | QA validation              | qa       | FN-101  | FN-102,103  | Blocked          |
 ```
+
+If automation tests are explicitly required for the story (e.g., new Cypress flow, new Karate suite), add ONE `agent:qa` subtask blocked by the implementation subtasks. Otherwise, omit — the user validates manually after the story PR reaches Code Review.
 
 If you find yourself about to add `FN-105 | Subtask | Frontend styling | frontend`, STOP — roll it into FN-102 instead.
