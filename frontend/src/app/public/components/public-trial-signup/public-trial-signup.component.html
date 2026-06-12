@@ -40,8 +40,9 @@
 
     <div class="signup-card signup-status" *ngIf="!loading && !loadingError && signupCompleted">
       <span class="material-symbols-outlined signup-status-icon success">check_circle</span>
-      <h1>Account already activated</h1>
-      <p>Your trial account is ready. Sign in to continue.</p>
+      <h1>Your account is ready</h1>
+      <p>Sign in with the username below (or your email) and the password you just set.</p>
+      <div class="signup-account-label" *ngIf="createdUsername">Your username</div>
       <div class="signup-account-chip" *ngIf="createdUsername">
         <span class="material-symbols-outlined">person</span>
         <span>{{ createdUsername }}</span>

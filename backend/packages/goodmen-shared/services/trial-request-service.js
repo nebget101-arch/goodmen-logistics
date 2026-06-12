@@ -440,7 +440,10 @@ async function completeSignupFromToken(token, payload = {}) {
         first_name: firstName,
         last_name: lastName,
         email: normalizedEmail,
-        tenant_id: tenant.id
+        tenant_id: tenant.id,
+        // FN-1730: set explicitly so a new trial admin is never blocked by a
+        // non-default `is_active` value at login (auth.js returns 403 when false).
+        is_active: true
       })
       .returning(['id', 'username', 'email', 'role']);
 
