@@ -159,6 +159,19 @@
       (submit)="onSubmit()"
       (close)="onClose()"
     >
+      <!-- FN-1727: global submit/validation banner — rendered above every step
+           body so the "complete the highlighted fields" message and create
+           failures are visible no matter which step the user is jumped to. -->
+      <div
+        class="submit-error submit-error--global"
+        *ngIf="errorMessage"
+        role="alert"
+        aria-live="assertive"
+        data-testid="submit-error"
+      >
+        {{ errorMessage }}
+      </div>
+
       <!-- ── Step bodies ────────────────────────────────────────────────── -->
       <ng-container [ngSwitch]="currentStepId">
         <app-load-wizard-basics
@@ -254,10 +267,9 @@
               (existingDeleted)="onExistingDeleted($event)"
             ></app-load-wizard-attachments>
 
-            <div class="submit-error" *ngIf="errorMessage" role="alert" data-testid="submit-error">
-              {{ errorMessage }}
-            </div>
-
+            <!-- FN-1727: the submit/validation error now renders in the shared
+                 banner above the step body (so it shows on any jumped-to step).
+                 Only the in-step "saving…" hint remains here. -->
             <div class="submitting-hint" *ngIf="submitting" aria-live="polite">
               {{ mode === 'edit' ? 'Saving changes…' : 'Saving load…' }}
             </div>
