@@ -17,7 +17,7 @@ const http = require('http');
  */
 
 const telemetry = require('./vehicle-telemetry');
-const { buildMockTelemetry } = telemetry;
+const { buildMockTelemetry, CITY_CATALOG } = telemetry;
 
 const FIXED_NOW = new Date('2026-06-12T12:00:00.000Z');
 const VALID_SEVERITIES = new Set(['low', 'medium', 'high']);
@@ -55,9 +55,9 @@ describe('buildMockTelemetry (FN-1752 deterministic mock generator)', () => {
   it('returns the full provider-agnostic contract shape', () => {
     const t = buildMockTelemetry({ id: 'veh-1', unit_number: 'T-100' }, FIXED_NOW);
     for (const key of [
-      'vehicle_id', 'latitude', 'longitude', 'speed_mph', 'heading_deg',
-      'fuel_level_pct', 'odometer', 'engine_status', 'last_moved_at',
-      'fault_codes', 'updated_at', 'source'
+      'vehicle_id', 'latitude', 'longitude', 'city', 'state', 'speed_mph',
+      'heading_deg', 'fuel_level_pct', 'odometer', 'engine_status',
+      'last_moved_at', 'fault_codes', 'updated_at', 'source'
     ]) {
       assert.ok(Object.prototype.hasOwnProperty.call(t, key), `missing key: ${key}`);
     }
@@ -65,6 +65,8 @@ describe('buildMockTelemetry (FN-1752 deterministic mock generator)', () => {
     assert.strictEqual(t.source, 'mock');
     assert.strictEqual(t.updated_at, FIXED_NOW.toISOString());
     assert.ok(Array.isArray(t.fault_codes));
+    assert.ok(typeof t.city === 'string' && t.city.length > 0, 'city must be a non-empty string');
+    assert.ok(/^[A-Z]{2}$/.test(t.state), `state must be 2-letter, got: ${t.state}`);
   });
 
   it('is deterministic — identical position/fuel/faults for the same vehicle regardless of clock', () => {
@@ -80,6 +82,8 @@ describe('buildMockTelemetry (FN-1752 deterministic mock generator)', () => {
     assert.strictEqual(a.heading_deg, b.heading_deg);
     assert.strictEqual(a.speed_mph, b.speed_mph);
     assert.deepStrictEqual(a.fault_codes, b.fault_codes);
+    assert.strictEqual(a.city, b.city);
+    assert.strictEqual(a.state, b.state);
   });
 
   it('seeds from unit_number when present, else the id', () => {
@@ -107,6 +111,24 @@ describe('buildMockTelemetry (FN-1752 deterministic mock generator)', () => {
       }
       // last_moved_at is always in the past relative to updated_at.
       assert.ok(new Date(t.last_moved_at).getTime() <= new Date(t.updated_at).getTime());
+    }
+  });
+
+  it('anchors every vehicle to a real catalog city with coords inside the US box', () => {
+    const byName = new Map(CITY_CATALOG.map((c) => [c.city, c]));
+    for (let i = 0; i < 200; i++) {
+      const t = buildMockTelemetry({ id: `city-${i}` }, FIXED_NOW);
+      assert.ok(typeof t.city === 'string' && t.city.length > 0, `bad city: ${t.city}`);
+      assert.ok(/^[A-Z]{2}$/.test(t.state), `bad state: ${t.state}`);
+      // city/state must be a real catalog entry (not fabricated)
+      const entry = byName.get(t.city);
+      assert.ok(entry, `city not in catalog: ${t.city}`);
+      assert.strictEqual(t.state, entry.state, `state mismatch for ${t.city}`);
+      // coords must be the jittered catalog coords (±0.03°) and inside the US box
+      assert.ok(Math.abs(t.latitude - entry.lat) <= 0.031, `lat jitter too large for ${t.city}`);
+      assert.ok(Math.abs(t.longitude - entry.lng) <= 0.031, `lng jitter too large for ${t.city}`);
+      assert.ok(t.latitude >= 31 && t.latitude <= 44, `lat out of box: ${t.latitude}`);
+      assert.ok(t.longitude >= -118 && t.longitude <= -68, `lng out of box: ${t.longitude}`);
     }
   });
 
