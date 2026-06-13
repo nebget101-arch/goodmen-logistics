@@ -1,5 +1,4 @@
 const PDFDocument = require('pdfkit');
-const path = require('path');
 const fs = require('fs');
 
 // White background theme; dark text for readability
@@ -34,7 +33,7 @@ function formatMoney(value) {
   return num.toFixed(2);
 }
 
-function buildInvoicePdf({ invoice, customer, location, workOrder, vehicle, lineItems, payments }) {
+function buildInvoicePdf({ invoice, customer, location, workOrder, vehicle, lineItems, payments, logoBuffer }) {
   return new Promise((resolve, reject) => {
     const doc = new PDFDocument({ size: 'LETTER', margin: 40 });
     const chunks = [];
@@ -51,9 +50,28 @@ function buildInvoicePdf({ invoice, customer, location, workOrder, vehicle, line
     doc.rect(0, 0, doc.page.width, doc.page.height).fill(theme.bg);
 
     // ----- Header: left = Invoice # + Service location; right = Status, Issued, Due, Payment terms -----
-    const logoPath = process.env.INVOICE_LOGO_PATH || path.join(__dirname, '..', 'assets', 'logo.png');
-    if (logoPath && fs.existsSync(logoPath)) {
-      doc.image(logoPath, startX, y, { width: 80 });
+    // Logo resolution (FN-1748): prefer a DB-resolved buffer pulled from R2 by the
+    // invoices route (location logo → tenant fallback). INVOICE_LOGO_PATH is demoted
+    // to a dev-only fallback for local rendering when no DB logo is provided. Embedding
+    // is best-effort: a corrupt/unsupported image must never break invoice generation.
+    let logoRendered = false;
+    if (logoBuffer && Buffer.isBuffer(logoBuffer) && logoBuffer.length) {
+      try {
+        doc.image(logoBuffer, startX, y, { width: 80 });
+        logoRendered = true;
+      } catch (err) {
+        logoRendered = false;
+      }
+    }
+    if (!logoRendered) {
+      const devLogoPath = process.env.INVOICE_LOGO_PATH;
+      if (devLogoPath && fs.existsSync(devLogoPath)) {
+        try {
+          doc.image(devLogoPath, startX, y, { width: 80 });
+        } catch (err) {
+          // non-fatal: continue with the no-logo layout
+        }
+      }
     }
 
     const headerLeftW = pageWidth * 0.5;
