@@ -21,7 +21,7 @@ const http = require('http');
 // ─── In-memory knex stub ────────────────────────────────────────────────────
 
 function makeState() {
-  return { geofences: [], geofence_triggers: [], seq: 0 };
+  return { geofences: [], geofence_triggers: [], geofence_trigger_recipients: [], seq: 0 };
 }
 
 function matchesEq(row, conds) {
@@ -506,6 +506,7 @@ describe('geofence trigger management (FN-1665)', () => {
   beforeEach(() => {
     state.geofences = [];
     state.geofence_triggers = [];
+    state.geofence_trigger_recipients = [];
     state.seq = 0;
   });
 
@@ -564,5 +565,100 @@ describe('geofence trigger management (FN-1665)', () => {
       body: { eventKind: 'enter', action: 'notify' },
     });
     assert.strictEqual(missing.status, 404);
+  });
+
+  // ─── FN-1758: notify-trigger recipients ────────────────────────────────────
+
+  it('creates a geofence with a notify trigger carrying recipients (round-trips on GET)', async () => {
+    const create = await request(server, {
+      method: 'POST',
+      path: '/api/geofences',
+      headers: auth,
+      body: {
+        ...CIRCLE,
+        triggers: [
+          {
+            eventKind: 'exit',
+            action: 'notify',
+            recipients: [
+              { recipientType: 'user', userId: 'user-1', channel: 'both' },
+              { recipientType: 'email', email: 'ops@acme.com', channel: 'email' },
+              { recipientType: 'broker', brokerId: 'broker-1', channel: 'email' },
+            ],
+          },
+        ],
+      },
+    });
+    assert.strictEqual(create.status, 201);
+    const trigger = create.body.triggers[0];
+    assert.strictEqual(trigger.recipients.length, 3);
+
+    // GET returns the recipients in the wire shape.
+    const got = await request(server, { method: 'GET', path: `/api/geofences/${create.body.id}`, headers: auth });
+    assert.strictEqual(got.status, 200);
+    const recipients = got.body.triggers[0].recipients;
+    const byType = Object.fromEntries(recipients.map((r) => [r.recipientType, r]));
+    assert.strictEqual(byType.user.userId, 'user-1');
+    assert.strictEqual(byType.user.channel, 'both');
+    assert.strictEqual(byType.email.email, 'ops@acme.com');
+    assert.strictEqual(byType.broker.brokerId, 'broker-1');
+    // identity fields not relevant to the type are null
+    assert.strictEqual(byType.user.email, null);
+    assert.strictEqual(byType.email.userId, null);
+  });
+
+  it('adds a trigger with recipients, then replaces them on update', async () => {
+    const gf = await createCircle();
+
+    const add = await request(server, {
+      method: 'POST',
+      path: `/api/geofences/${gf.id}/triggers`,
+      headers: auth,
+      body: {
+        eventKind: 'enter',
+        action: 'notify',
+        recipients: [{ recipientType: 'email', email: 'first@acme.com', channel: 'email' }],
+      },
+    });
+    assert.strictEqual(add.status, 201);
+    assert.strictEqual(add.body.recipients.length, 1);
+    assert.strictEqual(add.body.recipients[0].email, 'first@acme.com');
+
+    const upd = await request(server, {
+      method: 'PUT',
+      path: `/api/geofences/${gf.id}/triggers/${add.body.id}`,
+      headers: auth,
+      body: {
+        eventKind: 'enter',
+        action: 'notify',
+        recipients: [
+          { recipientType: 'email', email: 'second@acme.com', channel: 'both' },
+          { recipientType: 'user', userId: 'user-9', channel: 'in_app' },
+        ],
+      },
+    });
+    assert.strictEqual(upd.status, 200);
+    assert.strictEqual(upd.body.recipients.length, 2, 'recipient set fully replaced');
+    const emails = upd.body.recipients.filter((r) => r.recipientType === 'email');
+    assert.strictEqual(emails[0].email, 'second@acme.com');
+  });
+
+  it('rejects an invalid recipient (400) — bad type / missing identity / bad channel', async () => {
+    const gf = await createCircle();
+    const cases = [
+      { recipientType: 'nope', userId: 'u' },
+      { recipientType: 'user' }, // missing userId
+      { recipientType: 'email', email: 'not-an-email' },
+      { recipientType: 'broker', brokerId: 'b', channel: 'sms' }, // bad channel
+    ];
+    for (const recipient of cases) {
+      const res = await request(server, {
+        method: 'POST',
+        path: `/api/geofences/${gf.id}/triggers`,
+        headers: auth,
+        body: { eventKind: 'enter', action: 'notify', recipients: [recipient] },
+      });
+      assert.strictEqual(res.status, 400, `expected 400 for ${JSON.stringify(recipient)}`);
+    }
   });
 });

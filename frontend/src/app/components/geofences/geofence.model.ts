@@ -17,6 +17,12 @@ export type GeofenceEventKind = 'enter' | 'exit' | 'dwell';
 /** Action a trigger fires when its event occurs. */
 export type GeofenceTriggerAction = 'notify' | 'update_load_status' | 'webhook';
 
+/** Category of a `notify` recipient — drives which identity field is set. */
+export type GeofenceRecipientType = 'user' | 'email' | 'broker';
+
+/** Delivery channel for a `notify` recipient (no SMS — FN-1755). */
+export type GeofenceRecipientChannel = 'email' | 'in_app' | 'both';
+
 /** A single WGS-84 coordinate. */
 export interface LatLng {
   lat: number;
@@ -25,6 +31,27 @@ export interface LatLng {
 
 /** Maximum number of vertices allowed for a polygon geofence (AC: ≤ 40). */
 export const MAX_POLYGON_VERTICES = 40;
+
+/**
+ * A single recipient of a `notify` trigger. Exactly one identity field is
+ * populated, matching `recipientType`:
+ *   - `user`   → `userId`   (inside the org — in-app bell + account email)
+ *   - `email`  → `email`    (outside the org — external address, email only)
+ *   - `broker` → `brokerId` (outside the org — broker contact, load-context email)
+ *
+ * Wire shape is camelCase to match the rest of the geofence trigger contract;
+ * the backend dispatch subtask (FN-1758) maps these to the
+ * `geofence_trigger_recipients` columns (recipient_type, user_id, email,
+ * broker_id, channel).
+ */
+export interface GeofenceTriggerRecipient {
+  id?: string;
+  recipientType: GeofenceRecipientType;
+  userId?: string | null;
+  email?: string | null;
+  brokerId?: string | null;
+  channel: GeofenceRecipientChannel;
+}
 
 /** A trigger attached to a geofence. */
 export interface GeofenceTrigger {
@@ -37,6 +64,8 @@ export interface GeofenceTrigger {
   action: GeofenceTriggerAction;
   /** Required when `action === 'webhook'`. */
   targetUrl?: string | null;
+  /** Only meaningful when `action === 'notify'` — who gets alerted and how. */
+  recipients?: GeofenceTriggerRecipient[];
 }
 
 /** A persisted geofence as returned by the API. */
@@ -82,4 +111,19 @@ export interface GeofenceListFilters {
 export interface GeofenceListResponse {
   data: Geofence[];
   meta?: { total?: number };
+}
+
+/** Minimal internal-user shape needed to populate the `user` recipient picker. */
+export interface GeofenceRecipientUser {
+  id: string;
+  /** Display name (full name, falling back to username / email). */
+  name: string;
+  email?: string | null;
+}
+
+/** Minimal broker shape needed to populate the `broker` recipient picker. */
+export interface GeofenceRecipientBroker {
+  id: string;
+  /** Display label (name + location/MC where available). */
+  name: string;
 }

@@ -36,6 +36,10 @@ function getDb() {
 const GEOFENCE_KINDS = ['circle', 'polygon'];
 const TRIGGER_EVENT_KINDS = ['enter', 'exit', 'dwell'];
 const TRIGGER_ACTIONS = ['notify', 'update_load_status', 'webhook'];
+// FN-1758: notify-trigger recipients (geofence_trigger_recipients).
+const TRIGGER_RECIPIENT_TYPES = ['user', 'email', 'broker'];
+const RECIPIENT_CHANNELS = ['email', 'in_app', 'both'];
+const DEFAULT_RECIPIENT_CHANNEL = 'both';
 const MAX_POLYGON_VERTICES = 40;
 const EARTH_RADIUS_M = 6371008.8; // mean Earth radius (meters), matches GeoJSON tooling
 
@@ -241,12 +245,51 @@ function validateTrigger(trigger, index) {
       errors.push(`${prefix}.targetUrl must be an http(s) URL when action is 'webhook'`);
     }
   }
+  if (trigger.recipients !== undefined) {
+    errors.push(...validateRecipients(trigger.recipients, prefix));
+  }
   return errors;
 }
 
 function validateTriggers(triggers) {
   if (!Array.isArray(triggers)) return ['triggers must be an array'];
   return triggers.flatMap((t, i) => validateTrigger(t, i));
+}
+
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+/**
+ * Validate one wire recipient (FN-1758). Exactly one identity field must be
+ * set, matching recipient_type: user→userId, email→email, broker→brokerId.
+ * channel is optional and defaults to 'both'.
+ */
+function validateRecipient(recipient, label) {
+  const prefix = label || 'recipient';
+  const errors = [];
+  if (!recipient || typeof recipient !== 'object' || Array.isArray(recipient)) {
+    return [`${prefix} must be an object`];
+  }
+  if (!TRIGGER_RECIPIENT_TYPES.includes(recipient.recipientType)) {
+    errors.push(`${prefix}.recipientType must be one of: ${TRIGGER_RECIPIENT_TYPES.join(', ')}`);
+  }
+  if (recipient.channel !== undefined && !RECIPIENT_CHANNELS.includes(recipient.channel)) {
+    errors.push(`${prefix}.channel must be one of: ${RECIPIENT_CHANNELS.join(', ')}`);
+  }
+  if (recipient.recipientType === 'user') {
+    if (!recipient.userId) errors.push(`${prefix}.userId is required when recipientType is 'user'`);
+  } else if (recipient.recipientType === 'email') {
+    if (typeof recipient.email !== 'string' || !EMAIL_RE.test(recipient.email)) {
+      errors.push(`${prefix}.email must be a valid email address when recipientType is 'email'`);
+    }
+  } else if (recipient.recipientType === 'broker') {
+    if (!recipient.brokerId) errors.push(`${prefix}.brokerId is required when recipientType is 'broker'`);
+  }
+  return errors;
+}
+
+function validateRecipients(recipients, triggerPrefix) {
+  if (!Array.isArray(recipients)) return [`${triggerPrefix || 'trigger'}.recipients must be an array`];
+  return recipients.flatMap((r, i) => validateRecipient(r, `${triggerPrefix || 'trigger'}.recipients[${i}]`));
 }
 
 // ─── Wire ↔ storage mapping ──────────────────────────────────────────────────
@@ -281,8 +324,8 @@ function geometryFromPayload(body) {
   return { type: 'Polygon', coordinates: [ring] };
 }
 
-/** Stored geofence row (+ trigger rows) → wire Geofence object. */
-function toWireGeofence(row, triggerRows = []) {
+/** Stored geofence row (+ trigger rows + recipients-by-trigger) → wire Geofence object. */
+function toWireGeofence(row, triggerRows = [], recipientsByTrigger = {}) {
   if (!row) return null;
   const geometry = normalizeGeometry(row.geometry) || {};
   const wire = {
@@ -293,7 +336,7 @@ function toWireGeofence(row, triggerRows = []) {
     addressId: row.address_id || null,
     createdBy: row.created_by || null,
     createdAt: row.created_at || null,
-    triggers: triggerRows.map(toWireTrigger),
+    triggers: triggerRows.map((t) => toWireTrigger(t, recipientsByTrigger[t.id] || [])),
   };
   if (row.kind === 'circle' && Array.isArray(geometry.center)) {
     wire.center = { lng: geometry.center[0], lat: geometry.center[1] };
@@ -312,8 +355,8 @@ function toWireGeofence(row, triggerRows = []) {
   return wire;
 }
 
-/** Stored trigger row → wire trigger object. */
-function toWireTrigger(row) {
+/** Stored trigger row (+ recipient rows) → wire trigger object. */
+function toWireTrigger(row, recipientRows = []) {
   return {
     id: row.id,
     vehicleId: row.vehicle_id || null,
@@ -321,6 +364,19 @@ function toWireTrigger(row) {
     dwellMinutes: row.dwell_minutes != null ? row.dwell_minutes : null,
     action: row.action,
     targetUrl: row.target_url || null,
+    recipients: recipientRows.map(toWireRecipient),
+  };
+}
+
+/** Stored geofence_trigger_recipients row → wire recipient object (FN-1758). */
+function toWireRecipient(row) {
+  return {
+    id: row.id,
+    recipientType: row.recipient_type,
+    userId: row.user_id || null,
+    email: row.email || null,
+    brokerId: row.broker_id || null,
+    channel: row.channel || DEFAULT_RECIPIENT_CHANNEL,
   };
 }
 
@@ -334,6 +390,47 @@ function triggerInsertRow(geofenceId, trigger) {
     action: trigger.action,
     target_url: trigger.action === 'webhook' ? trigger.targetUrl : null,
   };
+}
+
+/** Wire recipient → insertable geofence_trigger_recipients row (FN-1758). */
+function recipientInsertRow(triggerId, recipient) {
+  const type = recipient.recipientType;
+  return {
+    trigger_id: triggerId,
+    recipient_type: type,
+    user_id: type === 'user' ? recipient.userId : null,
+    email: type === 'email' ? recipient.email : null,
+    broker_id: type === 'broker' ? recipient.brokerId : null,
+    channel: recipient.channel || DEFAULT_RECIPIENT_CHANNEL,
+  };
+}
+
+/**
+ * Load recipients for a set of trigger ids → { [triggerId]: rows[] } (FN-1758).
+ * Returns {} when there are no triggers. Safe before the FN-1757 migration is
+ * applied: a missing `geofence_trigger_recipients` table yields no recipients
+ * rather than throwing, so geofence reads keep working.
+ */
+async function loadRecipients(triggerIds, conn = getDb()) {
+  if (!triggerIds.length) return {};
+  let rows;
+  try {
+    rows = await conn('geofence_trigger_recipients').whereIn('trigger_id', triggerIds);
+  } catch (_err) {
+    return {};
+  }
+  return rows.reduce((acc, row) => {
+    (acc[row.trigger_id] = acc[row.trigger_id] || []).push(row);
+    return acc;
+  }, {});
+}
+
+/** Insert the recipients of one trigger (no-op when none). */
+async function insertTriggerRecipients(triggerId, recipients, conn) {
+  if (!Array.isArray(recipients) || !recipients.length) return;
+  await conn('geofence_trigger_recipients').insert(
+    recipients.map((r) => recipientInsertRow(triggerId, r))
+  );
 }
 
 // ─── CRUD ─────────────────────────────────────────────────────────────────────
@@ -378,7 +475,11 @@ async function listGeofences(context, filters = {}, conn = getDb()) {
 
   const ids = selected.map((g) => g.id);
   const triggersByGeofence = await loadTriggers(ids, conn);
-  return selected.map((g) => toWireGeofence(g, triggersByGeofence[g.id] || []));
+  const allTriggerIds = Object.values(triggersByGeofence).flat().map((t) => t.id);
+  const recipientsByTrigger = await loadRecipients(allTriggerIds, conn);
+  return selected.map((g) =>
+    toWireGeofence(g, triggersByGeofence[g.id] || [], recipientsByTrigger)
+  );
 }
 
 async function loadTriggers(geofenceIds, conn = getDb()) {
@@ -397,7 +498,8 @@ async function getGeofence(context, id, conn = getDb()) {
   const row = await conn('geofences').where({ id, tenant_id: tenantId }).first();
   if (!row) return null;
   const triggers = await conn('geofence_triggers').where({ geofence_id: id });
-  return toWireGeofence(row, triggers);
+  const recipientsByTrigger = await loadRecipients(triggers.map((t) => t.id), conn);
+  return toWireGeofence(row, triggers, recipientsByTrigger);
 }
 
 /** Create a geofence (+ optional triggers) atomically. Returns the wire record. */
@@ -416,11 +518,15 @@ async function createGeofence(context, userId, body) {
     const [created] = await trx('geofences').insert(insertRow).returning('*');
 
     const triggers = Array.isArray(body.triggers) ? body.triggers : [];
-    if (triggers.length) {
-      await trx('geofence_triggers').insert(triggers.map((t) => triggerInsertRow(created.id, t)));
+    for (const trigger of triggers) {
+      const [insertedTrigger] = await trx('geofence_triggers')
+        .insert(triggerInsertRow(created.id, trigger))
+        .returning('*');
+      await insertTriggerRecipients(insertedTrigger.id, trigger.recipients, trx);
     }
     const insertedTriggers = await trx('geofence_triggers').where({ geofence_id: created.id });
-    return toWireGeofence(created, insertedTriggers);
+    const recipientsByTrigger = await loadRecipients(insertedTriggers.map((t) => t.id), trx);
+    return toWireGeofence(created, insertedTriggers, recipientsByTrigger);
   });
 }
 
@@ -451,14 +557,35 @@ async function updateGeofence(context, id, body) {
       .returning('*');
 
     if (body.triggers !== undefined) {
+      // Clear recipients of the existing triggers first (the DB cascades on the
+      // trigger delete, but we delete explicitly so the in-memory test stub and
+      // pre-FN-1757 environments behave the same).
+      const existingTriggers = await trx('geofence_triggers').where({ geofence_id: id });
+      await deleteRecipientsForTriggers(existingTriggers.map((t) => t.id), trx);
       await trx('geofence_triggers').where({ geofence_id: id }).del();
       if (Array.isArray(body.triggers) && body.triggers.length) {
-        await trx('geofence_triggers').insert(body.triggers.map((t) => triggerInsertRow(id, t)));
+        for (const trigger of body.triggers) {
+          const [insertedTrigger] = await trx('geofence_triggers')
+            .insert(triggerInsertRow(id, trigger))
+            .returning('*');
+          await insertTriggerRecipients(insertedTrigger.id, trigger.recipients, trx);
+        }
       }
     }
     const triggers = await trx('geofence_triggers').where({ geofence_id: id });
-    return toWireGeofence(updated, triggers);
+    const recipientsByTrigger = await loadRecipients(triggers.map((t) => t.id), trx);
+    return toWireGeofence(updated, triggers, recipientsByTrigger);
   });
+}
+
+/** Delete all recipients belonging to the given trigger ids (no-op when empty). */
+async function deleteRecipientsForTriggers(triggerIds, conn) {
+  if (!triggerIds.length) return;
+  try {
+    await conn('geofence_trigger_recipients').whereIn('trigger_id', triggerIds).del();
+  } catch (_err) {
+    // table may not exist yet (pre-FN-1757) — nothing to clear
+  }
 }
 
 /** Delete a tenant-scoped geofence (triggers cascade). Returns true if deleted. */
@@ -480,7 +607,9 @@ async function addTrigger(context, geofenceId, trigger, conn = getDb()) {
   const [created] = await conn('geofence_triggers')
     .insert(triggerInsertRow(geofenceId, trigger))
     .returning('*');
-  return toWireTrigger(created);
+  await insertTriggerRecipients(created.id, trigger.recipients, conn);
+  const recipientsByTrigger = await loadRecipients([created.id], conn);
+  return toWireTrigger(created, recipientsByTrigger[created.id] || []);
 }
 
 /** Update a trigger that belongs to a tenant-scoped geofence. Returns the wire trigger, or null. */
@@ -494,7 +623,14 @@ async function updateTrigger(context, geofenceId, triggerId, trigger, conn = get
     .where({ id: triggerId, geofence_id: geofenceId })
     .update(patch)
     .returning('*');
-  return updated ? toWireTrigger(updated) : null;
+  if (!updated) return null;
+  // When `recipients` is supplied it fully replaces this trigger's recipient set.
+  if (trigger.recipients !== undefined) {
+    await deleteRecipientsForTriggers([triggerId], conn);
+    await insertTriggerRecipients(triggerId, trigger.recipients, conn);
+  }
+  const recipientsByTrigger = await loadRecipients([triggerId], conn);
+  return toWireTrigger(updated, recipientsByTrigger[triggerId] || []);
 }
 
 /** Remove a trigger from a tenant-scoped geofence. Returns true if removed. */
@@ -514,6 +650,8 @@ module.exports = {
   GEOFENCE_KINDS,
   TRIGGER_EVENT_KINDS,
   TRIGGER_ACTIONS,
+  TRIGGER_RECIPIENT_TYPES,
+  RECIPIENT_CHANNELS,
   MAX_POLYGON_VERTICES,
   // geometry math (operates on stored GeoJSON; reused by Story C / FN-1655)
   haversineMeters,
@@ -525,11 +663,14 @@ module.exports = {
   geometryFromPayload,
   toWireGeofence,
   toWireTrigger,
+  toWireRecipient,
   // validation
   validateGeometryFields,
   validateGeofenceInput,
   validateTrigger,
   validateTriggers,
+  validateRecipient,
+  validateRecipients,
   // crud
   listGeofences,
   getGeofence,
