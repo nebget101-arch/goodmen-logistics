@@ -365,6 +365,17 @@ export class VehicleTrackingComponent implements OnInit, AfterViewInit, OnDestro
   }
 
   /**
+   * Human-readable "City, ST" for the current position (FN-1776), or '' when
+   * either field is missing (older payloads / no city data) — never
+   * "undefined, " or a dangling comma.
+   */
+  locationLabel(): string {
+    const city = this.telemetry?.city?.trim();
+    const state = this.telemetry?.state?.trim();
+    return city && state ? `${city}, ${state}` : '';
+  }
+
+  /**
    * Google Maps deep-link for the current position, or `null` when there is
    * no position. Uses the raw lat/lng (not the 4-decimal display string) so
    * the pin lands on the exact coordinate.

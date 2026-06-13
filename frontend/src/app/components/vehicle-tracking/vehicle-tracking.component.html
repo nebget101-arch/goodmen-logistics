@@ -76,17 +76,20 @@
           <dl class="vt-metrics">
             <div>
               <dt>Position</dt>
-              <dd>
+              <dd class="vt-position">
+                <span class="vt-city" *ngIf="locationLabel() as label">{{ label }}</span>
                 <a
                   *ngIf="googleMapsUrl() as mapsUrl; else plainPosition"
-                  class="vt-maps-link"
+                  class="vt-maps-link vt-coords"
                   [href]="mapsUrl"
                   target="_blank"
                   rel="noopener noreferrer">
                   {{ positionDisplay() }}
                   <span class="material-symbols-outlined vt-maps-icon">open_in_new</span>
                 </a>
-                <ng-template #plainPosition>{{ positionDisplay() }}</ng-template>
+                <ng-template #plainPosition>
+                  <span class="vt-coords">{{ positionDisplay() }}</span>
+                </ng-template>
               </dd>
             </div>
             <div>

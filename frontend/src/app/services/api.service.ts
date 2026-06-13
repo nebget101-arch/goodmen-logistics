@@ -88,6 +88,10 @@ export interface VehicleTelemetry {
   vehicle_id: string;
   latitude: number;
   longitude: number;
+  /** Human-readable city for the position (FN-1776). Optional — absent on older payloads. */
+  city?: string;
+  /** 2-letter US state for the position (FN-1776). Optional — absent on older payloads. */
+  state?: string;
   speed_mph: number;
   heading_deg: number;
   fuel_level_pct: number;
