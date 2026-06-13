@@ -1,6 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const { PDFDocument, StandardFonts, rgb } = require('pdf-lib');
+const { embedOperatingEntityLogo, scaleToFit } = require('./logo-embed.helper');
 
 function safeDate(value) {
   if (!value) return '';
@@ -640,6 +641,7 @@ async function generateConsentPdf({ template, consent, company, driver }) {
   const pdfDoc = await PDFDocument.create();
   const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
   const boldFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+  const logoImage = await embedOperatingEntityLogo(pdfDoc, company);
 
   // Professional color scheme
   const C = {
@@ -670,11 +672,20 @@ async function generateConsentPdf({ template, consent, company, driver }) {
 
   // ── Page header helper ────────────────────────────────────────────────
   function drawConsentPageHeader(pg) {
+    let textX = marginLeft;
+    // MC logo at the left of the header when available; company text shifts right.
+    if (logoImage) {
+      const dims = scaleToFit(logoImage, 120, 30);
+      if (dims) {
+        pg.drawImage(logoImage, { x: marginLeft, y: 752 - dims.height / 2, width: dims.width, height: dims.height });
+        textX = marginLeft + dims.width + 10;
+      }
+    }
     // Company name bold 13pt
-    pg.drawText(companyName, { x: marginLeft, y: 755, size: 13, font: boldFont, color: C.primary });
+    pg.drawText(companyName, { x: textX, y: 755, size: 13, font: boldFont, color: C.primary });
     // Address
     if (companyAddress) {
-      pg.drawText(companyAddress, { x: marginLeft, y: 742, size: 8, font, color: C.label });
+      pg.drawText(companyAddress, { x: textX, y: 742, size: 8, font, color: C.label });
     }
     // Document type right-aligned
     const docType = 'CONSENT FORM';

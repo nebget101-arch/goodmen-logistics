@@ -443,7 +443,7 @@ async function maybeGenerateOnboardingPdfs(packetId) {
     const oeId = packet.operating_entity_id || driver.operating_entity_id || null;
     if (oeId) {
       const oeRes = await query(
-        'SELECT id, name, legal_name, address_line1, address_line2, city, state, zip_code, phone, email FROM operating_entities WHERE id = $1',
+        'SELECT id, name, legal_name, address_line1, address_line2, city, state, zip_code, phone, email, logo_storage_key, logo_mime_type FROM operating_entities WHERE id = $1',
         [oeId]
       );
       operatingEntity = oeRes.rows[0] || null;
@@ -494,7 +494,9 @@ async function maybeGenerateOnboardingPdfs(packetId) {
         name: operatingEntity.name || operatingEntity.legal_name || '',
         address: [operatingEntity.address_line1, operatingEntity.address_line2, operatingEntity.city, operatingEntity.state, operatingEntity.zip_code].filter(Boolean).join(', '),
         phone: operatingEntity.phone || '',
-        email: operatingEntity.email || ''
+        email: operatingEntity.email || '',
+        logo_storage_key: operatingEntity.logo_storage_key,
+        logo_mime_type: operatingEntity.logo_mime_type
       };
     }
     if (applicationData.auditTrail) pdfContext.auditTrail = applicationData.auditTrail;

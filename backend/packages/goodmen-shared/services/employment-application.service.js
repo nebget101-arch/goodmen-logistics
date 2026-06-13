@@ -365,7 +365,9 @@ async function submitApplication(applicationId, payload, userId, context = null)
             name: oeRow.name || oeRow.legal_name || '',
             address: [oeRow.address_line1, oeRow.address_line2, oeRow.city, oeRow.state, oeRow.zip_code].filter(Boolean).join(', '),
             phone: oeRow.phone || '',
-            email: oeRow.email || ''
+            email: oeRow.email || '',
+            logo_storage_key: oeRow.logo_storage_key,
+            logo_mime_type: oeRow.logo_mime_type
           };
         }
       } catch (oeErr) {
