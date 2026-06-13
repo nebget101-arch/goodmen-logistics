@@ -1,6 +1,5 @@
 import { AfterViewInit, Component, ElementRef, OnDestroy, OnInit, ViewChild } from '@angular/core';
 import { ApiService, InvoiceUploadResult } from '../../services/api.service';
-import * as QRCode from 'qrcode';
 import { QuickAddEvent } from './quick-add-panel.component';
 import { AppliedSummary } from './invoice-review-modal.component';
 
@@ -249,11 +248,11 @@ export class WarehouseReceivingComponent implements OnInit, AfterViewInit, OnDes
         this.bridgeSessionId = data.sessionId || '';
         this.qrCodeDataUrl = '';
         if (this.bridgeMobileUrl) {
-          QRCode.toDataURL(this.bridgeMobileUrl, {
+          import('qrcode').then(QRCode => QRCode.toDataURL(this.bridgeMobileUrl, {
             width: 250,
             margin: 2,
             color: { dark: '#000000', light: '#ffffff' }
-          }).then((url: string) => {
+          })).then((url: string) => {
             this.qrCodeDataUrl = url;
           }).catch(() => {
             this.qrCodeDataUrl = `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(this.bridgeMobileUrl)}`;

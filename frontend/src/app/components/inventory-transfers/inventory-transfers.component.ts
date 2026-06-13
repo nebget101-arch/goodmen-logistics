@@ -2,7 +2,6 @@ import { AfterViewInit, Component, ElementRef, OnInit, ViewChild } from '@angula
 import { ApiService } from '../../services/api.service';
 import { PermissionHelperService } from '../../services/permission-helper.service';
 import { PERMISSIONS } from '../../models/access-control.model';
-import * as QRCode from 'qrcode';
 
 @Component({
   selector: 'app-inventory-transfers',
@@ -139,11 +138,11 @@ export class InventoryTransfersComponent implements OnInit, AfterViewInit {
         this.bridgeSessionId = data.sessionId || '';
         this.qrCodeDataUrl = '';
         if (this.bridgeMobileUrl) {
-          QRCode.toDataURL(this.bridgeMobileUrl, {
+          import('qrcode').then(QRCode => QRCode.toDataURL(this.bridgeMobileUrl, {
             width: 250,
             margin: 2,
             color: { dark: '#000000', light: '#ffffff' }
-          }).then((url: string) => {
+          })).then((url: string) => {
             this.qrCodeDataUrl = url;
           }).catch(() => {
             this.qrCodeDataUrl = `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(this.bridgeMobileUrl)}`;
