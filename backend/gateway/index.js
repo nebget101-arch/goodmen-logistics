@@ -500,6 +500,13 @@ app.use(
   '/api/vehicles',
   buildProxy(VEHICLES_MAINTENANCE_SERVICE_URL, 'vehicles')
 );
+// FN-1752: mock fleet telemetry layer (all-trucks map). The per-vehicle
+// telemetry path (/api/vehicles/:id/telemetry) already proxies via /api/vehicles
+// above; /api/fleet is the additional prefix the telemetry router owns.
+app.use(
+  '/api/fleet',
+  buildProxy(VEHICLES_MAINTENANCE_SERVICE_URL, 'vehicles')
+);
 // Live-map vehicle positions read API (FN-1672)
 app.use(
   '/api/vehicle-positions',

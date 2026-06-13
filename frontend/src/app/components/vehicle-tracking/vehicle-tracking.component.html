@@ -1,0 +1,125 @@
+<!-- FN-1751 — Vehicle Tracking page: truck filter + Leaflet 2D map + telemetry panel.
+     AI dark-theme palette only (rgba drawn from docs/AI_THEME_VISUAL_REFERENCE.md). -->
+<div class="vt-page">
+  <header class="vt-header">
+    <div class="vt-title">
+      <span class="material-icons vt-title-icon">my_location</span>
+      <div>
+        <h1>Vehicle Tracking</h1>
+        <p class="vt-subtitle">Live 2D map &amp; telemetry by truck — telemetry is mock pending real integration.</p>
+      </div>
+    </div>
+
+    <div class="vt-filter">
+      <app-ai-select
+        label="Truck"
+        name="truckFilter"
+        placeholder="Select a truck…"
+        [options]="truckOptions"
+        [allowEmpty]="true"
+        emptyLabel="All trucks"
+        [disabled]="loadingTrucks"
+        [ngModel]="selectedTruckId"
+        (ngModelChange)="onTruckChange($event)">
+      </app-ai-select>
+      <p class="vt-error" *ngIf="trucksError">{{ trucksError }}</p>
+    </div>
+  </header>
+
+  <div class="vt-body">
+    <!-- Map -->
+    <section class="vt-map-card">
+      <div #trackingMap class="vt-map" aria-label="Vehicle tracking map"></div>
+    </section>
+
+    <!-- Telemetry panel -->
+    <aside class="vt-panel">
+      <h2 class="vt-panel-title">Telemetry</h2>
+
+      <!-- Empty state -->
+      <div class="vt-empty" *ngIf="!selectedTruckId && !loadingTelemetry">
+        <span class="material-icons">local_shipping</span>
+        <p>Select a truck to view its live telemetry.</p>
+      </div>
+
+      <p class="vt-error" *ngIf="telemetryError">{{ telemetryError }}</p>
+
+      <!-- Loading skeletons -->
+      <div class="vt-kpis" *ngIf="loadingTelemetry">
+        <app-ai-skeleton width="100%" height="92px" radius="14px"></app-ai-skeleton>
+        <app-ai-skeleton width="100%" height="92px" radius="14px"></app-ai-skeleton>
+        <app-ai-skeleton width="100%" height="120px" radius="14px"></app-ai-skeleton>
+        <app-ai-skeleton width="100%" height="120px" radius="14px"></app-ai-skeleton>
+      </div>
+
+      <!-- Loaded telemetry -->
+      <ng-container *ngIf="telemetry && !loadingTelemetry">
+        <div class="vt-kpis">
+          <app-kpi-card
+            label="Fuel Level"
+            [value]="fuelDisplay()"
+            [subline]="'Engine: ' + (telemetry.engine_status || 'unknown')"
+            [status]="fuelStatus">
+          </app-kpi-card>
+
+          <app-kpi-card
+            label="Last Moved"
+            [value]="relativeTime(telemetry.last_moved_at)"
+            [subline]="absoluteTime(telemetry.last_moved_at)"
+            status="info">
+          </app-kpi-card>
+        </div>
+
+        <!-- Position & speed -->
+        <div class="vt-block">
+          <h3 class="vt-block-title">Position &amp; Speed</h3>
+          <dl class="vt-metrics">
+            <div>
+              <dt>Position</dt>
+              <dd>{{ positionDisplay() }}</dd>
+            </div>
+            <div>
+              <dt>Speed</dt>
+              <dd>{{ speedDisplay() }}</dd>
+            </div>
+            <div>
+              <dt>Heading</dt>
+              <dd>{{ telemetry.heading_deg != null ? telemetry.heading_deg + '°' : '—' }}</dd>
+            </div>
+            <div>
+              <dt>Odometer</dt>
+              <dd>{{ telemetry.odometer != null ? (telemetry.odometer | number) + ' mi' : '—' }}</dd>
+            </div>
+          </dl>
+        </div>
+
+        <!-- Fault codes -->
+        <div class="vt-block">
+          <h3 class="vt-block-title">
+            Active Fault Codes
+            <span class="vt-count">{{ (telemetry.fault_codes || []).length }}</span>
+          </h3>
+
+          <p class="vt-none" *ngIf="!(telemetry.fault_codes || []).length">
+            No active fault codes.
+          </p>
+
+          <ul class="vt-faults" *ngIf="(telemetry.fault_codes || []).length">
+            <li class="vt-fault" *ngFor="let f of telemetry.fault_codes">
+              <div class="vt-fault-head">
+                <span class="vt-fault-code">{{ f.code }}</span>
+                <span class="vt-sev-badge" [ngClass]="faultSeverityClass(f.severity)">{{ f.severity }}</span>
+              </div>
+              <p class="vt-fault-desc">{{ f.description }}</p>
+            </li>
+          </ul>
+        </div>
+
+        <p class="vt-source" *ngIf="telemetry.source === 'mock'">
+          <span class="material-icons">science</span>
+          Mock telemetry — pending real telematics integration.
+        </p>
+      </ng-container>
+    </aside>
+  </div>
+</div>
