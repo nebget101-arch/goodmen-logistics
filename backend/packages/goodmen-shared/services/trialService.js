@@ -8,6 +8,67 @@ const { knex } = require('../internal/db');
 const stripeService = require('./stripeService');
 
 /**
+ * Ensure a tenant has a Stripe customer, creating one lazily if absent.
+ *
+ * Returns the existing `stripe_customer_id` when present. Otherwise creates the
+ * Stripe customer (same identity/metadata as {@link activateTrial}) and persists
+ * it to `tenants.stripe_customer_id`. This is the single code path used both by
+ * trial activation and by the billing endpoints (FN-1733) so that a tenant can
+ * add a payment method before an admin approves the trial.
+ *
+ * Idempotent and race-safe: the persist is a conditional UPDATE that only claims
+ * the column while it is still NULL, so two concurrent callers converge on one
+ * customer id (the loser's freshly-created customer is an unused orphan).
+ *
+ * @param {string} tenantId
+ * @returns {Promise<string>} the tenant's Stripe customer id
+ */
+async function ensureStripeCustomer(tenantId) {
+  if (!tenantId) {
+    const err = new Error('tenantId is required');
+    err.statusCode = 400;
+    throw err;
+  }
+
+  const tenant = await knex('tenants')
+    .where({ id: tenantId })
+    .first(['id', 'stripe_customer_id', 'email', 'legal_name', 'name']);
+  if (!tenant) {
+    const err = new Error('Tenant not found');
+    err.statusCode = 404;
+    throw err;
+  }
+  if (tenant.stripe_customer_id) return tenant.stripe_customer_id;
+
+  // Creating a customer requires a live Stripe client. Surface a clear,
+  // non-misleading message instead of the legacy "not initialized" 400.
+  if (!stripeService.isStripeConfigured()) {
+    const err = new Error('Billing is not configured. Please contact support to enable billing.');
+    err.code = 'STRIPE_NOT_CONFIGURED';
+    err.statusCode = 503;
+    throw err;
+  }
+
+  const customer = await stripeService.createCustomer(
+    tenantId,
+    tenant.email || tenant.legal_name || tenant.name,
+    tenant.legal_name || tenant.name
+  );
+
+  // Race-safe persist: only claim the column while it is still NULL. If a
+  // concurrent caller won, re-read and use their id rather than our orphan.
+  const claimed = await knex('tenants')
+    .where({ id: tenantId })
+    .whereNull('stripe_customer_id')
+    .update({ stripe_customer_id: customer.id, updated_at: knex.fn.now() });
+
+  if (claimed === 1) return customer.id;
+
+  const fresh = await knex('tenants').where({ id: tenantId }).first(['stripe_customer_id']);
+  return fresh?.stripe_customer_id || customer.id;
+}
+
+/**
  * Activate a trial for a tenant: sets trial_start, trial_end, trial_status, creates Stripe customer.
  * @param {string} tenantId
  * @param {string} planId
@@ -21,16 +82,9 @@ async function activateTrial(tenantId, planId, trialDays = 14, actorUserId = nul
     : 14;
   const now = new Date();
   const trialEnd = new Date(now.getTime() + safeTrialDays * 24 * 60 * 60 * 1000);
-  // Fetch tenant for email/name
-  const tenant = await knex('tenants').where({ id: tenantId }).first();
-  if (!tenant) throw new Error('Tenant not found');
-  // Create Stripe customer if not present
-  let stripeCustomerId = tenant.stripe_customer_id;
-  if (!stripeCustomerId) {
-    const customer = await stripeService.createCustomer(tenantId, tenant.email || tenant.legal_name || tenant.name, tenant.legal_name || tenant.name);
-    stripeCustomerId = customer.id;
-    await knex('tenants').where({ id: tenantId }).update({ stripe_customer_id: stripeCustomerId });
-  }
+  // Ensure the tenant has a Stripe customer (idempotent, race-safe). This also
+  // validates the tenant exists — throws 'Tenant not found' otherwise.
+  await ensureStripeCustomer(tenantId);
   await knex('tenants').where({ id: tenantId }).update({
     trial_start: now,
     trial_end: trialEnd,
@@ -178,6 +232,7 @@ async function writeAuditLog(tenantId, userId, action, entityType, entityId, det
 }
 
 module.exports = {
+  ensureStripeCustomer,
   activateTrial,
   getTrialStatus,
   getDaysRemaining,

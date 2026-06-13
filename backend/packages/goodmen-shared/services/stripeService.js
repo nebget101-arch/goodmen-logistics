@@ -20,6 +20,15 @@ function assertStripeConfigured() {
 }
 
 /**
+ * Whether Stripe is configured (a real secret key is present and the client is live).
+ * Lets callers branch before attempting a Stripe write instead of catching an error.
+ * @returns {boolean}
+ */
+function isStripeConfigured() {
+  return !stripe?._disabled;
+}
+
+/**
  * Create a Stripe customer for a tenant.
  * @param {string} tenantId FleetNeuron tenant ID.
  * @param {string} email Customer billing email.
@@ -312,6 +321,7 @@ async function applyExtraSeatPurchase(subscriptionId, extraSeatPriceId, quantity
 }
 
 module.exports = {
+  isStripeConfigured,
   createCustomer,
   attachPaymentMethod,
   detachPaymentMethod,

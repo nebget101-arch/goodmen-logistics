@@ -382,21 +382,18 @@ router.post('/extra-seats/purchase', async (req, res) => {
  *                   type: object
  *                   properties:
  *                     clientSecret: { type: string, description: Stripe SetupIntent client_secret }
- *       400:
- *         description: Stripe customer not initialized for this tenant
+ *       503:
+ *         description: Billing is not configured (Stripe disabled)
  */
 router.post('/setup-intent', async (req, res) => {
   try {
     const tenant = await getTenantForRequest(req);
 
-    if (!tenant.stripe_customer_id) {
-      return res.status(400).json({
-        success: false,
-        error: 'Stripe customer is not initialized for this tenant'
-      });
-    }
+    // Lazily create the Stripe customer if the tenant doesn't have one yet
+    // (e.g. trial pending admin approval) so a card can be added pre-approval.
+    const stripeCustomerId = await trialService.ensureStripeCustomer(tenant.id);
 
-    const setupIntent = await stripeService.createSetupIntent(tenant.stripe_customer_id);
+    const setupIntent = await stripeService.createSetupIntent(stripeCustomerId);
 
     return res.json({
       success: true,
@@ -443,7 +440,9 @@ router.post('/setup-intent', async (req, res) => {
  *                   properties:
  *                     paymentMethodId: { type: string }
  *       400:
- *         description: Missing paymentMethodId or Stripe customer not initialized
+ *         description: Missing paymentMethodId
+ *       503:
+ *         description: Billing is not configured (Stripe disabled)
  */
 router.post('/payment-method/confirm', async (req, res) => {
   try {
@@ -454,11 +453,11 @@ router.post('/payment-method/confirm', async (req, res) => {
       return res.status(400).json({ success: false, error: 'paymentMethodId is required' });
     }
 
-    if (!tenant.stripe_customer_id) {
-      return res.status(400).json({ success: false, error: 'Stripe customer is not initialized for this tenant' });
-    }
+    // Lazily create the Stripe customer if absent so cards can be attached
+    // before the trial is approved (FN-1733).
+    const stripeCustomerId = await trialService.ensureStripeCustomer(tenant.id);
 
-    await stripeService.attachPaymentMethod(tenant.stripe_customer_id, paymentMethodId);
+    await stripeService.attachPaymentMethod(stripeCustomerId, paymentMethodId);
 
     await knex('tenants')
       .where({ id: tenant.id })
@@ -709,18 +708,18 @@ router.get('/config-status', async (req, res) => {
  *                   type: object
  *                   properties:
  *                     url: { type: string, description: Stripe Customer Portal redirect URL }
- *       400:
- *         description: Stripe customer not initialized for this tenant
+ *       503:
+ *         description: Billing is not configured (Stripe disabled)
  */
 router.post('/portal-session', async (req, res) => {
   try {
     const tenant = await getTenantForRequest(req);
 
-    if (!tenant.stripe_customer_id) {
-      return res.status(400).json({ success: false, error: 'Stripe customer is not initialized for this tenant' });
-    }
+    // Lazily create the Stripe customer if absent (FN-1733) so the portal is
+    // reachable even before the trial is approved.
+    const stripeCustomerId = await trialService.ensureStripeCustomer(tenant.id);
 
-    const { url } = await stripeService.createBillingPortalSession(tenant.stripe_customer_id, getBillingReturnUrl());
+    const { url } = await stripeService.createBillingPortalSession(stripeCustomerId, getBillingReturnUrl());
 
     return res.json({ success: true, data: { url } });
   } catch (err) {
