@@ -45,6 +45,10 @@ const workOrdersRouter = require('@goodmen/shared/routes/work-orders-hub');
 const partsRouter = require('@goodmen/shared/routes/parts');
 const manufacturersRouter = require('@goodmen/shared/routes/manufacturers');
 const vendorsRouter = require('@goodmen/shared/routes/vendors');
+// FN-1752: mock/stubbed vehicle telemetry (provider-agnostic shape) — defines
+// GET /vehicles/:id/telemetry and GET /fleet/telemetry. Applies its own
+// auth/tenant/subscription guard per-route, so it is mounted at /api directly.
+const vehicleTelemetryRouter = require('@goodmen/shared/routes/vehicle-telemetry');
 const authMiddleware = require('@goodmen/shared/middleware/auth-middleware');
 const tenantContextMiddleware = require('@goodmen/shared/middleware/tenant-context-middleware');
 const requirePlanAccess = require('@goodmen/shared/middleware/plan-access-middleware');
@@ -65,6 +69,11 @@ app.use('/api/work-orders', authMiddleware, tenantContextMiddleware, requireActi
 app.use('/api/parts', authMiddleware, tenantContextMiddleware, requireActiveSubscription, requirePartsPlan, partsRouter);
 app.use('/api/manufacturers', authMiddleware, tenantContextMiddleware, requireActiveSubscription, requirePartsPlan, manufacturersRouter);
 app.use('/api/vendors', authMiddleware, tenantContextMiddleware, requireActiveSubscription, requirePartsPlan, vendorsRouter);
+// FN-1752: telemetry router carries its own per-route guard (auth + tenant +
+// active subscription); mounted at /api so it can own both
+// /api/vehicles/:id/telemetry and /api/fleet/telemetry. Registered LAST so the
+// specific routers above match first and unknown paths fall through to 404.
+app.use('/api', vehicleTelemetryRouter);
 
 /**
  * @openapi
