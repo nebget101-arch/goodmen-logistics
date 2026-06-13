@@ -143,4 +143,55 @@ describe('geocode-service (FN-1761)', () => {
       withEnv('', () => assert.strictEqual(geocode.countryCodes(), ''));
     });
   });
+
+  describe('buildSearchParams (FN-1773 — country + API key wiring)', () => {
+    function withEnv(vars, fn) {
+      const prev = {};
+      for (const [k, v] of Object.entries(vars)) {
+        prev[k] = process.env[k];
+        if (v === undefined) delete process.env[k];
+        else process.env[k] = v;
+      }
+      try {
+        fn();
+      } finally {
+        for (const [k, v] of Object.entries(prev)) {
+          if (v === undefined) delete process.env[k];
+          else process.env[k] = v;
+        }
+      }
+    }
+
+    it('includes countrycodes by default and no key when GEOCODER_API_KEY is unset', () => {
+      withEnv({ GEOCODER_COUNTRY_CODES: undefined, GEOCODER_API_KEY: undefined }, () => {
+        const p = geocode.buildSearchParams('dallas', 5);
+        assert.strictEqual(p.q, 'dallas');
+        assert.strictEqual(p.format, 'jsonv2');
+        assert.strictEqual(p.countrycodes, 'us');
+        assert.strictEqual('key' in p, false);
+      });
+    });
+
+    it('attaches the API key under the default "key" param when set', () => {
+      withEnv({ GEOCODER_API_KEY: 'secret123', GEOCODER_API_KEY_PARAM: undefined }, () => {
+        const p = geocode.buildSearchParams('dallas', 5);
+        assert.strictEqual(p.key, 'secret123');
+      });
+    });
+
+    it('honors a custom API-key param name', () => {
+      withEnv({ GEOCODER_API_KEY: 'secret123', GEOCODER_API_KEY_PARAM: 'apiKey' }, () => {
+        const p = geocode.buildSearchParams('dallas', 5);
+        assert.strictEqual(p.apiKey, 'secret123');
+        assert.strictEqual('key' in p, false);
+      });
+    });
+
+    it('omits countrycodes when GEOCODER_COUNTRY_CODES is blank (global)', () => {
+      withEnv({ GEOCODER_COUNTRY_CODES: '' }, () => {
+        const p = geocode.buildSearchParams('dallas', 5);
+        assert.strictEqual('countrycodes' in p, false);
+      });
+    });
+  });
 });
