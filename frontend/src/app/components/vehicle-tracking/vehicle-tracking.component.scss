@@ -211,6 +211,24 @@
   line-height: 1;
 }
 
+/* Position stacks the City, ST label over the raw coordinates (FN-1776). */
+.vt-position {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+/* Primary line — reuses the dd primary-text token. */
+.vt-city {
+  color: rgba(248, 250, 252, 1);
+}
+
+/* Coordinates read as a secondary sub-line beneath the city. */
+.vt-coords {
+  font-size: 0.82rem;
+  font-weight: 500;
+}
+
 /* ── Fault codes ────────────────────────────────────────────────────── */
 .vt-faults {
   list-style: none;
