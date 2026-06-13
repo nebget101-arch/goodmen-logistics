@@ -19,13 +19,21 @@
  * ping never double-emits.
  *
  * Per PM (FN-1669): any active geofence in the vehicle's tenant can drive load
- * status — the worker does not gate crossings on geofence_triggers. Dwell is
- * recorded as an event only (no detention billing in Phase 1).
+ * status — the load-status automation does not gate crossings on
+ * geofence_triggers. Dwell is recorded as an event only (no detention billing
+ * in Phase 1).
+ *
+ * FN-1758 (Story A — FN-1755): each newly-written event is ALSO handed to the
+ * geofence-notify-dispatcher, which fires `notify` triggers (email + in-app to
+ * their configured recipients). That path is independent of and runs after the
+ * load-status automation, and is best-effort — a notification failure never
+ * regresses event writing or load-status transitions.
  */
 
 const dbModule = require('../internal/db');
 const { geofenceContainsPoint } = require('./geofence-service');
 const loadStatusAutomation = require('./load-status-automation');
+const notifyDispatcher = require('./geofence-notify-dispatcher');
 
 const LOG_PREFIX = '[geofence-event-worker]';
 const QUEUE_NAME = 'geofence-events';
@@ -133,7 +141,7 @@ async function latestEventsByGeofence(vehicleId, geofenceIds, conn = getDb()) {
  * @returns {Promise<{pingId, events: Array, transitions: Array}>}
  */
 async function processPing(ping, options = {}, conn = getDb()) {
-  const result = { pingId: ping && ping.id, events: [], transitions: [] };
+  const result = { pingId: ping && ping.id, events: [], transitions: [], notifications: 0 };
   const point = pingPoint(ping);
   if (!ping || !ping.id || !ping.vehicle_id || !point) return result;
 
@@ -183,6 +191,21 @@ async function processPing(ping, options = {}, conn = getDb()) {
       conn
     );
     if (transition) result.transitions.push(transition);
+
+    // FN-1758: fire notify-trigger recipients for this crossing. Isolated and
+    // best-effort so a notification failure never regresses the event write or
+    // the load-status automation above.
+    try {
+      const dispatch = await notifyDispatcher.dispatchNotifyForEvent(inserted, {}, conn);
+      if (dispatch && dispatch.recipients) {
+        result.notifications += dispatch.recipients;
+      }
+    } catch (err) {
+      console.warn(
+        `${LOG_PREFIX} notify dispatch failed for event ${inserted.id}:`,
+        err.message
+      );
+    }
   }
 
   return result;
@@ -285,7 +308,8 @@ function createGeofenceEventWorker({
     }
     const events = results.reduce((n, r) => n + r.events.length, 0);
     const transitions = results.reduce((n, r) => n + r.transitions.length, 0);
-    return { pings: pings.length, events, transitions };
+    const notifications = results.reduce((n, r) => n + (r.notifications || 0), 0);
+    return { pings: pings.length, events, transitions, notifications };
   });
 
   /** Enqueue a single ping for crossing computation. */

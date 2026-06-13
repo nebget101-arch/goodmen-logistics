@@ -159,12 +159,18 @@ function circleGeofence(id, lng, lat, radiusM = 500) {
   };
 }
 
-function seedState({ loadStatus = 'DISPATCHED', geofences = [] } = {}) {
+function seedState({ loadStatus = 'DISPATCHED', geofences = [], triggers = [], recipients = [] } = {}) {
   return {
     seq: 0,
-    vehicles: [{ id: VEHICLE, tenant_id: TENANT }],
+    vehicles: [{ id: VEHICLE, unit_number: 'T-101', tenant_id: TENANT }],
     geofences,
     geofence_events: [],
+    // FN-1758: notify-dispatch tables. Present (even when empty) so the worker's
+    // per-event dispatch resolves cleanly instead of erroring on a missing table.
+    geofence_triggers: triggers,
+    geofence_trigger_recipients: recipients,
+    users: [{ id: 'user-1', email: 'dispatcher@fleet.test', tenant_id: TENANT }],
+    brokers: [],
     loads: [
       {
         id: 'load-1',
@@ -446,5 +452,77 @@ describe('processPing — load-status automation end-to-end', () => {
     assert.equal(res.events.length, 1, 'crossing still logged');
     assert.equal(res.transitions.length, 0, 'but no status change');
     assert.equal(load().status, 'NEW');
+  });
+});
+
+// ─── Integration: notify dispatch wiring (FN-1758) ───────────────────────────
+
+describe('processPing — notify dispatch (FN-1758)', () => {
+  const PICKUP = circleGeofence('gf-pickup', -87.6298, 41.8781);
+  const inside = { lng: -87.6298, lat: 41.8781 };
+
+  let state;
+  function load() {
+    return state.loads.find((l) => l.id === 'load-1');
+  }
+
+  it('a notify trigger does NOT regress load-status automation, and dispatch runs', async () => {
+    state = seedState({
+      loadStatus: 'DISPATCHED',
+      geofences: [PICKUP],
+      triggers: [
+        { id: 'trg-1', geofence_id: 'gf-pickup', vehicle_id: null, event_kind: 'enter', action: 'notify' },
+      ],
+      recipients: [
+        { id: 'rec-1', trigger_id: 'trg-1', recipient_type: 'user', user_id: 'user-1', channel: 'both' },
+      ],
+    });
+    installKnex(state);
+
+    const res = await worker.processPing(
+      { id: 'ping-1', vehicle_id: VEHICLE, ts: BASE, ...inside },
+      { dwellMinutes: 0 }
+    );
+
+    // Load-status automation still fired (the dispatch path must not regress it).
+    assert.equal(res.events.length, 1);
+    assert.equal(res.transitions.length, 1);
+    assert.equal(load().status, 'ARRIVED_AT_PICKUP');
+    // And the notify trigger's recipient was dispatched.
+    assert.equal(res.notifications, 1);
+  });
+
+  it('no notify trigger → zero notifications (load-status path unaffected)', async () => {
+    state = seedState({ loadStatus: 'DISPATCHED', geofences: [PICKUP] });
+    installKnex(state);
+    const res = await worker.processPing(
+      { id: 'ping-2', vehicle_id: VEHICLE, ts: BASE, ...inside },
+      { dwellMinutes: 0 }
+    );
+    assert.equal(res.transitions.length, 1);
+    assert.equal(res.notifications, 0);
+  });
+
+  it('reprocessing the same ping does not re-dispatch (idempotent at the event level)', async () => {
+    state = seedState({
+      loadStatus: 'DISPATCHED',
+      geofences: [PICKUP],
+      triggers: [
+        { id: 'trg-1', geofence_id: 'gf-pickup', vehicle_id: null, event_kind: 'enter', action: 'notify' },
+      ],
+      recipients: [
+        { id: 'rec-1', trigger_id: 'trg-1', recipient_type: 'email', email: 'ops@acme.com', channel: 'email' },
+      ],
+    });
+    installKnex(state);
+    const ping = { id: 'ping-1', vehicle_id: VEHICLE, ts: BASE, ...inside };
+
+    const first = await worker.processPing(ping, { dwellMinutes: 0 });
+    assert.equal(first.events.length, 1);
+    assert.equal(first.notifications, 1);
+
+    const second = await worker.processPing(ping, { dwellMinutes: 0 });
+    assert.equal(second.events.length, 0, 'no new event on reprocess');
+    assert.equal(second.notifications, 0, 'no re-dispatch on reprocess');
   });
 });
