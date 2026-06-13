@@ -50,6 +50,12 @@ services:
     branch: dev
     plan: starter
     rootDir: backend/microservices/reporting-service
+    # Autodeploy on this service's dir + the shared package it consumes.
+    # buildFilter paths are repo-root-relative & inclusive (rootDir alone misses backend/packages/**).
+    buildFilter:
+      paths:
+        - backend/microservices/reporting-service/**
+        - backend/packages/goodmen-shared/**
     buildCommand: npm install
     startCommand: npm start
     envVars:
@@ -90,6 +96,11 @@ services:
     branch: dev
     plan: starter
     rootDir: backend/microservices/integrations-service
+    buildFilter:
+      paths:
+        - backend/microservices/integrations-service/**
+        - backend/packages/goodmen-shared/**
+        - backend/packages/goodmen-database/**
     buildCommand: npm install
     startCommand: npm start
     envVars:
@@ -123,6 +134,10 @@ services:
     branch: dev
     plan: starter
     rootDir: backend/microservices/auth-users-service
+    buildFilter:
+      paths:
+        - backend/microservices/auth-users-service/**
+        - backend/packages/goodmen-shared/**
     buildCommand: npm install
     startCommand: npm start
     envVars:
@@ -229,6 +244,10 @@ services:
     branch: dev
     plan: starter
     rootDir: backend/microservices/drivers-compliance-service
+    buildFilter:
+      paths:
+        - backend/microservices/drivers-compliance-service/**
+        - backend/packages/goodmen-shared/**
     buildCommand: npm install
     startCommand: npm start
     envVars:
@@ -283,6 +302,10 @@ services:
     branch: dev
     plan: starter
     rootDir: backend/microservices/vehicles-maintenance-service
+    buildFilter:
+      paths:
+        - backend/microservices/vehicles-maintenance-service/**
+        - backend/packages/goodmen-shared/**
     buildCommand: npm install
     startCommand: npm start
     envVars:
@@ -335,6 +358,11 @@ services:
     branch: dev
     plan: starter
     rootDir: backend/microservices/logistics-service
+    buildFilter:
+      paths:
+        - backend/microservices/logistics-service/**
+        - backend/packages/goodmen-shared/**
+        - backend/packages/goodmen-database/**
     buildCommand: npm install
     preDeployCommand: npx --prefix ../../packages/goodmen-database knex migrate:latest --env production --knexfile ../../packages/goodmen-database/knexfile.js
     startCommand: npm start
@@ -390,6 +418,10 @@ services:
     branch: dev
     plan: starter
     rootDir: backend/microservices/inventory-service
+    buildFilter:
+      paths:
+        - backend/microservices/inventory-service/**
+        - backend/packages/goodmen-shared/**
     buildCommand: npm install
     startCommand: npm start
     envVars:
@@ -430,6 +462,10 @@ services:
     branch: dev
     plan: starter
     rootDir: backend/microservices/ai-service
+    buildFilter:
+      paths:
+        - backend/microservices/ai-service/**
+        - backend/packages/goodmen-shared/**
     buildCommand: npm install
     startCommand: npm start
     envVars:
