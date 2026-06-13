@@ -16,6 +16,12 @@
 
   <p class="error-banner" *ngIf="error">{{ error }}</p>
 
+  <p class="scope-banner" *ngIf="scopedVehicleId">
+    <span class="material-symbols-outlined">filter_alt</span>
+    Showing geofences for {{ scopedVehicleLabel || 'this unit' }}.
+    <button type="button" class="link-btn" (click)="clearUnitScope()">Show all</button>
+  </p>
+
   <div class="geofences-layout">
     <!-- ── Saved geofences ───────────────────────────────────────────── -->
     <section class="ai-panel list-panel">
@@ -67,6 +73,33 @@
       <h2 class="panel-title">{{ editingId ? 'Edit geofence' : 'New geofence' }}</h2>
 
       <form [formGroup]="form" (ngSubmit)="save()">
+        <!-- Address search (FN-1762): geocode → fly map → drop editable circle -->
+        <div class="field address-search">
+          <span class="field-label">Search address</span>
+          <div class="address-input-wrap">
+            <span class="material-symbols-outlined address-icon">search</span>
+            <input
+              type="text"
+              class="form-input has-icon"
+              [value]="addressQuery"
+              (input)="onAddressInput($any($event.target).value)"
+              placeholder="Type an address to place a fence"
+              autocomplete="off"
+              aria-label="Search address"
+            />
+            <span class="material-symbols-outlined spinner" *ngIf="geocoding">progress_activity</span>
+          </div>
+          <ul class="geocode-results" *ngIf="geocodeResults.length">
+            <li *ngFor="let r of geocodeResults">
+              <button type="button" class="geocode-option" (click)="selectGeocodeResult(r)">
+                <span class="material-symbols-outlined">location_on</span>
+                <span class="geocode-label">{{ r.label }}</span>
+                <span class="geocode-saved" *ngIf="r.addressId">Saved</span>
+              </button>
+            </li>
+          </ul>
+        </div>
+
         <label class="field">
           <span class="field-label">Name</span>
           <input
@@ -104,6 +137,27 @@
             {{ vertexCount }} / {{ maxVertices }}
           </p>
         </div>
+
+        <!-- Per-unit scoping (FN-1762) -->
+        <div class="field">
+          <span class="field-label">Applies to</span>
+          <app-ai-segmented-control
+            [segments]="appliesToSegments"
+            [selectedKey]="appliesTo"
+            (selectedKeyChange)="onAppliesToChange($event)"
+            ariaLabel="Geofence applies to"
+          ></app-ai-segmented-control>
+        </div>
+
+        <label class="field" *ngIf="appliesTo === 'unit'">
+          <span class="field-label">Unit</span>
+          <app-ai-select
+            formControlName="vehicleId"
+            [options]="vehicleOptions"
+            placeholder="Select a unit"
+            ariaLabel="Unit"
+          ></app-ai-select>
+        </label>
 
         <!-- Triggers -->
         <div class="triggers-section" formArrayName="triggers">
@@ -148,11 +202,6 @@
               <label class="field compact" *ngIf="t.get('action')?.value === 'webhook'">
                 <span class="field-label">Webhook URL</span>
                 <input type="url" class="form-input" formControlName="targetUrl" placeholder="https://…" />
-              </label>
-
-              <label class="field compact">
-                <span class="field-label">Vehicle ID (optional)</span>
-                <input type="text" class="form-input" formControlName="vehicleId" placeholder="All vehicles" />
               </label>
             </div>
             <button

@@ -4,11 +4,13 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { CommonModule } from '@angular/common';
 import { ReactiveFormsModule } from '@angular/forms';
 import { HttpClientTestingModule, HttpTestingController } from '@angular/common/http/testing';
+import { RouterTestingModule } from '@angular/router/testing';
 import { environment } from '../../../environments/environment';
 
 import { GeofencesComponent } from './geofences.component';
 import { AiSelectComponent } from '../../shared/ai-select/ai-select.component';
-import { Geofence } from './geofence.model';
+import { AiSegmentedControlComponent } from '../../shared/ai-segmented-control/ai-segmented-control.component';
+import { GeocodeResult, Geofence } from './geofence.model';
 
 describe('GeofencesComponent', () => {
   let component: GeofencesComponent;
@@ -18,8 +20,8 @@ describe('GeofencesComponent', () => {
 
   beforeEach(async () => {
     await TestBed.configureTestingModule({
-      declarations: [GeofencesComponent, AiSelectComponent],
-      imports: [CommonModule, ReactiveFormsModule, HttpClientTestingModule],
+      declarations: [GeofencesComponent, AiSelectComponent, AiSegmentedControlComponent],
+      imports: [CommonModule, ReactiveFormsModule, HttpClientTestingModule, RouterTestingModule],
     }).compileComponents();
 
     fixture = TestBed.createComponent(GeofencesComponent);
@@ -92,5 +94,46 @@ describe('GeofencesComponent', () => {
     component.edit({ id: 'p1', name: 'Big', kind: 'polygon', vertices });
     expect(component.vertexLimitReached).toBeTrue();
     expect(component.hasGeometry).toBeFalse();
+  });
+
+  // ── FN-1762 ───────────────────────────────────────────────────────────────
+  it('selecting a geocode result drops an editable circle and pre-fills the form', () => {
+    const r: GeocodeResult = { label: 'Chicago, IL', lat: 41.8, lng: -87.6, addressId: 'loc1' };
+    component.selectGeocodeResult(r);
+
+    expect(component.kind).toBe('circle');
+    expect(component.hasGeometry).toBeTrue();
+    expect(component.form.get('radiusMeters')!.value).toBe(200);
+    // name auto-fills from the result label when blank
+    expect(component.form.get('name')!.value).toBe('Chicago, IL');
+    expect(component.geocodeResults).toEqual([]);
+  });
+
+  it('per-unit scope stamps the chosen vehicle id (and addressId) on the saved payload', () => {
+    component.selectGeocodeResult({ label: 'Yard', lat: 1, lng: 2, addressId: 'loc9' });
+    component.form.get('appliesTo')!.setValue('unit');
+    component.form.get('vehicleId')!.setValue('veh-7');
+    component.addTrigger();
+
+    component.save();
+    const req = httpMock.expectOne(base);
+    expect(req.request.method).toBe('POST');
+    expect(req.request.body.addressId).toBe('loc9');
+    expect(req.request.body.triggers[0].vehicleId).toBe('veh-7');
+    req.flush({ id: 'g2' });
+    httpMock.expectOne(base).flush({ data: [] }); // reload after save
+  });
+
+  it('"all units" clears the trigger vehicle id', () => {
+    component.selectGeocodeResult({ label: 'Yard', lat: 1, lng: 2 });
+    component.form.get('appliesTo')!.setValue('all');
+    component.addTrigger();
+
+    component.save();
+    const req = httpMock.expectOne(base);
+    expect(req.request.body.triggers[0].vehicleId).toBeNull();
+    expect(req.request.body.addressId).toBeNull();
+    req.flush({ id: 'g3' });
+    httpMock.expectOne(base).flush({ data: [] });
   });
 });

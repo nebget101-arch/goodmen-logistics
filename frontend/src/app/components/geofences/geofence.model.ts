@@ -65,6 +65,8 @@ export interface GeofencePayload {
   radiusMeters?: number | null;
   vertices?: LatLng[] | null;
   active?: boolean;
+  /** Set when the geometry was anchored to a saved location via address search. */
+  addressId?: string | null;
   triggers?: GeofenceTrigger[];
 }
 
@@ -76,6 +78,25 @@ export interface GeofenceListFilters {
   near?: LatLng;
   /** Radius (meters) bounding the near-point filter. */
   nearRadiusMeters?: number;
+  /** Per-unit view — keep geofences whose triggers are scoped to this vehicle. */
+  vehicleId?: string;
+}
+
+/**
+ * A forward-geocode candidate from `GET /api/geofences/geocode` (FN-1761).
+ *
+ * The backend proxies Nominatim/OSM and returns `{ label, lat, lng, type,
+ * address_id? }`; `GeofenceService.geocode` maps the wire `address_id` to the
+ * camelCase `addressId` used everywhere else in this contract.
+ */
+export interface GeocodeResult {
+  label: string;
+  lat: number;
+  lng: number;
+  /** OSM place type (e.g. `city`, `road`, `building`) — informational. */
+  type?: string;
+  /** Set when the result resolves to one of the tenant's saved locations. */
+  addressId?: string | null;
 }
 
 /** Standard `{ data, meta }` list envelope. */
