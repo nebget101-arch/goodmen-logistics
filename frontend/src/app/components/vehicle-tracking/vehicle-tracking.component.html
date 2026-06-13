@@ -3,7 +3,7 @@
 <div class="vt-page">
   <header class="vt-header">
     <div class="vt-title">
-      <span class="material-icons vt-title-icon">my_location</span>
+      <span class="material-symbols-outlined vt-title-icon">my_location</span>
       <div>
         <h1>Vehicle Tracking</h1>
         <p class="vt-subtitle">Live 2D map &amp; telemetry by truck — telemetry is mock pending real integration.</p>
@@ -76,7 +76,18 @@
           <dl class="vt-metrics">
             <div>
               <dt>Position</dt>
-              <dd>{{ positionDisplay() }}</dd>
+              <dd>
+                <a
+                  *ngIf="googleMapsUrl() as mapsUrl; else plainPosition"
+                  class="vt-maps-link"
+                  [href]="mapsUrl"
+                  target="_blank"
+                  rel="noopener noreferrer">
+                  {{ positionDisplay() }}
+                  <span class="material-symbols-outlined vt-maps-icon">open_in_new</span>
+                </a>
+                <ng-template #plainPosition>{{ positionDisplay() }}</ng-template>
+              </dd>
             </div>
             <div>
               <dt>Speed</dt>
