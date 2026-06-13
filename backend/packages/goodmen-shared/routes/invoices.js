@@ -6,9 +6,45 @@ const dtLogger = require('../utils/logger');
 const db = require('../internal/db').knex;
 const invoicesService = require('../services/invoices.service');
 const { buildInvoicePdf } = require('../utils/invoice-pdf');
-const { uploadBuffer, getSignedDownloadUrl } = require('../storage/r2-storage');
+const { uploadBuffer, getSignedDownloadUrl, downloadBuffer } = require('../storage/r2-storage');
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+/**
+ * Resolve the branding logo buffer for an invoice PDF (FN-1748).
+ *
+ * Resolution order: the invoice's service location logo
+ * (`locations.logo_storage_key`) first, then a tenant-level fallback
+ * (`tenants.logo_storage_key`). The resolved R2 object is downloaded and
+ * returned as a Buffer for embedding in the PDF header.
+ *
+ * Never throws: a missing key or an R2 fetch failure resolves to `null` so the
+ * invoice still generates with the existing no-logo layout.
+ *
+ * @param {object} invoice - invoice row (provides tenant_id for the fallback)
+ * @param {object|null} location - location row (provides logo_storage_key)
+ * @returns {Promise<Buffer|null>}
+ */
+async function resolveInvoiceLogoBuffer(invoice, location) {
+  try {
+    let storageKey = location?.logo_storage_key || null;
+    if (!storageKey && invoice?.tenant_id) {
+      const tenant = await db('tenants')
+        .where({ id: invoice.tenant_id })
+        .select('logo_storage_key')
+        .first();
+      storageKey = tenant?.logo_storage_key || null;
+    }
+    if (!storageKey) return null;
+    return await downloadBuffer(storageKey);
+  } catch (err) {
+    dtLogger.warn('invoice_logo_resolve_failed', {
+      invoiceId: invoice?.id || null,
+      error: err?.message || String(err)
+    });
+    return null;
+  }
+}
 
 function requireRole(allowedRoles) {
   return (req, res, next) => {
@@ -948,6 +984,8 @@ router.post('/:id/pdf', authMiddleware, requireRole(['admin', 'accounting', 'ser
     const data = await invoicesService.getInvoiceById(req.params.id, req.context || null);
     if (!data) return res.status(404).json({ error: 'Invoice not found' });
 
+    const logoBuffer = await resolveInvoiceLogoBuffer(data.invoice, data.location);
+
     const pdfBuffer = await buildInvoicePdf({
       invoice: data.invoice,
       customer: data.customer,
@@ -955,7 +993,8 @@ router.post('/:id/pdf', authMiddleware, requireRole(['admin', 'accounting', 'ser
       workOrder: data.workOrder,
       vehicle: data.vehicle,
       lineItems: data.lineItems,
-      payments: data.payments
+      payments: data.payments,
+      logoBuffer
     });
 
     const fileName = `${data.invoice.invoice_number}.pdf`;
