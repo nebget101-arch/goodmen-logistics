@@ -15,6 +15,7 @@ const { handleCdlVision } = require('./handlers/cdl-vision-handler');
 const { handleSettlementInsights } = require('./handlers/settlement-insights-handler');
 const { handleLoadsNlq } = require('./handlers/loads-nlq-handler');
 const { handleLoadsSpreadsheetImport } = require('./handlers/loads-spreadsheet-handler');
+const { handleVehicleFaultDiagnosis } = require('./handlers/vehicle-fault-diagnosis-handler');
 const { handleInvoiceExtract } = require('./handlers/invoice-extractor-handler');
 const { handleLoadDriverMatch } = require('./handlers/load-driver-match-handler');
 const { handleVehicleRepairHistorySummary } = require('./handlers/vehicle-repair-history-handler');
@@ -2545,6 +2546,86 @@ function buildAiRouter(deps) {
    */
   router.post('/loads/spreadsheet-import', (req, res) =>
     handleLoadsSpreadsheetImport(req, res, deps)
+  );
+
+  /**
+   * @openapi
+   * /api/ai/vehicle/fault-diagnosis:
+   *   post:
+   *     summary: AI vehicle fault-code diagnosis (FN-1769)
+   *     description: >
+   *       Turns a list of active J1939/OBD-II fault codes into a plain-English
+   *       diagnosis and urgency call. Uses OpenAI gpt-4.1-mini with structured JSON
+   *       output (temperature 0.2). Empty faultCodes returns a benign no-fault
+   *       response without a model call. A deterministic safety bias forces
+   *       immediateAttention=true and urgency >= high for any critical/high severity
+   *       fault touching engine/oil pressure/brakes/coolant/overheat.
+   *     tags:
+   *       - AI
+   *     security:
+   *       - bearerAuth: []
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             required:
+   *               - faultCodes
+   *             properties:
+   *               vehicleId:
+   *                 type: string
+   *                 description: Optional vehicle ID for context/logging
+   *               unitNumber:
+   *                 type: string
+   *                 description: Optional unit number for the prompt
+   *               faultCodes:
+   *                 type: array
+   *                 description: Active fault codes from the telemetry contract
+   *                 items:
+   *                   type: object
+   *                   properties:
+   *                     code:
+   *                       type: string
+   *                     description:
+   *                       type: string
+   *                     severity:
+   *                       type: string
+   *     responses:
+   *       200:
+   *         description: Fault diagnosis
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: object
+   *               properties:
+   *                 summary:
+   *                   type: string
+   *                 immediateAttention:
+   *                   type: boolean
+   *                 urgency:
+   *                   type: string
+   *                   enum: [critical, high, medium, low]
+   *                 recommendedAction:
+   *                   type: string
+   *                 perFault:
+   *                   type: array
+   *                   items:
+   *                     type: object
+   *                     properties:
+   *                       code:
+   *                         type: string
+   *                       likelyCause:
+   *                         type: string
+   *                       immediateAttention:
+   *                         type: boolean
+   *       401:
+   *         description: Unauthorized
+   *       502:
+   *         description: AI fault diagnosis unavailable
+   */
+  router.post('/vehicle/fault-diagnosis', (req, res) =>
+    handleVehicleFaultDiagnosis(req, res, deps)
   );
 
   return router;

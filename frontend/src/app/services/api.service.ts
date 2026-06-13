@@ -99,6 +99,27 @@ export interface VehicleTelemetry {
   source: string;
 }
 
+/** Per-fault AI interpretation, keyed back to the fault `code` (FN-1769). */
+export interface FaultDiagnosisPerFault {
+  code: string;
+  likelyCause: string;
+  immediateAttention: boolean;
+}
+
+/**
+ * FN-1769 — AI fault-code diagnosis contract
+ * (`POST /api/ai/vehicle/fault-diagnosis`). Turns a list of active fault codes
+ * into a plain-English diagnosis + an urgency call. Owned by the frontend
+ * subtask (FN-1771); the ai-service handler (FN-1770) returns this exact shape.
+ */
+export interface VehicleFaultDiagnosis {
+  summary: string;
+  immediateAttention: boolean;
+  urgency: 'critical' | 'high' | 'medium' | 'low';
+  recommendedAction: string;
+  perFault: FaultDiagnosisPerFault[];
+}
+
 @Injectable({
   providedIn: 'root'
 })
@@ -2124,6 +2145,26 @@ export class ApiService {
   }): Observable<any> {
     const aiBase = this.baseUrl.replace(/\/api\/?$/, '/api/ai');
     return this.http.post(`${aiBase}/work-order/triage`, payload);
+  }
+
+  /**
+   * FN-1771 — AI fault-code diagnosis for the Vehicle Tracking telemetry panel.
+   * Hits `POST /api/ai/vehicle/fault-diagnosis` (FN-1770 handler) via the same
+   * AI-base rewrite as `triageWorkOrder`. Unwraps the `{ success, data }`
+   * envelope when present (mirrors `getVehicleTelemetry`).
+   */
+  getVehicleFaultDiagnosis(payload: {
+    vehicleId?: string | null;
+    unitNumber?: string | null;
+    faultCodes: Array<{ code: string; description: string; severity: string }>;
+  }): Observable<VehicleFaultDiagnosis> {
+    const aiBase = this.baseUrl.replace(/\/api\/?$/, '/api/ai');
+    return this.http
+      .post<{ success?: boolean; data?: VehicleFaultDiagnosis } | VehicleFaultDiagnosis>(
+        `${aiBase}/vehicle/fault-diagnosis`,
+        payload
+      )
+      .pipe(map((res: any) => (res?.data ?? res) as VehicleFaultDiagnosis));
   }
 
   // FN-1442: AI triage + live availability in one round-trip. Backend joins
