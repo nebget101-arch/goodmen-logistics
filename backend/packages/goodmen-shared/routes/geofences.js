@@ -20,6 +20,7 @@
 const express = require('express');
 const router = express.Router();
 const geofenceService = require('../services/geofence-service');
+const geocodeService = require('../services/geocode-service');
 const dtLogger = require('../utils/logger');
 
 function getTenantContext(req) {
@@ -56,6 +57,16 @@ function parseListFilters(req, userId) {
     filters.nearRadiusMeters = Number(req.query.nearRadiusMeters);
   }
 
+  // vehicle_id (per-unit view): keep geofences with a trigger scoped to this
+  // vehicle, or a tenant-wide trigger that also applies to it. Accept the
+  // snake_case wire name and a camelCase alias.
+  const vehicleRaw =
+    req.query.vehicle_id !== undefined ? req.query.vehicle_id : req.query.vehicleId;
+  if (vehicleRaw !== undefined) {
+    const v = String(vehicleRaw).trim();
+    if (v) filters.vehicleId = v;
+  }
+
   return filters;
 }
 
@@ -64,7 +75,7 @@ function parseListFilters(req, userId) {
  * /api/geofences:
  *   get:
  *     summary: List geofences for the tenant
- *     description: Filters — active (true/false), ownedBy (user id or "me"), near (lng,lat) + nearRadiusMeters.
+ *     description: Filters — active (true/false), ownedBy (user id or "me"), near (lng,lat) + nearRadiusMeters, vehicle_id (per-unit view).
  *     tags: [Geofences]
  *     security: [{ bearerAuth: [] }]
  *     parameters:
@@ -72,6 +83,7 @@ function parseListFilters(req, userId) {
  *       - { in: query, name: ownedBy, schema: { type: string } }
  *       - { in: query, name: near, description: "lng,lat (GeoJSON axis order)", schema: { type: string } }
  *       - { in: query, name: nearRadiusMeters, schema: { type: number } }
+ *       - { in: query, name: vehicle_id, description: "Keep geofences whose triggers are scoped to (or tenant-wide for) this vehicle", schema: { type: string } }
  *     responses:
  *       200: { description: "{ data, meta } list of geofences (each with triggers)" }
  *       403: { description: Tenant context missing }
@@ -86,6 +98,40 @@ router.get('/', async (req, res) => {
   } catch (err) {
     dtLogger.error('geofences_list_failed', { error: err.message });
     return res.status(500).json({ error: 'Failed to list geofences' });
+  }
+});
+
+/**
+ * @openapi
+ * /api/geofences/geocode:
+ *   get:
+ *     summary: Forward-geocode an address (Nominatim/OSM proxy)
+ *     description: >
+ *       Server-side proxy to Nominatim for the address-search box. Returns ranked
+ *       candidates `{ label, lat, lng, type, address_id? }`; `address_id` is set
+ *       when a result resolves to one of the tenant's saved locations. Results are
+ *       cached in-process with a short TTL (`meta.cached` flags a cache hit).
+ *     tags: [Geofences]
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: query, name: q, required: true, description: "Free-text address query", schema: { type: string } }
+ *     responses:
+ *       200: { description: "{ data: [{ label, lat, lng, type, address_id? }], meta }" }
+ *       400: { description: q is required }
+ *       403: { description: Tenant context missing }
+ *       502: { description: Geocoding upstream unavailable }
+ */
+router.get('/geocode', async (req, res) => {
+  const context = getTenantContext(req);
+  if (!context) return res.status(403).json({ error: 'Tenant context missing' });
+  const q = (req.query.q || '').toString().trim();
+  if (!q) return res.status(400).json({ error: 'q query parameter is required' });
+  try {
+    const { results, cached } = await geocodeService.geocode(q, { context });
+    return res.json({ data: results, meta: { total: results.length, cached } });
+  } catch (err) {
+    dtLogger.error('geofences_geocode_failed', { error: err.message });
+    return res.status(502).json({ error: 'Geocoding service unavailable' });
   }
 });
 
