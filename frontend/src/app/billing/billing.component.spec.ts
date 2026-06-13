@@ -18,6 +18,7 @@ describe('BillingComponent', () => {
 
   const baseState = (overrides: Partial<TrialState> = {}): TrialState => ({
     trialStatus: 'converted',
+    pending: false,
     trialEnd: null,
     daysRemaining: null,
     planAmount: 349,
@@ -200,6 +201,24 @@ describe('BillingComponent', () => {
       component.state = baseState({ cancelAtPeriodEnd: true });
       expect(component.cancelAtPeriodEnd).toBe(true);
       expect(component.statusSeverity).toBe('warning');
+    });
+
+    it('reports a pending trial as info severity (FN-1734)', () => {
+      component.state = baseState({
+        trialStatus: null,
+        subscriptionStatus: null,
+        pending: true
+      });
+      expect(component.isPending).toBe(true);
+      expect(component.isInTrial).toBe(false);
+      expect(component.isConverted).toBe(false);
+      expect(component.statusSeverity).toBe('info');
+    });
+
+    it('does not treat an active subscriber as pending', () => {
+      component.state = baseState();
+      expect(component.isPending).toBe(false);
+      expect(component.statusSeverity).toBe('good');
     });
   });
 });

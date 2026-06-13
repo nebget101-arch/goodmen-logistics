@@ -56,6 +56,14 @@
     </button>
   </div>
 
+  <!-- ── Pending: trial awaiting admin activation (no end date yet) ── -->
+  <div *ngSwitchCase="'pending'" class="trial-banner banner-pending" role="status" aria-live="polite">
+    <span class="banner-icon">⏳</span>
+    <span class="banner-text">
+      Your trial is pending activation — you'll see your trial end date here once it's approved.
+    </span>
+  </div>
+
   <!-- hidden for 'converted' subscribers and non-trial users -->
   <ng-container *ngSwitchDefault></ng-container>
 
