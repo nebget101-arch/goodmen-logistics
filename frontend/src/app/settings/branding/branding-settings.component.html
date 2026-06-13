@@ -1,0 +1,125 @@
+<div class="branding-settings">
+  <header class="branding-header">
+    <h1>Branding</h1>
+    <p class="branding-subtitle">
+      Manage the logos used on your documents. Carrier logos appear on dispatch,
+      settlement and driver documents; location logos appear on invoices.
+    </p>
+  </header>
+
+  <!-- Carriers (MCs) -->
+  <section class="branding-group">
+    <div class="group-head">
+      <h2>Carriers</h2>
+      <span class="group-meta" *ngIf="!loadingEntities && !entitiesError">
+        {{ entityRows.length }} operating {{ entityRows.length === 1 ? 'entity' : 'entities' }}
+      </span>
+    </div>
+
+    <div class="group-state" *ngIf="loadingEntities">Loading carriers…</div>
+    <div class="group-state group-state--error" *ngIf="entitiesError">
+      {{ entitiesError }}
+      <button type="button" class="link-btn" (click)="loadEntities()">Retry</button>
+    </div>
+    <div class="group-state" *ngIf="!loadingEntities && !entitiesError && entityRows.length === 0">
+      No carriers found for your account.
+    </div>
+
+    <div class="row-list" *ngIf="!loadingEntities && !entitiesError">
+      <ng-container *ngFor="let row of entityRows; trackBy: trackById">
+        <ng-container *ngTemplateOutlet="logoRow; context: { $implicit: row }"></ng-container>
+      </ng-container>
+    </div>
+  </section>
+
+  <!-- Shop locations -->
+  <section class="branding-group">
+    <div class="group-head">
+      <h2>Shop locations</h2>
+      <span class="group-meta" *ngIf="!loadingLocations && !locationsError">
+        {{ locationRows.length }} {{ locationRows.length === 1 ? 'location' : 'locations' }}
+      </span>
+    </div>
+
+    <div class="group-state" *ngIf="loadingLocations">Loading locations…</div>
+    <div class="group-state group-state--error" *ngIf="locationsError">
+      {{ locationsError }}
+      <button type="button" class="link-btn" (click)="loadLocations()">Retry</button>
+    </div>
+    <div class="group-state" *ngIf="!loadingLocations && !locationsError && locationRows.length === 0">
+      No shop locations found for your account.
+    </div>
+
+    <div class="row-list" *ngIf="!loadingLocations && !locationsError">
+      <ng-container *ngFor="let row of locationRows; trackBy: trackById">
+        <ng-container *ngTemplateOutlet="logoRow; context: { $implicit: row }"></ng-container>
+      </ng-container>
+    </div>
+  </section>
+</div>
+
+<!-- Reusable logo-management row -->
+<ng-template #logoRow let-row>
+  <div class="logo-row">
+    <!-- Preview / empty placeholder -->
+    <div
+      class="logo-preview"
+      [class.is-empty]="!row.logoUrl"
+      [class.drag-over]="row.dragOver"
+      (drop)="onDrop(row, $event)"
+      (dragover)="onDragOver(row, $event)"
+      (dragleave)="onDragLeave(row, $event)"
+    >
+      <div class="logo-spinner" *ngIf="row.loading">
+        <span class="spinner" aria-label="Working"></span>
+      </div>
+
+      <ng-container *ngIf="!row.loading">
+        <img *ngIf="row.logoUrl" [src]="row.logoUrl" [alt]="row.title + ' logo'" class="logo-img" />
+        <div *ngIf="!row.logoUrl" class="logo-placeholder">
+          <span class="placeholder-glyph">⬚</span>
+          <span class="placeholder-text">No logo</span>
+        </div>
+      </ng-container>
+    </div>
+
+    <!-- Meta + actions -->
+    <div class="logo-body">
+      <div class="logo-info">
+        <span class="logo-title">{{ row.title }}</span>
+        <span class="logo-subtitle" *ngIf="row.subtitle">{{ row.subtitle }}</span>
+      </div>
+
+      <p class="logo-hint" *ngIf="!row.logoUrl && !row.error">{{ acceptedHint }}</p>
+      <p class="logo-error" *ngIf="row.error" role="alert">{{ row.error }}</p>
+
+      <div class="logo-actions">
+        <input
+          #fileInput
+          type="file"
+          class="visually-hidden"
+          [accept]="acceptAttr"
+          (change)="onFileSelected(row, $event)"
+          [disabled]="row.loading"
+        />
+        <button
+          type="button"
+          class="btn btn--primary"
+          (click)="fileInput.click()"
+          [disabled]="row.loading"
+        >
+          {{ row.logoUrl ? 'Replace' : 'Upload logo' }}
+        </button>
+        <button
+          type="button"
+          class="btn btn--danger"
+          *ngIf="row.logoUrl"
+          (click)="removeLogo(row)"
+          [disabled]="row.loading"
+        >
+          Remove
+        </button>
+      </div>
+    </div>
+  </div>
+</ng-template>

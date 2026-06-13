@@ -903,6 +903,37 @@ export class ApiService {
     return `${this.baseUrl}/dqf-documents/download/${documentId}`;
   }
 
+  // Branding logos (FN-1744) — honors the FN-1737 API contract.
+  // GET returns { logoUrl, mimeType, uploadedAt } or { logoUrl: null }.
+  // POST is multipart `file` (same FormData pattern as uploadDQFDocument).
+  getOperatingEntityLogo(entityId: string): Observable<any> {
+    return this.http.get(`${this.baseUrl}/branding/operating-entities/${entityId}/logo`);
+  }
+
+  uploadOperatingEntityLogo(entityId: string, file: File): Observable<any> {
+    const formData = new FormData();
+    formData.append('file', file);
+    return this.http.post(`${this.baseUrl}/branding/operating-entities/${entityId}/logo`, formData);
+  }
+
+  deleteOperatingEntityLogo(entityId: string): Observable<any> {
+    return this.http.delete(`${this.baseUrl}/branding/operating-entities/${entityId}/logo`);
+  }
+
+  getLocationLogo(locationId: string): Observable<any> {
+    return this.http.get(`${this.baseUrl}/branding/locations/${locationId}/logo`);
+  }
+
+  uploadLocationLogo(locationId: string, file: File): Observable<any> {
+    const formData = new FormData();
+    formData.append('file', file);
+    return this.http.post(`${this.baseUrl}/branding/locations/${locationId}/logo`, formData);
+  }
+
+  deleteLocationLogo(locationId: string): Observable<any> {
+    return this.http.delete(`${this.baseUrl}/branding/locations/${locationId}/logo`);
+  }
+
   // Blob download helpers for authenticated file downloads
   downloadDQFDocumentBlob(documentId: string): Observable<Blob> {
     return this.http.get(`${this.baseUrl}/dqf-documents/download/${documentId}`, {
