@@ -114,4 +114,33 @@ describe('geocode-service (FN-1761)', () => {
     const { results } = await geocode.geocode('amph', { search: makeSearch() });
     assert.strictEqual(results[0].address_id, undefined);
   });
+
+  describe('countryCodes (FN-1773 — US restriction)', () => {
+    const ENV = 'GEOCODER_COUNTRY_CODES';
+    function withEnv(value, fn) {
+      const prev = process.env[ENV];
+      if (value === undefined) delete process.env[ENV];
+      else process.env[ENV] = value;
+      try {
+        fn();
+      } finally {
+        if (prev === undefined) delete process.env[ENV];
+        else process.env[ENV] = prev;
+      }
+    }
+
+    it('defaults to "us" when GEOCODER_COUNTRY_CODES is unset', () => {
+      withEnv(undefined, () => assert.strictEqual(geocode.countryCodes(), 'us'));
+    });
+
+    it('honors the override and normalizes (lowercase, no spaces)', () => {
+      withEnv(' US, CA , MX ', () =>
+        assert.strictEqual(geocode.countryCodes(), 'us,ca,mx')
+      );
+    });
+
+    it('returns "" (global) when explicitly set blank', () => {
+      withEnv('', () => assert.strictEqual(geocode.countryCodes(), ''));
+    });
+  });
 });

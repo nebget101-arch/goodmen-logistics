@@ -22,6 +22,10 @@ const dbModule = require('../internal/db');
 const dtLogger = require('../utils/logger');
 
 const DEFAULT_BASE_URL = 'https://nominatim.openstreetmap.org';
+// Constrain results to the US by default (FleetNeuron is a US fleet app). Override
+// via GEOCODER_COUNTRY_CODES (comma-separated ISO codes, e.g. 'us,ca,mx' for
+// cross-border); set it empty to disable the filter and search globally.
+const DEFAULT_COUNTRY_CODES = 'us';
 // Descriptive UA per the Nominatim usage policy (app name + version + contact).
 const USER_AGENT = 'FleetNeuron/1.0 (ops@fleetneuron.ai)';
 const CACHE_TTL_MS = 60 * 1000; // short-TTL: 60s is plenty to absorb ret/keystroke bursts
@@ -33,6 +37,19 @@ const cache = new Map();
 
 function baseUrl() {
   return (process.env.GEOCODER_BASE_URL || DEFAULT_BASE_URL).replace(/\/+$/, '');
+}
+
+/**
+ * Comma-separated ISO-3166-1 country codes to restrict Nominatim results to.
+ * Defaults to `us`; `GEOCODER_COUNTRY_CODES=''` (explicitly empty) disables the
+ * filter for a global search. Normalized to lowercase, no spaces.
+ */
+function countryCodes() {
+  const raw =
+    process.env.GEOCODER_COUNTRY_CODES != null
+      ? process.env.GEOCODER_COUNTRY_CODES
+      : DEFAULT_COUNTRY_CODES;
+  return raw.trim().toLowerCase().replace(/\s+/g, '');
 }
 
 /** Lowercased, whitespace-collapsed query — the cache key and match basis. */
@@ -86,8 +103,11 @@ function clearCache() {
 async function nominatimSearch(q, limit) {
   const axios = require('axios'); // lazy: only the real geocode path needs the HTTP client
   const url = `${baseUrl()}/search`;
+  const params = { q, format: 'jsonv2', addressdetails: 1, limit };
+  const cc = countryCodes();
+  if (cc) params.countrycodes = cc; // restrict to US (or configured codes); omit for global
   const response = await axios.get(url, {
-    params: { q, format: 'jsonv2', addressdetails: 1, limit },
+    params,
     headers: { 'User-Agent': USER_AGENT, 'Accept-Language': 'en' },
     timeout: 8000,
   });
@@ -178,6 +198,7 @@ module.exports = {
   geocode,
   clearCache,
   // exported for unit tests / reuse
+  countryCodes,
   normalizeQuery,
   normalizeAddress,
   toWireResult,
