@@ -50,6 +50,7 @@ const tollsRouter = require(path.join(sharedRoot, 'routes', 'tolls'));
 const brokersRouter = require(path.join(sharedRoot, 'routes', 'brokers'));
 const locationsRouter = require(path.join(sharedRoot, 'routes', 'locations'));
 const locationBinsRouter = require(path.join(sharedRoot, 'routes', 'location-bins'));
+const brandingRouter = require(path.join(sharedRoot, 'routes', 'branding'));
 const userLocationsRouter = require(path.join(sharedRoot, 'routes', 'user-locations'));
 const geoRouter = require(path.join(sharedRoot, 'routes', 'geo'));
 const geofencesRouter = require(path.join(sharedRoot, 'routes', 'geofences'));
@@ -109,6 +110,8 @@ app.use('/api', authMiddleware, tenantContextMiddleware, requireActiveSubscripti
 app.use('/api/brokers', authMiddleware, tenantContextMiddleware, requireActiveSubscription, brokersRouter);
 app.use('/api/locations', authMiddleware, tenantContextMiddleware, requireActiveSubscription, locationsRouter);
 app.use('/api/locations/:locationId/bins', authMiddleware, tenantContextMiddleware, requireActiveSubscription, locationBinsRouter);
+// FN-1742: branding logos for operating entities + shop locations (epic FN-1736).
+app.use('/api/branding', authMiddleware, tenantContextMiddleware, requireActiveSubscription, brandingRouter);
 app.use('/api', authMiddleware, tenantContextMiddleware, requireActiveSubscription, userLocationsRouter);
 app.use('/api/geo', authMiddleware, tenantContextMiddleware, requireActiveSubscription, geoRouter);
 app.use('/api/geofences', authMiddleware, tenantContextMiddleware, requireActiveSubscription, geofencesRouter);
