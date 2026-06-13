@@ -71,6 +71,34 @@ export interface CdlExtractionResponse {
   meta?: { lowConfidenceFields?: string[]; processingMs?: number };
 }
 
+/** FN-1750 — active diagnostic trouble code on a vehicle. */
+export interface TelemetryFaultCode {
+  code: string;
+  description: string;
+  severity: 'low' | 'medium' | 'high' | 'critical' | string;
+}
+
+/**
+ * FN-1750 — provider-agnostic vehicle telemetry shape. Backend currently
+ * returns deterministic MOCK data (`source: 'mock'`); a real telematics
+ * integration can swap in later without changing this contract.
+ * Endpoints: GET /api/vehicles/:id/telemetry, GET /api/fleet/telemetry?type=truck
+ */
+export interface VehicleTelemetry {
+  vehicle_id: string;
+  latitude: number;
+  longitude: number;
+  speed_mph: number;
+  heading_deg: number;
+  fuel_level_pct: number;
+  odometer: number;
+  engine_status: string;
+  last_moved_at: string;
+  fault_codes: TelemetryFaultCode[];
+  updated_at: string;
+  source: string;
+}
+
 @Injectable({
   providedIn: 'root'
 })
@@ -962,6 +990,21 @@ export class ApiService {
 
   getVehicle(id: string): Observable<any> {
     return this.http.get(`${this.baseUrl}/vehicles/${id}`);
+  }
+
+  // FN-1750 — Vehicle Tracking telemetry (provider-agnostic; backend returns MOCK
+  // data for now behind these contract endpoints). See VehicleTelemetry shape above.
+  // Backend (FN-1752) wraps payloads as { success, data } like equipment.js — unwrap data.
+  getVehicleTelemetry(id: string): Observable<VehicleTelemetry> {
+    return this.http
+      .get<{ success: boolean; data: VehicleTelemetry }>(`${this.baseUrl}/vehicles/${encodeURIComponent(id)}/telemetry`)
+      .pipe(map((res) => res?.data ?? (res as unknown as VehicleTelemetry)));
+  }
+
+  getFleetTelemetry(type: string = 'truck'): Observable<VehicleTelemetry[]> {
+    return this.http
+      .get<{ success: boolean; data: VehicleTelemetry[] }>(`${this.baseUrl}/fleet/telemetry?type=${encodeURIComponent(type)}`)
+      .pipe(map((res) => res?.data ?? (res as unknown as VehicleTelemetry[]) ?? []));
   }
 
   getVehicleMaintenanceHistory(id: string, page = 1, pageSize = 25): Observable<any> {

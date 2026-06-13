@@ -1,0 +1,299 @@
+/* FN-1751 Vehicle Tracking. Colors are rgba() drawn from the documented
+   dark-theme palette (see docs/AI_THEME_VISUAL_REFERENCE.md) — no new hex. */
+:host {
+  display: block;
+}
+
+.vt-page {
+  padding: 20px 24px 32px;
+  color: rgba(226, 232, 240, 1);
+}
+
+/* ── Header ─────────────────────────────────────────────────────────── */
+.vt-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 18px;
+}
+
+.vt-title {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.vt-title-icon {
+  font-size: 2rem;
+  color: rgba(45, 212, 191, 0.95);
+}
+
+.vt-title h1 {
+  margin: 0;
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: rgba(248, 250, 252, 1);
+}
+
+.vt-subtitle {
+  margin: 2px 0 0;
+  font-size: 0.85rem;
+  color: rgba(148, 163, 184, 1);
+}
+
+.vt-filter {
+  min-width: 260px;
+  flex: 0 1 320px;
+}
+
+.vt-error {
+  margin: 6px 0 0;
+  font-size: 0.8rem;
+  color: rgba(252, 165, 165, 1);
+}
+
+/* ── Layout ─────────────────────────────────────────────────────────── */
+.vt-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 380px;
+  gap: 18px;
+  align-items: stretch;
+}
+
+@media (max-width: 1100px) {
+  .vt-body {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* ── Map ────────────────────────────────────────────────────────────── */
+.vt-map-card {
+  border-radius: 16px;
+  overflow: hidden;
+  border: 1px solid rgba(51, 65, 85, 0.9);
+  box-shadow: 0 16px 35px rgba(2, 6, 23, 0.55);
+  background: rgba(15, 23, 42, 0.95);
+}
+
+.vt-map {
+  width: 100%;
+  height: 620px;
+  min-height: 420px;
+}
+
+@media (max-width: 1100px) {
+  .vt-map {
+    height: 440px;
+  }
+}
+
+/* ── Telemetry panel ────────────────────────────────────────────────── */
+.vt-panel {
+  border-radius: 16px;
+  padding: 18px;
+  border: 1px solid rgba(51, 65, 85, 0.9);
+  background:
+    radial-gradient(circle at 0% 0%, rgba(45, 212, 191, 0.06), transparent 45%),
+    rgba(15, 23, 42, 0.95);
+  box-shadow: 0 16px 35px rgba(2, 6, 23, 0.55);
+}
+
+.vt-panel-title {
+  margin: 0 0 14px;
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: rgba(148, 163, 184, 1);
+}
+
+.vt-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 40px 12px;
+  text-align: center;
+  color: rgba(148, 163, 184, 1);
+}
+
+.vt-empty .material-icons {
+  font-size: 2.4rem;
+  color: rgba(71, 85, 105, 1);
+}
+
+.vt-kpis {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+@media (max-width: 480px) {
+  .vt-kpis {
+    grid-template-columns: 1fr;
+  }
+}
+
+.vt-block {
+  margin-top: 18px;
+}
+
+.vt-block-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 10px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: rgba(226, 232, 240, 1);
+}
+
+.vt-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 22px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: rgba(248, 250, 252, 1);
+  background: rgba(51, 65, 85, 0.9);
+}
+
+.vt-metrics {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin: 0;
+}
+
+.vt-metrics dt {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: rgba(148, 163, 184, 1);
+}
+
+.vt-metrics dd {
+  margin: 2px 0 0;
+  font-size: 0.98rem;
+  font-weight: 600;
+  color: rgba(248, 250, 252, 1);
+}
+
+.vt-none {
+  margin: 0;
+  font-size: 0.85rem;
+  color: rgba(148, 163, 184, 1);
+}
+
+/* ── Fault codes ────────────────────────────────────────────────────── */
+.vt-faults {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.vt-fault {
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(51, 65, 85, 0.9);
+  background: rgba(2, 6, 23, 0.4);
+}
+
+.vt-fault-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.vt-fault-code {
+  font-family: 'SFMono-Regular', Menlo, Consolas, monospace;
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: rgba(248, 250, 252, 1);
+}
+
+.vt-fault-desc {
+  margin: 4px 0 0;
+  font-size: 0.82rem;
+  color: rgba(148, 163, 184, 1);
+}
+
+.vt-sev-badge {
+  text-transform: capitalize;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+}
+
+.vt-sev-critical {
+  color: rgba(252, 165, 165, 1);
+  border-color: rgba(248, 113, 113, 0.5);
+  background: rgba(239, 68, 68, 0.12);
+}
+
+.vt-sev-high {
+  color: rgba(253, 186, 116, 1);
+  border-color: rgba(217, 119, 6, 0.5);
+  background: rgba(217, 119, 6, 0.12);
+}
+
+.vt-sev-medium {
+  color: rgba(250, 204, 21, 1);
+  border-color: rgba(202, 138, 4, 0.5);
+  background: rgba(202, 138, 4, 0.12);
+}
+
+.vt-sev-low {
+  color: rgba(148, 163, 184, 1);
+  border-color: rgba(51, 65, 85, 0.9);
+  background: rgba(51, 65, 85, 0.35);
+}
+
+.vt-source {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 16px 0 0;
+  font-size: 0.78rem;
+  color: rgba(148, 163, 184, 1);
+}
+
+.vt-source .material-icons {
+  font-size: 1rem;
+  color: rgba(45, 212, 191, 0.9);
+}
+
+/* ── Leaflet markers (injected dynamically — needs ::ng-deep) ────────── */
+:host ::ng-deep .vt-fleet-marker .vt-dot {
+  display: block;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: rgba(56, 189, 248, 0.95);
+  border: 2px solid rgba(15, 23, 42, 0.9);
+  box-shadow: 0 0 0 1px rgba(56, 189, 248, 0.5);
+}
+
+:host ::ng-deep .vt-selected-marker .vt-pin {
+  display: block;
+  width: 18px;
+  height: 18px;
+  border-radius: 50% 50% 50% 0;
+  transform: rotate(-45deg);
+  margin: 4px;
+  background: rgba(45, 212, 191, 0.95);
+  border: 2px solid rgba(15, 23, 42, 0.9);
+  box-shadow: 0 0 0 2px rgba(45, 212, 191, 0.45), 0 4px 10px rgba(2, 6, 23, 0.6);
+}

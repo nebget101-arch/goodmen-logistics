@@ -9,6 +9,7 @@ import { DriversComponent } from './components/drivers/drivers.component';
 import { DispatchDriversComponent } from './components/dispatch-drivers/dispatch-drivers.component';
 import { DriverEditComponent } from './components/driver-edit/driver-edit.component';
 import { VehiclesComponent } from './components/vehicles/vehicles.component';
+import { VehicleTrackingComponent } from './components/vehicle-tracking/vehicle-tracking.component';
 import { HosComponent } from './components/hos/hos.component';
 import { LoadsComponent } from './components/loads/loads.component';
 import { DispatchBoardComponent } from './components/dispatch-board/dispatch-board.component';
@@ -100,6 +101,15 @@ const routes: Routes = [
       vehicleType: 'trailer',
       planPath: '/trailers',
       anyPermission: [PERMISSIONS.VEHICLES_VIEW, PERMISSIONS.VEHICLES_CREATE, PERMISSIONS.VEHICLES_EDIT]
+    }
+  },
+  {
+    path: 'vehicle-tracking',
+    component: VehicleTrackingComponent,
+    canActivate: [AuthGuard, PlanGuard, PermissionGuard],
+    data: {
+      planPath: '/vehicle-tracking',
+      anyPermission: [PERMISSIONS.VEHICLES_VIEW]
     }
   },
   { path: 'hos', component: HosComponent, canActivate: [AuthGuard, PlanGuard], data: { planPath: '/hos' } },
