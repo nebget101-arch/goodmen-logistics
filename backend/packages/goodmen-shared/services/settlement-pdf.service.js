@@ -1,5 +1,6 @@
 const { PDFDocument, StandardFonts, rgb } = require('pdf-lib');
 const { ensureSettlementAiInsights } = require('./settlement-ai-insights.service');
+const { embedOperatingEntityLogo, scaleToFit } = require('./logo-embed.helper');
 
 function asNumber(value) {
   const num = Number(value || 0);
@@ -345,7 +346,7 @@ function drawWrappedLines(page, font, lines, x, y, options = {}) {
   return currentY;
 }
 
-function drawPageBase(page, fonts, payload) {
+function drawPageBase(page, fonts, payload, logoImage) {
   const { regular, bold } = fonts;
   page.drawRectangle({ x: 0, y: 0, width: LAYOUT.width, height: LAYOUT.height, color: COLORS.bg });
   drawAiGridWatermark(page);
@@ -367,20 +368,34 @@ function drawPageBase(page, fonts, payload) {
   });
   drawNeonDivider(page, LAYOUT.height - 126);
 
-  page.drawText('FleetNeuron', {
-    x: LAYOUT.marginLeft + 16,
-    y: LAYOUT.height - 65,
-    size: 24,
-    font: bold,
-    color: COLORS.white
-  });
-  page.drawText('AI FLEET INTELLIGENCE', {
-    x: LAYOUT.marginLeft + 16,
-    y: LAYOUT.height - 83,
-    size: 8,
-    font: bold,
-    color: COLORS.accent
-  });
+  // Operating-entity (MC) logo replaces the FleetNeuron wordmark when present;
+  // falls back to the text header when no logo is set or it failed to load.
+  if (logoImage) {
+    const dims = scaleToFit(logoImage, 150, 46);
+    if (dims) {
+      page.drawImage(logoImage, {
+        x: LAYOUT.marginLeft + 16,
+        y: LAYOUT.height - 88 + (46 - dims.height) / 2,
+        width: dims.width,
+        height: dims.height
+      });
+    }
+  } else {
+    page.drawText('FleetNeuron', {
+      x: LAYOUT.marginLeft + 16,
+      y: LAYOUT.height - 65,
+      size: 24,
+      font: bold,
+      color: COLORS.white
+    });
+    page.drawText('AI FLEET INTELLIGENCE', {
+      x: LAYOUT.marginLeft + 16,
+      y: LAYOUT.height - 83,
+      size: 8,
+      font: bold,
+      color: COLORS.accent
+    });
+  }
   page.drawText('www.fleetneuron.ai', {
     x: LAYOUT.width - LAYOUT.marginRight - 116,
     y: LAYOUT.height - 48,
@@ -462,11 +477,12 @@ function drawPageFooter(page, fonts, pageNumber, totalPages) {
   });
 }
 
-function createDocumentState(pdfDoc, fonts, payload) {
+function createDocumentState(pdfDoc, fonts, payload, logoImage) {
   return {
     pdfDoc,
     fonts,
     payload,
+    logoImage: logoImage || null,
     pages: [],
     page: null,
     y: LAYOUT.contentTop
@@ -475,7 +491,7 @@ function createDocumentState(pdfDoc, fonts, payload) {
 
 function addPage(state) {
   const page = state.pdfDoc.addPage([LAYOUT.width, LAYOUT.height]);
-  drawPageBase(page, state.fonts, state.payload);
+  drawPageBase(page, state.fonts, state.payload, state.logoImage);
   state.pages.push(page);
   state.page = page;
   state.y = LAYOUT.contentTop;
@@ -802,7 +818,8 @@ async function buildSettlementPdf(payload) {
   const bold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
   const fonts = { regular, bold };
 
-  const state = createDocumentState(pdfDoc, fonts, payload);
+  const logoImage = await embedOperatingEntityLogo(pdfDoc, payload?.operatingEntity);
+  const state = createDocumentState(pdfDoc, fonts, payload, logoImage);
   addPage(state);
 
   drawSectionTitle(state, getSettlementTypeLabel(payload?.settlement?.settlement_type));

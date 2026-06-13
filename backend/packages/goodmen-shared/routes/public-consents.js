@@ -74,7 +74,7 @@ async function loadDriverAndEntity(driverId, packetOperatingEntityId) {
   const oeId = (driver && driver.operating_entity_id) || packetOperatingEntityId || null;
   if (oeId) {
     const oeRes = await query(
-      'SELECT id, name, legal_name, address_line1, address_line2, city, state, zip_code, phone, email FROM operating_entities WHERE id = $1',
+      'SELECT id, name, legal_name, address_line1, address_line2, city, state, zip_code, phone, email, logo_storage_key, logo_mime_type FROM operating_entities WHERE id = $1',
       [oeId]
     );
     operatingEntity = oeRes.rows[0] || null;
@@ -528,7 +528,12 @@ router.post('/:packetId/:consentKey/sign', rateLimited, async (req, res) => {
           ip_address: signed.ip_address || req.ip,
           capture_data: captureData || {}
         },
-        company: { name: companyName, address: companyAddress },
+        company: {
+          name: companyName,
+          address: companyAddress,
+          logo_storage_key: operatingEntity?.logo_storage_key,
+          logo_mime_type: operatingEntity?.logo_mime_type
+        },
         driver
       });
 

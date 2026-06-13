@@ -183,7 +183,7 @@ async function signConsent(consentId, { signerName, signatureType, signatureValu
       let company = null;
       try {
         const oeRes = await query(
-          `SELECT oe.name, oe.address FROM operating_entities oe
+          `SELECT oe.name, oe.address, oe.logo_storage_key, oe.logo_mime_type FROM operating_entities oe
            JOIN drivers d ON d.operating_entity_id = oe.id
            WHERE d.id = $1`,
           [consent.driver_id]

@@ -1256,7 +1256,7 @@ router.post('/driver/:driverId/auto-pull-emp-app', async (req, res) => {
     let operatingEntity = null;
     if (driver.operating_entity_id) {
       const oeRes = await query(
-        `SELECT name, legal_name, address_line1, address_line2, city, state, zip_code, phone, email FROM operating_entities WHERE id = $1`,
+        `SELECT name, legal_name, address_line1, address_line2, city, state, zip_code, phone, email, logo_storage_key, logo_mime_type FROM operating_entities WHERE id = $1`,
         [driver.operating_entity_id]
       );
       if (oeRes.rows.length > 0) {
@@ -1265,7 +1265,9 @@ router.post('/driver/:driverId/auto-pull-emp-app', async (req, res) => {
           name: oe.name || oe.legal_name || '',
           address: [oe.address_line1, oe.address_line2, oe.city, oe.state, oe.zip_code].filter(Boolean).join(', '),
           phone: oe.phone || '',
-          email: oe.email || ''
+          email: oe.email || '',
+          logo_storage_key: oe.logo_storage_key,
+          logo_mime_type: oe.logo_mime_type
         };
       }
     }
