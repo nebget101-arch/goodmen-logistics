@@ -1,13 +1,36 @@
 import { Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable } from 'rxjs';
+import { map } from 'rxjs/operators';
 import { environment } from '../../../environments/environment';
 import {
   Geofence,
   GeofenceListFilters,
   GeofenceListResponse,
   GeofencePayload,
+  GeofenceRecipientBroker,
+  GeofenceRecipientUser,
 } from './geofence.model';
+
+/** Raw `/api/users` row (subset consumed by the recipient picker). */
+interface RawUser {
+  id: string;
+  first_name?: string | null;
+  last_name?: string | null;
+  username?: string | null;
+  email?: string | null;
+}
+
+/** Raw `/api/brokers` row (subset consumed by the recipient picker). */
+interface RawBroker {
+  id: string;
+  name?: string | null;
+  display_name?: string | null;
+  legal_name?: string | null;
+  city?: string | null;
+  state?: string | null;
+  mc_number?: string | null;
+}
 
 /**
  * GeofenceService — thin HTTP client over the `/api/geofences` CRUD contract
@@ -54,4 +77,47 @@ export class GeofenceService {
   delete(id: string): Observable<void> {
     return this.http.delete<void>(`${this.baseUrl}/${id}`);
   }
+
+  /**
+   * Internal users available as `user` recipients for a `notify` trigger.
+   * Sources `GET /api/users` (the same endpoint user-admin uses) and projects
+   * each row down to {@link GeofenceRecipientUser}. Co-located here so the
+   * recipient panel depends only on the geofence domain, not on ApiService.
+   */
+  listUsers(): Observable<GeofenceRecipientUser[]> {
+    return this.http
+      .get<{ data?: RawUser[] }>(`${environment.apiUrl}/users`)
+      .pipe(map((res) => (res?.data ?? []).map(toRecipientUser)));
+  }
+
+  /**
+   * Brokers available as `broker` recipients. Sources `GET /api/brokers`
+   * (a large page — the picker filters client-side) and projects to
+   * {@link GeofenceRecipientBroker}.
+   */
+  listBrokers(): Observable<GeofenceRecipientBroker[]> {
+    const p = new URLSearchParams({ page: '1', pageSize: '5000' });
+    return this.http
+      .get<{ data?: RawBroker[] }>(`${environment.apiUrl}/brokers?${p.toString()}`)
+      .pipe(map((res) => (res?.data ?? []).map(toRecipientBroker)));
+  }
+}
+
+/** Build a display name for a user: full name → username → email → id. */
+function toRecipientUser(u: RawUser): GeofenceRecipientUser {
+  const full = [u.first_name, u.last_name].filter(Boolean).join(' ').trim();
+  return {
+    id: u.id,
+    name: full || (u.username ?? '').trim() || (u.email ?? '').trim() || u.id,
+    email: u.email ?? null,
+  };
+}
+
+/** Build a one-line broker label: "Name / City, ST / MC#" where available. */
+function toRecipientBroker(b: RawBroker): GeofenceRecipientBroker {
+  const name = (b.display_name || b.name || b.legal_name || '').toString().trim() || '—';
+  const loc = [b.city, b.state].filter(Boolean).join(', ');
+  const mc = (b.mc_number || '').toString().trim();
+  const label = [name, loc, mc].filter(Boolean).join(' / ');
+  return { id: b.id, name: label };
 }
