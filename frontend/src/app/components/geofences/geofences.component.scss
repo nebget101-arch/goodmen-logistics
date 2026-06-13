@@ -364,11 +364,143 @@
   background: rgba(2, 6, 23, 0.4);
 }
 
-.trigger-grid {
+.trigger-content {
   flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.trigger-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
   gap: 8px;
+}
+
+/* ── Notify recipients panel ──────────────────────────────────────────── */
+.notify-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 10px;
+  border-radius: 10px;
+  border: 1px solid rgba(56, 189, 248, 0.35);
+  background:
+    radial-gradient(circle at 0 0, rgba(59, 130, 246, 0.1), transparent 55%),
+    rgba(2, 6, 23, 0.5);
+}
+
+.notify-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #67e8f9;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+
+  .material-symbols-outlined {
+    font-size: 1rem;
+  }
+}
+
+.recipient-add {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+
+  .recipient-type-select {
+    flex: 0 0 auto;
+    min-width: 140px;
+  }
+
+  .recipient-value-select,
+  .recipient-value-input {
+    flex: 1 1 200px;
+    min-width: 180px;
+  }
+}
+
+.recipient-groups {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 10px;
+}
+
+@media (min-width: 720px) {
+  .recipient-groups {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+.recipient-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px;
+  border-radius: 8px;
+  border: 1px solid rgba(51, 65, 85, 0.6);
+  background: rgba(2, 6, 23, 0.35);
+}
+
+.recipient-group-label {
+  color: #a5b4fc;
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+}
+
+.muted.tiny {
+  font-size: 0.78rem;
+}
+
+.recipient-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 4px 4px 8px;
+  border-radius: 8px;
+  border: 1px solid rgba(51, 65, 85, 0.7);
+  background: rgba(15, 23, 42, 0.6);
+}
+
+.recipient-name {
+  flex: 1;
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #e2e8f0;
+  font-size: 0.85rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+
+  .material-symbols-outlined {
+    flex: 0 0 auto;
+    font-size: 1rem;
+    color: #38bdf8;
+  }
+}
+
+.channel-select {
+  flex: 0 0 auto;
+  min-width: 130px;
+}
+
+.channel-pill {
+  flex: 0 0 auto;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid rgba(165, 180, 252, 0.6);
+  color: #c7d2fe;
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
 }
 
 .form-actions {

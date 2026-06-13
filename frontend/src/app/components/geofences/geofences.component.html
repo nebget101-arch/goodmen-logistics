@@ -121,40 +121,159 @@
             *ngFor="let t of triggers.controls; let i = index"
             [formGroupName]="i"
           >
-            <div class="trigger-grid">
-              <label class="field compact">
-                <span class="field-label">Event</span>
-                <app-ai-select
-                  formControlName="eventKind"
-                  [options]="eventKindOptions"
-                  ariaLabel="Trigger event"
-                ></app-ai-select>
-              </label>
+            <div class="trigger-content">
+              <div class="trigger-grid">
+                <label class="field compact">
+                  <span class="field-label">Event</span>
+                  <app-ai-select
+                    formControlName="eventKind"
+                    [options]="eventKindOptions"
+                    ariaLabel="Trigger event"
+                  ></app-ai-select>
+                </label>
 
-              <label class="field compact" *ngIf="t.get('eventKind')?.value === 'dwell'">
-                <span class="field-label">Dwell (min)</span>
-                <input type="number" class="form-input" formControlName="dwellMinutes" min="1" />
-              </label>
+                <label class="field compact" *ngIf="t.get('eventKind')?.value === 'dwell'">
+                  <span class="field-label">Dwell (min)</span>
+                  <input type="number" class="form-input" formControlName="dwellMinutes" min="1" />
+                </label>
 
-              <label class="field compact">
-                <span class="field-label">Action</span>
-                <app-ai-select
-                  formControlName="action"
-                  [options]="actionOptions"
-                  ariaLabel="Trigger action"
-                ></app-ai-select>
-              </label>
+                <label class="field compact">
+                  <span class="field-label">Action</span>
+                  <app-ai-select
+                    formControlName="action"
+                    [options]="actionOptions"
+                    ariaLabel="Trigger action"
+                  ></app-ai-select>
+                </label>
 
-              <label class="field compact" *ngIf="t.get('action')?.value === 'webhook'">
-                <span class="field-label">Webhook URL</span>
-                <input type="url" class="form-input" formControlName="targetUrl" placeholder="https://…" />
-              </label>
+                <label class="field compact" *ngIf="t.get('action')?.value === 'webhook'">
+                  <span class="field-label">Webhook URL</span>
+                  <input type="url" class="form-input" formControlName="targetUrl" placeholder="https://…" />
+                </label>
 
-              <label class="field compact">
-                <span class="field-label">Vehicle ID (optional)</span>
-                <input type="text" class="form-input" formControlName="vehicleId" placeholder="All vehicles" />
-              </label>
+                <label class="field compact">
+                  <span class="field-label">Vehicle ID (optional)</span>
+                  <input type="text" class="form-input" formControlName="vehicleId" placeholder="All vehicles" />
+                </label>
+              </div>
+
+              <!-- ── Notify recipients (action === 'notify') ──────────────── -->
+              <div class="notify-panel" *ngIf="t.get('action')?.value === 'notify'">
+                <span class="notify-title">
+                  <span class="material-symbols-outlined">notifications_active</span>
+                  Notify recipients
+                </span>
+
+                <!-- Add a recipient -->
+                <div class="recipient-add" [ngSwitch]="t.get('draftType')?.value">
+                  <app-ai-select
+                    class="recipient-type-select"
+                    formControlName="draftType"
+                    [options]="recipientTypeOptions"
+                    ariaLabel="Recipient type"
+                  ></app-ai-select>
+
+                  <app-ai-select
+                    *ngSwitchCase="'user'"
+                    class="recipient-value-select"
+                    formControlName="draftUserId"
+                    [options]="userOptions"
+                    [allowEmpty]="true"
+                    emptyLabel="Select a user…"
+                    ariaLabel="User recipient"
+                  ></app-ai-select>
+
+                  <input
+                    *ngSwitchCase="'email'"
+                    type="email"
+                    class="form-input recipient-value-input"
+                    formControlName="draftEmail"
+                    placeholder="name@example.com"
+                  />
+
+                  <app-ai-select
+                    *ngSwitchCase="'broker'"
+                    class="recipient-value-select"
+                    formControlName="draftBrokerId"
+                    [options]="brokerOptions"
+                    [allowEmpty]="true"
+                    emptyLabel="Select a broker…"
+                    ariaLabel="Broker recipient"
+                  ></app-ai-select>
+
+                  <button type="button" class="btn-secondary btn-sm" (click)="addRecipient(i)">
+                    <span class="material-symbols-outlined">add</span> Add
+                  </button>
+                </div>
+
+                <!-- Configured recipients, grouped inside / outside the org -->
+                <div class="recipient-groups" formArrayName="recipients">
+                  <div class="recipient-group">
+                    <span class="recipient-group-label">Inside the org</span>
+                    <p class="muted tiny" *ngIf="!hasRecipientScope(i, 'inside')">
+                      No internal users yet.
+                    </p>
+                    <ng-container *ngFor="let r of recipients(i).controls; let ri = index">
+                      <div
+                        class="recipient-row"
+                        *ngIf="r.get('recipientType')?.value === 'user'"
+                        [formGroupName]="ri"
+                      >
+                        <span class="recipient-name">
+                          <span class="material-symbols-outlined">person</span>
+                          {{ recipientLabel(r) }}
+                        </span>
+                        <app-ai-select
+                          class="channel-select"
+                          formControlName="channel"
+                          [options]="channelOptions"
+                          ariaLabel="Delivery channel"
+                        ></app-ai-select>
+                        <button
+                          type="button"
+                          class="icon-btn danger"
+                          (click)="removeRecipient(i, ri)"
+                          aria-label="Remove recipient"
+                        >
+                          <span class="material-symbols-outlined">close</span>
+                        </button>
+                      </div>
+                    </ng-container>
+                  </div>
+
+                  <div class="recipient-group">
+                    <span class="recipient-group-label">Outside the org</span>
+                    <p class="muted tiny" *ngIf="!hasRecipientScope(i, 'outside')">
+                      No external emails or brokers yet.
+                    </p>
+                    <ng-container *ngFor="let r of recipients(i).controls; let ri = index">
+                      <div
+                        class="recipient-row"
+                        *ngIf="r.get('recipientType')?.value !== 'user'"
+                        [formGroupName]="ri"
+                      >
+                        <span class="recipient-name">
+                          <span class="material-symbols-outlined">
+                            {{ r.get('recipientType')?.value === 'broker' ? 'local_shipping' : 'mail' }}
+                          </span>
+                          {{ recipientLabel(r) }}
+                        </span>
+                        <span class="channel-pill">Email</span>
+                        <button
+                          type="button"
+                          class="icon-btn danger"
+                          (click)="removeRecipient(i, ri)"
+                          aria-label="Remove recipient"
+                        >
+                          <span class="material-symbols-outlined">close</span>
+                        </button>
+                      </div>
+                    </ng-container>
+                  </div>
+                </div>
+              </div>
             </div>
+
             <button
               type="button"
               class="icon-btn danger"

@@ -16,6 +16,17 @@ describe('GeofencesComponent', () => {
   let httpMock: HttpTestingController;
   const base = `${environment.apiUrl}/geofences`;
 
+  /** Flush the recipient-option fetches fired by ngOnInit (users + brokers). */
+  function flushRecipientOptions(
+    users: unknown[] = [],
+    brokers: unknown[] = [],
+  ): void {
+    httpMock.expectOne(`${environment.apiUrl}/users`).flush({ data: users });
+    httpMock
+      .expectOne((r) => r.url.startsWith(`${environment.apiUrl}/brokers`))
+      .flush({ data: brokers });
+  }
+
   beforeEach(async () => {
     await TestBed.configureTestingModule({
       declarations: [GeofencesComponent, AiSelectComponent],
@@ -26,8 +37,9 @@ describe('GeofencesComponent', () => {
     component = fixture.componentInstance;
     httpMock = TestBed.inject(HttpTestingController);
 
-    fixture.detectChanges(); // ngOnInit → list(), ngAfterViewInit → map
+    fixture.detectChanges(); // ngOnInit → list() + recipient options, ngAfterViewInit → map
     httpMock.expectOne(base).flush({ data: [] });
+    flushRecipientOptions();
   });
 
   afterEach(() => httpMock.verify());
@@ -37,8 +49,16 @@ describe('GeofencesComponent', () => {
     expect(component.geofences).toEqual([]);
   });
 
-  it('FN-317: option arrays are readonly data fields, not getters', () => {
-    for (const key of ['kindOptions', 'eventKindOptions', 'actionOptions']) {
+  it('FN-317: option arrays are data fields, not getters', () => {
+    for (const key of [
+      'kindOptions',
+      'eventKindOptions',
+      'actionOptions',
+      'recipientTypeOptions',
+      'channelOptions',
+      'userOptions',
+      'brokerOptions',
+    ]) {
       const desc = Object.getOwnPropertyDescriptor(component, key);
       expect(desc).toBeDefined();
       expect(desc!.get).toBeUndefined();
@@ -92,5 +112,110 @@ describe('GeofencesComponent', () => {
     component.edit({ id: 'p1', name: 'Big', kind: 'polygon', vertices });
     expect(component.vertexLimitReached).toBeTrue();
     expect(component.hasGeometry).toBeFalse();
+  });
+
+  // ── Notify recipients (FN-1759) ─────────────────────────────────────────
+  function addNotifyTrigger() {
+    component.addTrigger({ eventKind: 'exit', action: 'notify' });
+  }
+
+  it('adds a user recipient (inside-org, channel both) to a notify trigger', () => {
+    addNotifyTrigger();
+    component.triggers.at(0).patchValue({ draftType: 'user', draftUserId: 'u1' });
+    component.addRecipient(0);
+
+    expect(component.recipients(0).length).toBe(1);
+    const r = component.recipients(0).at(0).value;
+    expect(r.recipientType).toBe('user');
+    expect(r.userId).toBe('u1');
+    expect(r.channel).toBe('both');
+    expect(component.hasRecipientScope(0, 'inside')).toBeTrue();
+    expect(component.hasRecipientScope(0, 'outside')).toBeFalse();
+  });
+
+  it('validates external email and groups email/broker as outside-org', () => {
+    addNotifyTrigger();
+
+    // invalid email is rejected
+    component.triggers.at(0).patchValue({ draftType: 'email', draftEmail: 'not-an-email' });
+    component.addRecipient(0);
+    expect(component.recipients(0).length).toBe(0);
+    expect(component.error).toContain('valid email');
+
+    // valid email is added, channel forced to email-only
+    component.triggers.at(0).patchValue({ draftType: 'email', draftEmail: 'Ops@Acme.com' });
+    component.addRecipient(0);
+    expect(component.recipients(0).length).toBe(1);
+    expect(component.recipients(0).at(0).value.email).toBe('ops@acme.com');
+    expect(component.recipients(0).at(0).value.channel).toBe('email');
+    expect(component.hasRecipientScope(0, 'outside')).toBeTrue();
+    expect(component.hasRecipientScope(0, 'inside')).toBeFalse();
+  });
+
+  it('does not add the same recipient twice', () => {
+    addNotifyTrigger();
+    component.triggers.at(0).patchValue({ draftType: 'user', draftUserId: 'u1' });
+    component.addRecipient(0);
+    component.triggers.at(0).patchValue({ draftType: 'user', draftUserId: 'u1' });
+    component.addRecipient(0);
+    expect(component.recipients(0).length).toBe(1);
+  });
+
+  it('serializes recipients on save and omits transient draft fields', () => {
+    const gf: Geofence = {
+      id: 'g2',
+      name: 'Dock',
+      kind: 'circle',
+      center: { lat: 41.8, lng: -87.6 },
+      radiusMeters: 200,
+      triggers: [
+        {
+          eventKind: 'exit',
+          action: 'notify',
+          recipients: [{ recipientType: 'broker', brokerId: 'b9', channel: 'email' }],
+        },
+      ],
+    };
+    component.edit(gf);
+    // pre-seeded broker recipient round-trips through the FormArray
+    expect(component.recipients(0).length).toBe(1);
+
+    // add an internal user too
+    component.triggers.at(0).patchValue({ draftType: 'user', draftUserId: 'u5' });
+    component.addRecipient(0);
+
+    component.save();
+    const req = httpMock.expectOne(`${base}/g2`);
+    expect(req.request.method).toBe('PUT');
+    const recipients = req.request.body.triggers[0].recipients;
+    expect(recipients.length).toBe(2);
+    expect(recipients).toContain(
+      jasmine.objectContaining({ recipientType: 'broker', brokerId: 'b9', channel: 'email' }),
+    );
+    expect(recipients).toContain(
+      jasmine.objectContaining({ recipientType: 'user', userId: 'u5', channel: 'both' }),
+    );
+    // no draft* leakage onto the wire
+    expect(Object.keys(recipients[0])).toEqual(['recipientType', 'userId', 'email', 'brokerId', 'channel']);
+    req.flush({ ...gf });
+    httpMock.expectOne(base).flush({ data: [gf] });
+  });
+
+  it('maps fetched users and brokers into option lists', () => {
+    // a fresh component instance to exercise the option-fetch mapping
+    const fx = TestBed.createComponent(GeofencesComponent);
+    const cmp = fx.componentInstance;
+    fx.detectChanges();
+    httpMock.expectOne(base).flush({ data: [] });
+    httpMock
+      .expectOne(`${environment.apiUrl}/users`)
+      .flush({ data: [{ id: 'u1', first_name: 'Ada', last_name: 'Lovelace', email: 'ada@x.io' }] });
+    httpMock
+      .expectOne((r) => r.url.startsWith(`${environment.apiUrl}/brokers`))
+      .flush({ data: [{ id: 'b1', name: 'Acme', city: 'Reno', state: 'NV', mc_number: 'MC1' }] });
+
+    expect(cmp.userOptions[0]).toEqual({ value: 'u1', label: 'Ada Lovelace (ada@x.io)' });
+    expect(cmp.brokerOptions[0]).toEqual({ value: 'b1', label: 'Acme / Reno, NV / MC1' });
+    fx.destroy();
   });
 });

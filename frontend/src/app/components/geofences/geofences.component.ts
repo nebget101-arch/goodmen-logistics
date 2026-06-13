@@ -7,7 +7,7 @@ import {
   OnInit,
   ViewChild,
 } from '@angular/core';
-import { FormArray, FormBuilder, FormGroup, Validators } from '@angular/forms';
+import { AbstractControl, FormArray, FormBuilder, FormGroup, Validators } from '@angular/forms';
 import * as L from 'leaflet';
 import 'leaflet-draw';
 
@@ -17,10 +17,21 @@ import {
   Geofence,
   GeofenceKind,
   GeofencePayload,
+  GeofenceRecipientChannel,
+  GeofenceRecipientType,
   GeofenceTrigger,
+  GeofenceTriggerRecipient,
   LatLng,
   MAX_POLYGON_VERTICES,
 } from './geofence.model';
+
+/** Basic email shape check for external (`email`) recipients. */
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+/** Raw value of a single trigger FormGroup (incl. transient draft* fields). */
+interface TriggerFormValue extends GeofenceTrigger {
+  recipients?: GeofenceTriggerRecipient[];
+}
 
 /**
  * GeofencesComponent — the geofence library page (FN-1666).
@@ -57,8 +68,26 @@ export class GeofencesComponent implements OnInit, AfterViewInit, OnDestroy {
     { value: 'update_load_status', label: 'Update load status' },
     { value: 'webhook', label: 'Webhook' },
   ];
+  /** Recipient kinds offered in the "Add recipient" draft selector (FN-1759). */
+  readonly recipientTypeOptions: AiSelectOption<GeofenceRecipientType>[] = [
+    { value: 'user', label: 'Internal user' },
+    { value: 'email', label: 'External email' },
+    { value: 'broker', label: 'Broker' },
+  ];
+  /** Per-recipient delivery channel (no SMS — FN-1755). */
+  readonly channelOptions: AiSelectOption<GeofenceRecipientChannel>[] = [
+    { value: 'both', label: 'Email + in-app' },
+    { value: 'email', label: 'Email only' },
+    { value: 'in_app', label: 'In-app only' },
+  ];
 
   readonly maxVertices = MAX_POLYGON_VERTICES;
+
+  // ── Recipient option lists (loaded once; stable refs — FN-317) ───────────
+  // Not getters: assigned a single time after fetch so `[options]` never sees a
+  // fresh array reference on each change-detection pass.
+  userOptions: AiSelectOption[] = [];
+  brokerOptions: AiSelectOption[] = [];
 
   // ── List state ─────────────────────────────────────────────────────────
   geofences: Geofence[] = [];
@@ -119,6 +148,7 @@ export class GeofencesComponent implements OnInit, AfterViewInit, OnDestroy {
 
   ngOnInit(): void {
     this.loadGeofences();
+    this.loadRecipientOptions();
   }
 
   ngAfterViewInit(): void {
@@ -144,6 +174,31 @@ export class GeofencesComponent implements OnInit, AfterViewInit, OnDestroy {
         this.error = 'Could not load geofences.';
         this.loading = false;
         this.cdr.markForCheck();
+      },
+    });
+  }
+
+  /** Fetch internal users + brokers for the recipient pickers (FN-1759). */
+  private loadRecipientOptions(): void {
+    this.geofenceService.listUsers().subscribe({
+      next: (users) => {
+        this.userOptions = users.map((u) => ({
+          value: u.id,
+          label: u.email ? `${u.name} (${u.email})` : u.name,
+        }));
+        this.cdr.markForCheck();
+      },
+      error: () => {
+        /* non-fatal: panel still allows email + broker recipients */
+      },
+    });
+    this.geofenceService.listBrokers().subscribe({
+      next: (brokers) => {
+        this.brokerOptions = brokers.map((b) => ({ value: b.id, label: b.name }));
+        this.cdr.markForCheck();
+      },
+      error: () => {
+        /* non-fatal */
       },
     });
   }
@@ -263,12 +318,108 @@ export class GeofencesComponent implements OnInit, AfterViewInit, OnDestroy {
         dwellMinutes: [trigger?.dwellMinutes ?? null],
         action: [trigger?.action ?? 'notify', Validators.required],
         targetUrl: [trigger?.targetUrl ?? ''],
+        // Configured recipients (only meaningful when action === 'notify').
+        recipients: this.fb.array(
+          (trigger?.recipients ?? []).map((r) => this.recipientGroup(r)),
+        ),
+        // Transient "add recipient" draft fields — never sent to the API.
+        draftType: ['user' as GeofenceRecipientType],
+        draftUserId: [''],
+        draftEmail: [''],
+        draftBrokerId: [''],
       }),
     );
   }
 
   removeTrigger(index: number): void {
     this.triggers.removeAt(index);
+  }
+
+  // ── Recipients (nested FormArray per trigger) ────────────────────────────
+  /** The recipients FormArray for the trigger at `triggerIndex`. */
+  recipients(triggerIndex: number): FormArray {
+    return this.triggers.at(triggerIndex).get('recipients') as FormArray;
+  }
+
+  private recipientGroup(r?: GeofenceTriggerRecipient): FormGroup {
+    return this.fb.group({
+      recipientType: [r?.recipientType ?? 'user' as GeofenceRecipientType],
+      userId: [r?.userId ?? null],
+      email: [r?.email ?? null],
+      brokerId: [r?.brokerId ?? null],
+      channel: [r?.channel ?? 'both' as GeofenceRecipientChannel],
+    });
+  }
+
+  /** Add a recipient to a trigger from its draft fields, then reset the draft. */
+  addRecipient(triggerIndex: number): void {
+    const tg = this.triggers.at(triggerIndex);
+    const type = tg.get('draftType')!.value as GeofenceRecipientType;
+    let recipient: GeofenceTriggerRecipient | null = null;
+
+    if (type === 'user') {
+      // Internal users can receive in-app + email, so default to both.
+      const userId = (tg.get('draftUserId')!.value || '').trim();
+      if (!userId || this.recipientExists(triggerIndex, 'user', userId)) return;
+      recipient = { recipientType: 'user', userId, channel: 'both' };
+    } else if (type === 'broker') {
+      // External — email only (no in-app account); load-context email server-side.
+      const brokerId = (tg.get('draftBrokerId')!.value || '').trim();
+      if (!brokerId || this.recipientExists(triggerIndex, 'broker', brokerId)) return;
+      recipient = { recipientType: 'broker', brokerId, channel: 'email' };
+    } else {
+      // External address — email only.
+      const email = (tg.get('draftEmail')!.value || '').trim().toLowerCase();
+      if (!EMAIL_RE.test(email) || this.recipientExists(triggerIndex, 'email', email)) {
+        this.error = EMAIL_RE.test(email) ? '' : 'Enter a valid email address.';
+        return;
+      }
+      recipient = { recipientType: 'email', email, channel: 'email' };
+    }
+
+    this.recipients(triggerIndex).push(this.recipientGroup(recipient));
+    tg.patchValue({ draftUserId: '', draftEmail: '', draftBrokerId: '' });
+    this.error = '';
+  }
+
+  removeRecipient(triggerIndex: number, recipientIndex: number): void {
+    this.recipients(triggerIndex).removeAt(recipientIndex);
+  }
+
+  /** Guard against adding the same user/email/broker twice to one trigger. */
+  private recipientExists(
+    triggerIndex: number,
+    type: GeofenceRecipientType,
+    id: string,
+  ): boolean {
+    const key = type === 'user' ? 'userId' : type === 'broker' ? 'brokerId' : 'email';
+    return this.recipients(triggerIndex).controls.some(
+      (c) => c.get('recipientType')!.value === type && c.get(key)!.value === id,
+    );
+  }
+
+  /** Human-readable label for a configured recipient row. */
+  recipientLabel(group: AbstractControl): string {
+    const type = group.get('recipientType')!.value as GeofenceRecipientType;
+    if (type === 'user') {
+      return this.optionLabel(this.userOptions, group.get('userId')!.value) ?? 'User';
+    }
+    if (type === 'broker') {
+      return this.optionLabel(this.brokerOptions, group.get('brokerId')!.value) ?? 'Broker';
+    }
+    return group.get('email')!.value || 'Email';
+  }
+
+  private optionLabel(options: AiSelectOption[], value: unknown): string | null {
+    return options.find((o) => o.value === value)?.label ?? null;
+  }
+
+  /** Whether a trigger has any recipients inside (users) / outside (email+broker) the org. */
+  hasRecipientScope(triggerIndex: number, scope: 'inside' | 'outside'): boolean {
+    return this.recipients(triggerIndex).controls.some((c) => {
+      const isUser = c.get('recipientType')!.value === 'user';
+      return scope === 'inside' ? isUser : !isUser;
+    });
   }
 
   // ── CRUD actions ───────────────────────────────────────────────────────────
@@ -349,12 +500,24 @@ export class GeofencesComponent implements OnInit, AfterViewInit, OnDestroy {
   /** Build the API payload from current form + captured geometry. */
   private toPayload(): GeofencePayload {
     const raw = this.form.getRawValue();
-    const triggers: GeofenceTrigger[] = (raw.triggers ?? []).map((t: GeofenceTrigger) => ({
+    const triggers: GeofenceTrigger[] = (raw.triggers ?? []).map((t: TriggerFormValue) => ({
       vehicleId: t.vehicleId || null,
       eventKind: t.eventKind,
       dwellMinutes: t.eventKind === 'dwell' ? t.dwellMinutes ?? null : null,
       action: t.action,
       targetUrl: t.action === 'webhook' ? t.targetUrl || null : null,
+      // Recipients only ride along with the `notify` action; drop the
+      // transient draft* fields by mapping each recipient explicitly.
+      recipients:
+        t.action === 'notify'
+          ? (t.recipients ?? []).map((r) => ({
+              recipientType: r.recipientType,
+              userId: r.recipientType === 'user' ? r.userId ?? null : null,
+              email: r.recipientType === 'email' ? r.email ?? null : null,
+              brokerId: r.recipientType === 'broker' ? r.brokerId ?? null : null,
+              channel: r.channel,
+            }))
+          : [],
     }));
 
     const payload: GeofencePayload = {
