@@ -97,15 +97,17 @@ function clearCache() {
 }
 
 /**
-/**
  * Build the Nominatim `/search` query params. Pure + exported so the
  * country-restriction and API-key wiring are unit-testable without HTTP.
  * When `GEOCODER_API_KEY` is set, it is attached under `GEOCODER_API_KEY_PARAM`
  * (default `key`) — this is what lets a hosted Nominatim-compatible provider
  * (e.g. LocationIQ) be used in place of the rate-limited public endpoint.
+ * `format` defaults to `json` (accepted by both Nominatim and LocationIQ —
+ * LocationIQ rejects `jsonv2` with HTTP 400); override via `GEOCODER_FORMAT`.
  */
 function buildSearchParams(q, limit) {
-  const params = { q, format: 'jsonv2', addressdetails: 1, limit };
+  const format = process.env.GEOCODER_FORMAT || 'json';
+  const params = { q, format, addressdetails: 1, limit };
   const cc = countryCodes();
   if (cc) params.countrycodes = cc; // restrict to US (or configured codes); omit for global
   const key = process.env.GEOCODER_API_KEY;

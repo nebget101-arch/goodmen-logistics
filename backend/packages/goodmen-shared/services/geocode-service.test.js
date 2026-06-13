@@ -162,13 +162,23 @@ describe('geocode-service (FN-1761)', () => {
       }
     }
 
-    it('includes countrycodes by default and no key when GEOCODER_API_KEY is unset', () => {
-      withEnv({ GEOCODER_COUNTRY_CODES: undefined, GEOCODER_API_KEY: undefined }, () => {
+    it('defaults format to json (LocationIQ-compatible), countrycodes us, no key', () => {
+      withEnv(
+        { GEOCODER_COUNTRY_CODES: undefined, GEOCODER_API_KEY: undefined, GEOCODER_FORMAT: undefined },
+        () => {
+          const p = geocode.buildSearchParams('dallas', 5);
+          assert.strictEqual(p.q, 'dallas');
+          assert.strictEqual(p.format, 'json');
+          assert.strictEqual(p.countrycodes, 'us');
+          assert.strictEqual('key' in p, false);
+        }
+      );
+    });
+
+    it('honors GEOCODER_FORMAT override (e.g. jsonv2 for Nominatim)', () => {
+      withEnv({ GEOCODER_FORMAT: 'jsonv2' }, () => {
         const p = geocode.buildSearchParams('dallas', 5);
-        assert.strictEqual(p.q, 'dallas');
         assert.strictEqual(p.format, 'jsonv2');
-        assert.strictEqual(p.countrycodes, 'us');
-        assert.strictEqual('key' in p, false);
       });
     });
 
