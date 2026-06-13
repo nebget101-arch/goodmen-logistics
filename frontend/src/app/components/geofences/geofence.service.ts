@@ -4,6 +4,7 @@ import { Observable } from 'rxjs';
 import { map } from 'rxjs/operators';
 import { environment } from '../../../environments/environment';
 import {
+  GeocodeResult,
   Geofence,
   GeofenceListFilters,
   GeofenceListResponse,
@@ -32,6 +33,15 @@ interface RawBroker {
   mc_number?: string | null;
 }
 
+/** Wire shape of a geocode candidate (snake_case `address_id`). */
+interface GeocodeWireResult {
+  label: string;
+  lat: number;
+  lng: number;
+  type?: string;
+  address_id?: string | null;
+}
+
 /**
  * GeofenceService — thin HTTP client over the `/api/geofences` CRUD contract
  * (FN-1665). Mirrors the `ApiService` conventions: `environment.apiUrl` base,
@@ -54,8 +64,30 @@ export class GeofenceService {
         p.set('nearRadiusMeters', String(filters.nearRadiusMeters));
       }
     }
+    if (filters?.vehicleId) p.set('vehicle_id', filters.vehicleId);
     const qs = p.toString();
     return this.http.get<GeofenceListResponse>(`${this.baseUrl}${qs ? '?' + qs : ''}`);
+  }
+
+  /**
+   * GET /api/geofences/geocode — forward-geocode a free-text address (FN-1761).
+   * Returns ranked candidates; maps the wire `address_id` to `addressId`.
+   */
+  geocode(q: string): Observable<GeocodeResult[]> {
+    const url = `${this.baseUrl}/geocode?q=${encodeURIComponent(q)}`;
+    return this.http
+      .get<{ data: GeocodeWireResult[] }>(url)
+      .pipe(
+        map((res) =>
+          (res?.data ?? []).map((r) => ({
+            label: r.label,
+            lat: r.lat,
+            lng: r.lng,
+            type: r.type,
+            addressId: r.address_id ?? null,
+          })),
+        ),
+      );
   }
 
   /** GET /api/geofences/:id */

@@ -45,6 +45,29 @@ describe('GeofenceService', () => {
     req.flush({ data: [] });
   });
 
+  it('encodes the vehicle_id (per-unit) filter into the query string', () => {
+    service.list({ vehicleId: 'veh-7' }).subscribe();
+    const req = httpMock.expectOne(
+      (r) => r.url === base && r.params.get('vehicle_id') === 'veh-7',
+    );
+    expect(req.request.method).toBe('GET');
+    req.flush({ data: [] });
+  });
+
+  it('geocodes an address and maps address_id → addressId', () => {
+    let result: any;
+    service.geocode('chicago il').subscribe((r) => (result = r));
+    const req = httpMock.expectOne(`${base}/geocode?q=chicago%20il`);
+    expect(req.request.method).toBe('GET');
+    req.flush({
+      data: [{ label: 'Chicago, IL', lat: 41.8, lng: -87.6, type: 'city', address_id: 'loc1' }],
+      meta: { total: 1, cached: false },
+    });
+    expect(result).toEqual([
+      { label: 'Chicago, IL', lat: 41.8, lng: -87.6, type: 'city', addressId: 'loc1' },
+    ]);
+  });
+
   it('creates a geofence via POST', () => {
     const payload: GeofencePayload = {
       name: 'Yard',

@@ -7,13 +7,19 @@ import {
   OnInit,
   ViewChild,
 } from '@angular/core';
+import { ActivatedRoute } from '@angular/router';
 import { AbstractControl, FormArray, FormBuilder, FormGroup, Validators } from '@angular/forms';
+import { of, Subject, Subscription } from 'rxjs';
+import { catchError, debounceTime, distinctUntilChanged, switchMap } from 'rxjs/operators';
 import * as L from 'leaflet';
 import 'leaflet-draw';
 
+import { ApiService } from '../../services/api.service';
+import { AiSegment } from '../../shared/ai-segmented-control/ai-segmented-control.component';
 import { AiSelectOption } from '../../shared/ai-select/ai-select.component';
 import { GeofenceService } from './geofence.service';
 import {
+  GeocodeResult,
   Geofence,
   GeofenceKind,
   GeofencePayload,
@@ -81,6 +87,12 @@ export class GeofencesComponent implements OnInit, AfterViewInit, OnDestroy {
     { value: 'in_app', label: 'In-app only' },
   ];
 
+  /** "Applies to" scope — all units (default) vs a single unit (FN-1762). */
+  readonly appliesToSegments: AiSegment[] = [
+    { key: 'all', label: 'All units' },
+    { key: 'unit', label: 'Specific unit' },
+  ];
+
   readonly maxVertices = MAX_POLYGON_VERTICES;
 
   // ── Recipient option lists (loaded once; stable refs — FN-317) ───────────
@@ -88,6 +100,26 @@ export class GeofencesComponent implements OnInit, AfterViewInit, OnDestroy {
   // fresh array reference on each change-detection pass.
   userOptions: AiSelectOption[] = [];
   brokerOptions: AiSelectOption[] = [];
+
+  /** Default radius (m) for a circle dropped from an address-search result. */
+  private readonly DEFAULT_ADDRESS_RADIUS_M = 200;
+
+  // ── Address search (FN-1762) ─────────────────────────────────────────────
+  addressQuery = '';
+  geocodeResults: GeocodeResult[] = [];
+  geocoding = false;
+  /** Saved-location id carried by the selected geocode result, if any. */
+  private addressId: string | null = null;
+  private readonly searchSubject = new Subject<string>();
+  private searchSub?: Subscription;
+
+  // ── Per-unit scoping (FN-1762) ───────────────────────────────────────────
+  /** Vehicle options for the "specific unit" selector (loaded lazily; never a getter — FN-317). */
+  vehicleOptions: AiSelectOption[] = [];
+  private vehiclesLoaded = false;
+  /** When the list is filtered to a single unit (deep-link), its id + label. */
+  scopedVehicleId: string | null = null;
+  scopedVehicleLabel: string | null = null;
 
   // ── List state ─────────────────────────────────────────────────────────
   geofences: Geofence[] = [];
@@ -113,12 +145,16 @@ export class GeofencesComponent implements OnInit, AfterViewInit, OnDestroy {
   constructor(
     private fb: FormBuilder,
     private geofenceService: GeofenceService,
+    private apiService: ApiService,
+    private route: ActivatedRoute,
     private cdr: ChangeDetectorRef,
   ) {
     this.form = this.fb.group({
       name: ['', [Validators.required, Validators.maxLength(120)]],
       kind: ['circle' as GeofenceKind, Validators.required],
       radiusMeters: [{ value: null as number | null, disabled: false }],
+      appliesTo: ['all'],
+      vehicleId: [''],
       triggers: this.fb.array([]),
     });
   }
@@ -129,6 +165,10 @@ export class GeofencesComponent implements OnInit, AfterViewInit, OnDestroy {
 
   get kind(): GeofenceKind {
     return this.form.get('kind')!.value as GeofenceKind;
+  }
+
+  get appliesTo(): 'all' | 'unit' {
+    return this.form.get('appliesTo')!.value as 'all' | 'unit';
   }
 
   get vertexCount(): number {
@@ -147,8 +187,21 @@ export class GeofencesComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   ngOnInit(): void {
-    this.loadGeofences();
+    this.wireAddressSearch();
     this.loadRecipientOptions();
+
+    // Deep-link from Equipment: ?vehicle_id=…&unit=… pre-scopes the page to a
+    // single unit (filter the list + pre-fill the editor for a new fence).
+    this.route.queryParams.subscribe((params) => {
+      const vehicleId = params['vehicle_id'] || params['vehicleId'] || null;
+      const unit = params['unit'] || null;
+      if (vehicleId) {
+        this.scopedVehicleId = vehicleId;
+        this.scopedVehicleLabel = unit ? `Unit ${unit}` : null;
+        this.startCreateForUnit(vehicleId, this.scopedVehicleLabel);
+      }
+      this.loadGeofences();
+    });
   }
 
   ngAfterViewInit(): void {
@@ -156,6 +209,8 @@ export class GeofencesComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   ngOnDestroy(): void {
+    this.searchSub?.unsubscribe();
+    this.searchSubject.complete();
     this.map?.remove();
     this.map = null;
   }
@@ -164,7 +219,8 @@ export class GeofencesComponent implements OnInit, AfterViewInit, OnDestroy {
   loadGeofences(): void {
     this.loading = true;
     this.error = '';
-    this.geofenceService.list().subscribe({
+    const filters = this.scopedVehicleId ? { vehicleId: this.scopedVehicleId } : undefined;
+    this.geofenceService.list(filters).subscribe({
       next: (res) => {
         this.geofences = res?.data ?? [];
         this.loading = false;
@@ -201,6 +257,125 @@ export class GeofencesComponent implements OnInit, AfterViewInit, OnDestroy {
         /* non-fatal */
       },
     });
+  }
+
+  // ── Address search (FN-1762) ─────────────────────────────────────────────
+  /** Debounced query stream → geocode proxy → results dropdown. */
+  private wireAddressSearch(): void {
+    this.searchSub = this.searchSubject
+      .pipe(
+        debounceTime(350),
+        distinctUntilChanged(),
+        switchMap((q) => {
+          const query = q.trim();
+          if (query.length < 3) {
+            this.geocoding = false;
+            return of([] as GeocodeResult[]);
+          }
+          this.geocoding = true;
+          this.cdr.markForCheck();
+          return this.geofenceService.geocode(query).pipe(
+            catchError(() => {
+              this.error = 'Address lookup failed. Try again.';
+              return of([] as GeocodeResult[]);
+            }),
+          );
+        }),
+      )
+      .subscribe((results) => {
+        this.geocodeResults = results;
+        this.geocoding = false;
+        this.cdr.markForCheck();
+      });
+  }
+
+  onAddressInput(value: string): void {
+    this.addressQuery = value;
+    this.searchSubject.next(value);
+  }
+
+  /** Pick a geocode result: fly the map there and drop an editable circle. */
+  selectGeocodeResult(r: GeocodeResult): void {
+    this.addressId = r.addressId ?? null;
+    this.addressQuery = r.label;
+    this.geocodeResults = [];
+    this.form.get('kind')!.setValue('circle');
+    this.dropCircleAt(r.lat, r.lng, this.DEFAULT_ADDRESS_RADIUS_M);
+    if (!this.form.get('name')!.value) {
+      this.form.get('name')!.setValue(r.label.slice(0, 120));
+    }
+    this.cdr.markForCheck();
+  }
+
+  clearGeocodeResults(): void {
+    this.geocodeResults = [];
+  }
+
+  /** Place an editable circle at a point and capture it as the current geometry. */
+  private dropCircleAt(lat: number, lng: number, radiusMeters: number): void {
+    this.center = { lat, lng };
+    this.vertices = [];
+    this.form.get('radiusMeters')!.setValue(radiusMeters);
+
+    if (this.map && this.drawnItems) {
+      this.drawnItems.clearLayers();
+      const circle = L.circle([lat, lng], {
+        radius: radiusMeters,
+        color: '#38bdf8',
+        weight: 2,
+      });
+      this.drawnItems.addLayer(circle);
+      this.map.setView([lat, lng], 14);
+    }
+  }
+
+  // ── Per-unit scoping (FN-1762) ───────────────────────────────────────────
+  onAppliesToChange(key: string): void {
+    this.form.get('appliesTo')!.setValue(key);
+    if (key === 'unit') {
+      this.ensureVehiclesLoaded();
+    } else {
+      this.form.get('vehicleId')!.setValue('');
+    }
+  }
+
+  /** Lazily load the vehicle list for the "specific unit" selector. */
+  private ensureVehiclesLoaded(): void {
+    if (this.vehiclesLoaded) return;
+    this.vehiclesLoaded = true;
+    this.apiService.getVehicles().subscribe({
+      next: (vehicles: any) => {
+        const list = Array.isArray(vehicles) ? vehicles : vehicles?.data ?? [];
+        this.vehicleOptions = list.map((v: any) => ({
+          value: String(v.id),
+          label: v.unit_number ? `Unit ${v.unit_number}` : (v.vin || String(v.id)),
+        }));
+        this.cdr.markForCheck();
+      },
+      error: () => {
+        this.vehiclesLoaded = false; // allow a retry on next switch
+      },
+    });
+  }
+
+  /** Enter "create" mode pre-scoped to a single unit (deep-link from Equipment). */
+  private startCreateForUnit(vehicleId: string, label: string | null): void {
+    this.startCreate();
+    this.ensureVehiclesLoaded();
+    this.form.get('appliesTo')!.setValue('unit');
+    this.form.get('vehicleId')!.setValue(vehicleId);
+    if (label && !this.vehicleOptions.some((o) => o.value === vehicleId)) {
+      // Show a friendly label even before the vehicle list resolves.
+      this.vehicleOptions = [{ value: vehicleId, label }];
+    }
+    // A geofence scopes to a unit via its triggers — seed one so scoping sticks.
+    if (this.triggers.length === 0) this.addTrigger();
+  }
+
+  clearUnitScope(): void {
+    this.scopedVehicleId = null;
+    this.scopedVehicleLabel = null;
+    this.loadGeofences();
   }
 
   // ── Map / draw ─────────────────────────────────────────────────────────────
@@ -428,8 +603,11 @@ export class GeofencesComponent implements OnInit, AfterViewInit, OnDestroy {
     this.error = '';
     this.center = null;
     this.vertices = [];
+    this.addressId = null;
+    this.addressQuery = '';
+    this.geocodeResults = [];
     this.triggers.clear();
-    this.form.reset({ name: '', kind: 'circle', radiusMeters: null });
+    this.form.reset({ name: '', kind: 'circle', radiusMeters: null, appliesTo: 'all', vehicleId: '' });
     this.drawnItems?.clearLayers();
   }
 
@@ -438,12 +616,27 @@ export class GeofencesComponent implements OnInit, AfterViewInit, OnDestroy {
     this.error = '';
     this.center = gf.center ?? null;
     this.vertices = gf.vertices ? [...gf.vertices] : [];
+    this.addressId = gf.addressId ?? null;
+    this.addressQuery = '';
+    this.geocodeResults = [];
     this.triggers.clear();
     (gf.triggers ?? []).forEach((t) => this.addTrigger(t));
+
+    // Derive the "applies to" scope: a single shared vehicle across all triggers
+    // means the fence is unit-scoped; anything else (or none) means all units.
+    const vehicleIds = (gf.triggers ?? []).map((t) => t.vehicleId || null);
+    const scoped =
+      vehicleIds.length > 0 && vehicleIds.every((v) => v && v === vehicleIds[0])
+        ? vehicleIds[0]
+        : null;
+    if (scoped) this.ensureVehiclesLoaded();
+
     this.form.reset({
       name: gf.name,
       kind: gf.kind,
       radiusMeters: gf.radiusMeters ?? null,
+      appliesTo: scoped ? 'unit' : 'all',
+      vehicleId: scoped ?? '',
     });
     this.renderGeometry(gf);
     this.cdr.markForCheck();
@@ -500,8 +693,13 @@ export class GeofencesComponent implements OnInit, AfterViewInit, OnDestroy {
   /** Build the API payload from current form + captured geometry. */
   private toPayload(): GeofencePayload {
     const raw = this.form.getRawValue();
+    // Per-unit scoping (FN-1762): "specific unit" stamps the chosen vehicle id on
+    // every trigger; "all units" clears it. Triggers are how a fence scopes to a unit.
+    const scopedVehicleId: string | null =
+      raw.appliesTo === 'unit' && raw.vehicleId ? String(raw.vehicleId) : null;
+
     const triggers: GeofenceTrigger[] = (raw.triggers ?? []).map((t: TriggerFormValue) => ({
-      vehicleId: t.vehicleId || null,
+      vehicleId: scopedVehicleId,
       eventKind: t.eventKind,
       dwellMinutes: t.eventKind === 'dwell' ? t.dwellMinutes ?? null : null,
       action: t.action,
@@ -524,6 +722,7 @@ export class GeofencesComponent implements OnInit, AfterViewInit, OnDestroy {
       name: (raw.name ?? '').trim(),
       kind: raw.kind,
       active: true,
+      addressId: this.addressId,
       triggers,
     };
 

@@ -33,6 +33,7 @@ export const NAV_SECTIONS: NavSection[] = [
       { path: '/vehicles', label: 'Trucks', tab: 'vehicles' },
       { path: '/trailers', label: 'Trailers', tab: 'vehicles' },
       { path: '/vehicle-tracking', label: 'Vehicle Tracking', tab: 'vehicles' },
+      { path: '/geofences', label: 'Geofences', tab: 'vehicles' },
     ],
   },
   {
