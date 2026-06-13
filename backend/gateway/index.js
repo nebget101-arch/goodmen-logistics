@@ -566,6 +566,7 @@ app.use('/api/load-templates', buildProxy(LOGISTICS_SERVICE_URL, 'logistics'));
 app.use('/api/brokers', buildProxy(LOGISTICS_SERVICE_URL, 'logistics'));
 app.use('/api/locations', buildProxy(LOGISTICS_SERVICE_URL, 'logistics'));
 app.use('/api/branding', buildProxy(LOGISTICS_SERVICE_URL, 'logistics'));
+app.use('/api/geofences', buildProxy(LOGISTICS_SERVICE_URL, 'logistics'));
 app.use('/api/geo', buildProxy(LOGISTICS_SERVICE_URL, 'logistics'));
 app.use('/api/invoices', buildProxy(LOGISTICS_SERVICE_URL, 'logistics'));
 app.use('/api/credit', buildProxy(LOGISTICS_SERVICE_URL, 'logistics'));
