@@ -32,6 +32,7 @@ export const NAV_SECTIONS: NavSection[] = [
     children: [
       { path: '/vehicles', label: 'Trucks', tab: 'vehicles' },
       { path: '/trailers', label: 'Trailers', tab: 'vehicles' },
+      { path: '/vehicle-tracking', label: 'Vehicle Tracking', tab: 'vehicles' },
     ],
   },
   {
