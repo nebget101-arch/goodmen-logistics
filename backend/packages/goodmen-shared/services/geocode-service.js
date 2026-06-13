@@ -97,17 +97,31 @@ function clearCache() {
 }
 
 /**
+/**
+ * Build the Nominatim `/search` query params. Pure + exported so the
+ * country-restriction and API-key wiring are unit-testable without HTTP.
+ * When `GEOCODER_API_KEY` is set, it is attached under `GEOCODER_API_KEY_PARAM`
+ * (default `key`) — this is what lets a hosted Nominatim-compatible provider
+ * (e.g. LocationIQ) be used in place of the rate-limited public endpoint.
+ */
+function buildSearchParams(q, limit) {
+  const params = { q, format: 'jsonv2', addressdetails: 1, limit };
+  const cc = countryCodes();
+  if (cc) params.countrycodes = cc; // restrict to US (or configured codes); omit for global
+  const key = process.env.GEOCODER_API_KEY;
+  if (key) params[(process.env.GEOCODER_API_KEY_PARAM || 'key').trim()] = key;
+  return params;
+}
+
+/**
  * Default HTTP getter (Nominatim `/search`). Isolated so tests inject a stub and
  * never touch the network. Returns the raw Nominatim result array.
  */
 async function nominatimSearch(q, limit) {
   const axios = require('axios'); // lazy: only the real geocode path needs the HTTP client
   const url = `${baseUrl()}/search`;
-  const params = { q, format: 'jsonv2', addressdetails: 1, limit };
-  const cc = countryCodes();
-  if (cc) params.countrycodes = cc; // restrict to US (or configured codes); omit for global
   const response = await axios.get(url, {
-    params,
+    params: buildSearchParams(q, limit),
     headers: { 'User-Agent': USER_AGENT, 'Accept-Language': 'en' },
     timeout: 8000,
   });
@@ -199,6 +213,7 @@ module.exports = {
   clearCache,
   // exported for unit tests / reuse
   countryCodes,
+  buildSearchParams,
   normalizeQuery,
   normalizeAddress,
   toWireResult,
