@@ -104,12 +104,18 @@ function clearCache() {
  * (e.g. LocationIQ) be used in place of the rate-limited public endpoint.
  * `format` defaults to `json` (accepted by both Nominatim and LocationIQ —
  * LocationIQ rejects `jsonv2` with HTTP 400); override via `GEOCODER_FORMAT`.
+ * `opts.viewbox` (lon,lat,lon,lat) soft-biases results toward the map's current
+ * view so local addresses outrank arbitrary same-named places nationwide.
  */
-function buildSearchParams(q, limit) {
+function buildSearchParams(q, limit, opts = {}) {
   const format = process.env.GEOCODER_FORMAT || 'json';
   const params = { q, format, addressdetails: 1, limit };
   const cc = countryCodes();
   if (cc) params.countrycodes = cc; // restrict to US (or configured codes); omit for global
+  if (opts.viewbox) {
+    params.viewbox = opts.viewbox; // preference, not a hard bound, unless bounded=1
+    if (opts.bounded) params.bounded = 1;
+  }
   const key = process.env.GEOCODER_API_KEY;
   if (key) params[(process.env.GEOCODER_API_KEY_PARAM || 'key').trim()] = key;
   return params;
@@ -119,11 +125,11 @@ function buildSearchParams(q, limit) {
  * Default HTTP getter (Nominatim `/search`). Isolated so tests inject a stub and
  * never touch the network. Returns the raw Nominatim result array.
  */
-async function nominatimSearch(q, limit) {
+async function nominatimSearch(q, limit, opts = {}) {
   const axios = require('axios'); // lazy: only the real geocode path needs the HTTP client
   const url = `${baseUrl()}/search`;
   const response = await axios.get(url, {
-    params: buildSearchParams(q, limit),
+    params: buildSearchParams(q, limit, opts),
     headers: { 'User-Agent': USER_AGENT, 'Accept-Language': 'en' },
     timeout: 8000,
   });
@@ -186,19 +192,24 @@ async function attachAddressIds(results, tenantId) {
 /**
  * Forward-geocode `q` to a ranked list of candidate places. Cache-first: a hit
  * within the TTL skips the upstream call entirely. `opts.context.tenantId`
- * enables `address_id` enrichment; `opts.search` overrides the HTTP getter
- * (tests). Returns [] for blank queries; throws only on an upstream HTTP error.
+ * enables `address_id` enrichment; `opts.viewbox` (lon,lat,lon,lat) soft-biases
+ * results to the map view; `opts.search` overrides the HTTP getter (tests).
+ * Returns [] for blank queries; throws only on an upstream HTTP error.
  */
 async function geocode(q, opts = {}) {
   const normalized = normalizeQuery(q);
   if (!normalized) return { results: [], cached: false };
 
-  const cached = readCache(normalized);
+  const viewbox = opts.viewbox || null;
+  // Cache per (query, viewbox): the same query in a different map view must not
+  // serve a result set biased toward the previous view.
+  const cacheKey = viewbox ? `${normalized}|${viewbox}` : normalized;
+  const cached = readCache(cacheKey);
   if (cached) return { results: cached, cached: true };
 
   const search = opts.search || nominatimSearch;
   const limit = Number.isFinite(opts.limit) ? opts.limit : DEFAULT_LIMIT;
-  const rawRows = await search(normalized, limit);
+  const rawRows = await search(normalized, limit, { viewbox, bounded: opts.bounded });
 
   const tenantId = opts.context && opts.context.tenantId;
   const mapped = (Array.isArray(rawRows) ? rawRows : [])
@@ -206,7 +217,7 @@ async function geocode(q, opts = {}) {
     .filter(Boolean);
   const results = await attachAddressIds(mapped, tenantId);
 
-  writeCache(normalized, results);
+  writeCache(cacheKey, results);
   return { results, cached: false };
 }
 

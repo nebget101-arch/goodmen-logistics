@@ -71,10 +71,13 @@ export class GeofenceService {
 
   /**
    * GET /api/geofences/geocode — forward-geocode a free-text address (FN-1761).
+   * Optional `viewbox` (lon,lat,lon,lat) soft-biases results toward the current
+   * map view so local addresses outrank same-named places elsewhere (FN-1781).
    * Returns ranked candidates; maps the wire `address_id` to `addressId`.
    */
-  geocode(q: string): Observable<GeocodeResult[]> {
-    const url = `${this.baseUrl}/geocode?q=${encodeURIComponent(q)}`;
+  geocode(q: string, viewbox?: string): Observable<GeocodeResult[]> {
+    let url = `${this.baseUrl}/geocode?q=${encodeURIComponent(q)}`;
+    if (viewbox) url += `&viewbox=${encodeURIComponent(viewbox)}`;
     return this.http
       .get<{ data: GeocodeWireResult[] }>(url)
       .pipe(
