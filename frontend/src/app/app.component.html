@@ -84,6 +84,11 @@
               <span class="material-symbols-outlined">alternate_email</span> Inbound Email
             </a>
           </ng-container>
+          <ng-container *ngIf="canSeeAdminMenuLink('/admin/branding', adminMenuPermissions)">
+            <a routerLink="/admin/branding" (click)="closeUserMenu(); closeSidebar()" class="user-dropdown-item">
+              <span class="material-symbols-outlined">branding_watermark</span> Branding &amp; Logos
+            </a>
+          </ng-container>
           <ng-container *ngIf="canSeeFmcsaImportsAdmin()">
             <a routerLink="/admin/fmcsa-imports" (click)="closeUserMenu(); closeSidebar()" class="user-dropdown-item">
               <span class="material-symbols-outlined">cloud_download</span> FMCSA Imports
@@ -149,6 +154,11 @@
           <ng-container *ngIf="canSeeAdminMenuLink('/admin/inbound-email', adminMenuPermissions)">
             <a routerLink="/admin/inbound-email" (click)="closeUserMenu(); closeSidebar()" class="user-dropdown-item">
               <span class="material-symbols-outlined">alternate_email</span> Inbound Email
+            </a>
+          </ng-container>
+          <ng-container *ngIf="canSeeAdminMenuLink('/admin/branding', adminMenuPermissions)">
+            <a routerLink="/admin/branding" (click)="closeUserMenu(); closeSidebar()" class="user-dropdown-item">
+              <span class="material-symbols-outlined">branding_watermark</span> Branding &amp; Logos
             </a>
           </ng-container>
           <ng-container *ngIf="canSeeFmcsaImportsAdmin()">
