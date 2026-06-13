@@ -111,8 +111,46 @@
                 <span class="vt-sev-badge" [ngClass]="faultSeverityClass(f.severity)">{{ f.severity }}</span>
               </div>
               <p class="vt-fault-desc">{{ f.description }}</p>
+              <p class="vt-fault-cause" *ngIf="likelyCauseFor(f.code) as cause">
+                <span class="material-symbols-outlined">neurology</span>
+                <span><strong>Likely cause:</strong> {{ cause }}</span>
+              </p>
             </li>
           </ul>
+
+          <!-- AI Diagnosis (FN-1771) — only when faults exist -->
+          <div class="vt-ai" *ngIf="(telemetry.fault_codes || []).length">
+            <h4 class="vt-ai-title">
+              <span class="material-symbols-outlined">neurology</span>
+              AI Diagnosis
+            </h4>
+
+            <app-ai-skeleton
+              *ngIf="loadingDiagnosis"
+              width="100%"
+              height="104px"
+              radius="12px">
+            </app-ai-skeleton>
+
+            <p class="vt-ai-error" *ngIf="diagnosisError && !loadingDiagnosis">{{ diagnosisError }}</p>
+
+            <div class="vt-ai-body" *ngIf="diagnosis && !loadingDiagnosis">
+              <span
+                class="vt-sev-badge vt-ai-attention"
+                [ngClass]="faultSeverityClass('critical')"
+                *ngIf="diagnosis.immediateAttention">
+                <span class="material-symbols-outlined">warning</span>
+                Immediate attention required
+              </span>
+
+              <p class="vt-ai-summary" *ngIf="diagnosis.summary">{{ diagnosis.summary }}</p>
+
+              <div class="vt-ai-action" *ngIf="diagnosis.recommendedAction">
+                <span class="vt-ai-label">Recommended action</span>
+                <p>{{ diagnosis.recommendedAction }}</p>
+              </div>
+            </div>
+          </div>
         </div>
 
         <p class="vt-source" *ngIf="telemetry.source === 'mock'">
