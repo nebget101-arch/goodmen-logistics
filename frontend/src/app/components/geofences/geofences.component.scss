@@ -194,6 +194,38 @@
   font-size: 0.9rem;
 }
 
+/* ── Per-unit scope banner ───────────────────────────────────────────────── */
+.scope-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 12px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(56, 189, 248, 0.5);
+  background: rgba(14, 165, 233, 0.12);
+  color: #cbd5e1;
+  font-size: 0.9rem;
+
+  .material-symbols-outlined {
+    font-size: 1.05rem;
+    color: #38bdf8;
+  }
+}
+
+.link-btn {
+  background: transparent;
+  border: none;
+  color: #67e8f9;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 0;
+
+  &:hover {
+    text-decoration: underline;
+  }
+}
+
 /* ── Geofence list ────────────────────────────────────────────────────── */
 .geofence-list {
   list-style: none;
@@ -337,6 +369,107 @@
   &.over-limit {
     color: #fca5a5;
   }
+}
+
+/* ── Address search ───────────────────────────────────────────────────────── */
+.address-search {
+  position: relative;
+}
+
+.address-input-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+
+  .address-icon {
+    position: absolute;
+    left: 10px;
+    color: #94a3b8;
+    font-size: 1.1rem;
+    pointer-events: none;
+  }
+
+  .form-input.has-icon {
+    padding-left: 36px;
+  }
+
+  .spinner {
+    position: absolute;
+    right: 10px;
+    color: #38bdf8;
+    font-size: 1.1rem;
+    animation: geofence-spin 900ms linear infinite;
+  }
+}
+
+@keyframes geofence-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.geocode-results {
+  list-style: none;
+  margin: 4px 0 0;
+  padding: 4px;
+  position: absolute;
+  z-index: 1000;
+  left: 0;
+  right: 0;
+  max-height: 240px;
+  overflow-y: auto;
+  border-radius: 10px;
+  border: 1px solid rgba(56, 189, 248, 0.45);
+  background: rgba(2, 6, 23, 0.97);
+  box-shadow: 0 16px 35px rgba(2, 6, 23, 0.75);
+
+  li + li {
+    margin-top: 2px;
+  }
+}
+
+.geocode-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  border: none;
+  border-radius: 8px;
+  padding: 8px 10px;
+  color: #e2e8f0;
+  cursor: pointer;
+  transition: background-color 120ms ease;
+
+  &:hover {
+    background: rgba(56, 189, 248, 0.14);
+  }
+
+  .material-symbols-outlined {
+    font-size: 1.05rem;
+    color: #38bdf8;
+    flex-shrink: 0;
+  }
+}
+
+.geocode-label {
+  flex: 1;
+  font-size: 0.88rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.geocode-saved {
+  flex-shrink: 0;
+  padding: 1px 7px;
+  border-radius: 999px;
+  border: 1px solid rgba(34, 197, 94, 0.7);
+  color: #86efac;
+  text-transform: uppercase;
+  font-size: 0.6rem;
+  letter-spacing: 0.06em;
 }
 
 /* ── Triggers ─────────────────────────────────────────────────────────── */

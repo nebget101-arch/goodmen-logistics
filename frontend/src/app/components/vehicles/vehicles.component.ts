@@ -1,5 +1,5 @@
 import { Component, OnInit, OnDestroy } from '@angular/core';
-import { ActivatedRoute } from '@angular/router';
+import { ActivatedRoute, Router } from '@angular/router';
 import { ApiService } from '../../services/api.service';
 import { debounceTime, forkJoin, Subject, Subscription } from 'rxjs';
 import { PermissionHelperService } from '../../services/permission-helper.service';
@@ -164,8 +164,19 @@ export class VehiclesComponent implements OnInit, OnDestroy {
   constructor(
     private apiService: ApiService,
     private route: ActivatedRoute,
+    private router: Router,
     private permissions: PermissionHelperService
   ) { }
+
+  /**
+   * FN-1762 — deep-link to the geofence editor pre-scoped to a single unit.
+   * Carries `vehicle_id` (scoping) + `unit` (display label) as query params.
+   */
+  createGeofenceForUnit(vehicle: Vehicle): void {
+    this.router.navigate(['/geofences'], {
+      queryParams: { vehicle_id: vehicle.id, unit: vehicle.unit_number },
+    });
+  }
 
   ngOnInit(): void {
     this.route.data.subscribe(data => {
