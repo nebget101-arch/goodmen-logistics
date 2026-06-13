@@ -34,6 +34,7 @@ import { TermsComponent } from './components/terms/terms.component';
 import { CommunicationPreferencesComponent } from './components/communication-preferences/communication-preferences.component';
 import { MultiMcAdminComponent } from './components/multi-mc-admin/multi-mc-admin.component';
 import { InboundEmailSettingsComponent } from './components/admin/inbound-email-settings/inbound-email-settings.component';
+import { BrandingSettingsComponent } from './settings/branding/branding-settings.component';
 import { RoadsideBoardComponent } from './components/roadside-board/roadside-board.component';
 import { PublicRoadsideComponent } from './components/public-roadside/public-roadside.component';
 import { EmployerResponseComponent } from './public/components/employer-response/employer-response.component';
@@ -292,6 +293,12 @@ const routes: Routes = [
     component: InboundEmailSettingsComponent,
     canActivate: [AuthGuard, PermissionGuard],
     data: { anyPermission: [PERMISSIONS.ROLES_MANAGE, PERMISSIONS.ACCESS_ADMIN, PERMISSIONS.USERS_EDIT] }
+  },
+  {
+    path: 'admin/branding',
+    component: BrandingSettingsComponent,
+    canActivate: [AuthGuard, PermissionGuard],
+    data: { anyPermission: [PERMISSIONS.ACCESS_ADMIN, PERMISSIONS.ROLES_MANAGE, PERMISSIONS.LOCATIONS_MANAGE] }
   },
   {
     path: 'admin/fmcsa-imports',
