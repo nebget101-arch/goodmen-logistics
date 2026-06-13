@@ -1,4 +1,5 @@
 const { PDFDocument, StandardFonts, rgb } = require('pdf-lib');
+const { embedOperatingEntityLogo, scaleToFit } = require('./logo-embed.helper');
 
 // ─── Utility functions ───────────────────────────────────────────────────────
 
@@ -62,13 +63,22 @@ const LAYOUT = {
 
 // ─── Professional PDF drawing helpers ────────────────────────────────────────
 
-function drawPageHeader(page, font, boldFont, companyName, companyAddress) {
+function drawPageHeader(page, font, boldFont, companyName, companyAddress, logoImage) {
   const { pageWidth, marginLeft, marginRight } = LAYOUT;
+  let textX = marginLeft;
+  // MC logo at the left of the header when available; company text shifts right.
+  if (logoImage) {
+    const dims = scaleToFit(logoImage, 120, 30);
+    if (dims) {
+      page.drawImage(logoImage, { x: marginLeft, y: 752 - dims.height / 2, width: dims.width, height: dims.height });
+      textX = marginLeft + dims.width + 10;
+    }
+  }
   // Company name bold 13pt
-  page.drawText(companyName || '', { x: marginLeft, y: 755, size: 13, font: boldFont, color: COLORS.primary });
+  page.drawText(companyName || '', { x: textX, y: 755, size: 13, font: boldFont, color: COLORS.primary });
   // Address 8pt
   if (companyAddress) {
-    page.drawText(companyAddress, { x: marginLeft, y: 742, size: 8, font, color: COLORS.label });
+    page.drawText(companyAddress, { x: textX, y: 742, size: 8, font, color: COLORS.label });
   }
   // Title right-aligned
   const title = 'DRIVER EMPLOYMENT APPLICATION';
@@ -213,15 +223,15 @@ function drawQuestionRow(page, font, boldFont, question, answer, y) {
   return y - 16;
 }
 
-function newPageWithHeader(pdfDoc, font, boldFont, companyName, companyAddress) {
+function newPageWithHeader(pdfDoc, font, boldFont, companyName, companyAddress, logoImage) {
   const page = pdfDoc.addPage([LAYOUT.pageWidth, LAYOUT.pageHeight]);
-  drawPageHeader(page, font, boldFont, companyName, companyAddress);
+  drawPageHeader(page, font, boldFont, companyName, companyAddress, logoImage);
   return { page, y: LAYOUT.contentStartY };
 }
 
-function checkPage(pdfDoc, page, y, minY, font, boldFont, companyName, companyAddress) {
+function checkPage(pdfDoc, page, y, minY, font, boldFont, companyName, companyAddress, logoImage) {
   if (y < minY) {
-    return newPageWithHeader(pdfDoc, font, boldFont, companyName, companyAddress);
+    return newPageWithHeader(pdfDoc, font, boldFont, companyName, companyAddress, logoImage);
   }
   return { page, y };
 }
@@ -332,6 +342,8 @@ async function generateEmploymentApplicationPdf(fullApp, context = {}) {
     if (oe.email) parts.push(oe.email);
     companyAddress = parts.join('  |  ');
   }
+  // MC logo (operating entity); null when absent or fetch fails → text header used.
+  const logoImage = await embedOperatingEntityLogo(pdfDoc, oe);
 
   // Document metadata for footers
   const docId = fullApp.id || fullApp.application_id || '';
@@ -339,7 +351,7 @@ async function generateEmploymentApplicationPdf(fullApp, context = {}) {
 
   // === PAGE 1: HEADER + NOTICE + APPLICANT INFO ===
   let page = pdfDoc.addPage([LAYOUT.pageWidth, LAYOUT.pageHeight]);
-  drawPageHeader(page, font, bold, companyName || '[COMPANY NAME]', companyAddress || '[ADDRESS, PHONE, EMAIL]');
+  drawPageHeader(page, font, bold, companyName || '[COMPANY NAME]', companyAddress || '[ADDRESS, PHONE, EMAIL]', logoImage);
   let y = LAYOUT.contentStartY;
 
   // Equal opportunity line
@@ -393,7 +405,7 @@ async function generateEmploymentApplicationPdf(fullApp, context = {}) {
   y -= 4;
 
   // === ADDRESS HISTORY ===
-  ({ page, y } = checkPage(pdfDoc, page, y, 120, font, bold, companyName, companyAddress));
+  ({ page, y } = checkPage(pdfDoc, page, y, 120, font, bold, companyName, companyAddress, logoImage));
   y = drawSectionBanner(page, bold, 'ADDRESS HISTORY (PAST 3 YEARS)', y);
   y -= 2;
 
@@ -408,7 +420,7 @@ async function generateEmploymentApplicationPdf(fullApp, context = {}) {
   y = drawTableHeader(page, bold, addrColumns, y);
 
   for (let i = 0; i < residencies.slice(0, 8).length; i++) {
-    ({ page, y } = checkPage(pdfDoc, page, y, 70, font, bold, companyName, companyAddress));
+    ({ page, y } = checkPage(pdfDoc, page, y, 70, font, bold, companyName, companyAddress, logoImage));
     const r = residencies[i];
     y = drawTableRow(page, font, addrColumns, [
       asText(r.residency_type || r.residencyType),
@@ -422,7 +434,7 @@ async function generateEmploymentApplicationPdf(fullApp, context = {}) {
   y -= 10;
 
   // === WORK AUTHORIZATION & BACKGROUND ===
-  ({ page, y } = checkPage(pdfDoc, page, y, 140, font, bold, companyName, companyAddress));
+  ({ page, y } = checkPage(pdfDoc, page, y, 140, font, bold, companyName, companyAddress, logoImage));
   y = drawSectionBanner(page, bold, 'WORK AUTHORIZATION & BACKGROUND', y);
   y -= 2;
 
@@ -440,7 +452,7 @@ async function generateEmploymentApplicationPdf(fullApp, context = {}) {
   y -= 6;
 
   // === EMPLOYMENT HISTORY ===
-  ({ page, y } = checkPage(pdfDoc, page, y, 160, font, bold, companyName, companyAddress));
+  ({ page, y } = checkPage(pdfDoc, page, y, 160, font, bold, companyName, companyAddress, logoImage));
   y = drawSectionBanner(page, bold, 'EMPLOYMENT HISTORY', y);
   page.drawText('All applicants must provide information for any previous employer during the preceding 3 years.', { x: LAYOUT.marginLeft + 4, y, size: 7.5, font, color: COLORS.label });
   y -= 10;
@@ -448,7 +460,7 @@ async function generateEmploymentApplicationPdf(fullApp, context = {}) {
   y -= 16;
 
   for (let i = 0; i < employers.length; i++) {
-    ({ page, y } = checkPage(pdfDoc, page, y, 140, font, bold, companyName, companyAddress));
+    ({ page, y } = checkPage(pdfDoc, page, y, 140, font, bold, companyName, companyAddress, logoImage));
     const e = employers[i] || {};
     const empLabel = e.is_current ? 'CURRENT / MOST RECENT EMPLOYER' : `PREVIOUS EMPLOYER ${i}`;
 
@@ -472,7 +484,7 @@ async function generateEmploymentApplicationPdf(fullApp, context = {}) {
   }
 
   // === ACCIDENT RECORD ===
-  ({ page, y } = checkPage(pdfDoc, page, y, 100, font, bold, companyName, companyAddress));
+  ({ page, y } = checkPage(pdfDoc, page, y, 100, font, bold, companyName, companyAddress, logoImage));
   y = drawSectionBanner(page, bold, 'ACCIDENT RECORD (PAST 5 YEARS)', y);
   y -= 2;
 
@@ -489,7 +501,7 @@ async function generateEmploymentApplicationPdf(fullApp, context = {}) {
     ];
     y = drawTableHeader(page, bold, accColumns, y);
     for (let i = 0; i < accidents.slice(0, 10).length; i++) {
-      ({ page, y } = checkPage(pdfDoc, page, y, 70, font, bold, companyName, companyAddress));
+      ({ page, y } = checkPage(pdfDoc, page, y, 70, font, bold, companyName, companyAddress, logoImage));
       const a = accidents[i];
       y = drawTableRow(page, font, accColumns, [
         fmtDate(a.date),
@@ -503,7 +515,7 @@ async function generateEmploymentApplicationPdf(fullApp, context = {}) {
   y -= 8;
 
   // === TRAFFIC CONVICTIONS ===
-  ({ page, y } = checkPage(pdfDoc, page, y, 100, font, bold, companyName, companyAddress));
+  ({ page, y } = checkPage(pdfDoc, page, y, 100, font, bold, companyName, companyAddress, logoImage));
   y = drawSectionBanner(page, bold, 'TRAFFIC CONVICTIONS (PAST 5 YEARS)', y);
   y -= 2;
 
@@ -520,7 +532,7 @@ async function generateEmploymentApplicationPdf(fullApp, context = {}) {
     y = drawTableHeader(page, bold, violColumns, y);
     const allViolations = [...violations, ...convictions];
     for (let i = 0; i < allViolations.slice(0, 10).length; i++) {
-      ({ page, y } = checkPage(pdfDoc, page, y, 70, font, bold, companyName, companyAddress));
+      ({ page, y } = checkPage(pdfDoc, page, y, 70, font, bold, companyName, companyAddress, logoImage));
       const v = allViolations[i];
       y = drawTableRow(page, font, violColumns, [
         asText(v.location || v.state_of_violation || v.stateOfViolation),
@@ -533,7 +545,7 @@ async function generateEmploymentApplicationPdf(fullApp, context = {}) {
   y -= 8;
 
   // === LICENSE HISTORY ===
-  ({ page, y } = checkPage(pdfDoc, page, y, 100, font, bold, companyName, companyAddress));
+  ({ page, y } = checkPage(pdfDoc, page, y, 100, font, bold, companyName, companyAddress, logoImage));
   y = drawSectionBanner(page, bold, 'DRIVER LICENSES / PERMITS (PAST 3 YEARS)', y);
   y -= 2;
 
@@ -545,7 +557,7 @@ async function generateEmploymentApplicationPdf(fullApp, context = {}) {
   ];
   y = drawTableHeader(page, bold, licColumns, y);
   for (let i = 0; i < licenses.slice(0, 5).length; i++) {
-    ({ page, y } = checkPage(pdfDoc, page, y, 70, font, bold, companyName, companyAddress));
+    ({ page, y } = checkPage(pdfDoc, page, y, 70, font, bold, companyName, companyAddress, logoImage));
     const l = licenses[i];
     y = drawTableRow(page, font, licColumns, [
       asText(l.state),
@@ -557,7 +569,7 @@ async function generateEmploymentApplicationPdf(fullApp, context = {}) {
   y -= 8;
 
   // === DRIVING EXPERIENCE ===
-  ({ page, y } = checkPage(pdfDoc, page, y, 140, font, bold, companyName, companyAddress));
+  ({ page, y } = checkPage(pdfDoc, page, y, 140, font, bold, companyName, companyAddress, logoImage));
   y = drawSectionBanner(page, bold, 'DRIVING EXPERIENCE', y);
   y -= 2;
 
@@ -579,7 +591,7 @@ async function generateEmploymentApplicationPdf(fullApp, context = {}) {
     { key: 'other', label: 'Other' }
   ];
   for (let i = 0; i < expTypes.length; i++) {
-    ({ page, y } = checkPage(pdfDoc, page, y, 70, font, bold, companyName, companyAddress));
+    ({ page, y } = checkPage(pdfDoc, page, y, 70, font, bold, companyName, companyAddress, logoImage));
     const et = expTypes[i];
     const exp = drivingExp[et.key] || {};
     const has = exp.hasExperience;
@@ -599,7 +611,7 @@ async function generateEmploymentApplicationPdf(fullApp, context = {}) {
   y -= 16;
 
   // === DRUG & ALCOHOL INFORMATION ===
-  ({ page, y } = checkPage(pdfDoc, page, y, 160, font, bold, companyName, companyAddress));
+  ({ page, y } = checkPage(pdfDoc, page, y, 160, font, bold, companyName, companyAddress, logoImage));
   y = drawSectionBanner(page, bold, 'DRUG & ALCOHOL INFORMATION', y);
   page.drawText('In the previous three (3) years have you:', { x: LAYOUT.marginLeft + 4, y, size: 8, font, color: COLORS.label });
   y -= 14;
@@ -613,13 +625,13 @@ async function generateEmploymentApplicationPdf(fullApp, context = {}) {
     { key: 'otherDOTViolation', label: '6. Had any other violation of DOT drug/alcohol testing regulations' }
   ];
   for (const q of daQuestions) {
-    ({ page, y } = checkPage(pdfDoc, page, y, 70, font, bold, companyName, companyAddress));
+    ({ page, y } = checkPage(pdfDoc, page, y, 70, font, bold, companyName, companyAddress, logoImage));
     y = drawQuestionRow(page, font, bold, q.label, yn(drugAlcohol[q.key]), y);
   }
   y -= 10;
 
   // === APPLICANT CERTIFICATION & SIGNATURE (FN-233) ===
-  ({ page, y } = checkPage(pdfDoc, page, y, 240, font, bold, companyName, companyAddress));
+  ({ page, y } = checkPage(pdfDoc, page, y, 240, font, bold, companyName, companyAddress, logoImage));
   y = drawSectionBanner(page, bold, 'APPLICANT CERTIFICATION & SIGNATURE', y);
   y -= 2;
 
@@ -648,7 +660,7 @@ async function generateEmploymentApplicationPdf(fullApp, context = {}) {
 
   // Signature box
   const sigBoxHeight = 72;
-  ({ page, y } = checkPage(pdfDoc, page, y, sigBoxHeight + 20, font, bold, companyName, companyAddress));
+  ({ page, y } = checkPage(pdfDoc, page, y, sigBoxHeight + 20, font, bold, companyName, companyAddress, logoImage));
   page.drawRectangle({
     x: LAYOUT.marginLeft,
     y: y - sigBoxHeight + 10,
@@ -684,7 +696,7 @@ async function generateEmploymentApplicationPdf(fullApp, context = {}) {
   const audit = context.auditTrail || applicant.auditTrail || {};
   if (audit.ipAddress || audit.submittedAt || audit.userAgent) {
     y -= 8;
-    ({ page, y } = checkPage(pdfDoc, page, y, 80, font, bold, companyName, companyAddress));
+    ({ page, y } = checkPage(pdfDoc, page, y, 80, font, bold, companyName, companyAddress, logoImage));
 
     const auditBoxHeight = 56;
     page.drawRectangle({
