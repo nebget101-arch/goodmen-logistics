@@ -274,7 +274,7 @@ export class GeofencesComponent implements OnInit, AfterViewInit, OnDestroy {
           }
           this.geocoding = true;
           this.cdr.markForCheck();
-          return this.geofenceService.geocode(query).pipe(
+          return this.geofenceService.geocode(query, this.currentViewbox()).pipe(
             catchError(() => {
               this.error = 'Address lookup failed. Try again.';
               return of([] as GeocodeResult[]);
@@ -292,6 +292,17 @@ export class GeofencesComponent implements OnInit, AfterViewInit, OnDestroy {
   onAddressInput(value: string): void {
     this.addressQuery = value;
     this.searchSubject.next(value);
+  }
+
+  /**
+   * Current map viewport as a Nominatim/LocationIQ `viewbox` (lon,lat,lon,lat)
+   * to soft-bias geocode results toward what the user is looking at. Returns
+   * undefined before the map is ready (search then runs unbiased). FN-1781.
+   */
+  private currentViewbox(): string | undefined {
+    if (!this.map) return undefined;
+    const b = this.map.getBounds();
+    return `${b.getWest()},${b.getSouth()},${b.getEast()},${b.getNorth()}`;
   }
 
   /** Pick a geocode result: fly the map there and drop an editable circle. */

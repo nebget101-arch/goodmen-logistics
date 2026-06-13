@@ -31,6 +31,18 @@ function getUserId(req) {
   return req.user && (req.user.id || req.user.sub);
 }
 
+/**
+ * Validate an optional geocode `viewbox` query param: four comma-separated
+ * finite numbers (lon,lat,lon,lat). Returns a clean string or null (so a
+ * malformed value is ignored rather than forwarded to the upstream geocoder).
+ */
+function parseViewbox(raw) {
+  if (!raw) return null;
+  const parts = String(raw).split(',').map(Number);
+  if (parts.length !== 4 || parts.some((n) => !Number.isFinite(n))) return null;
+  return parts.join(',');
+}
+
 /** Parse the list query string into service filters (wire param names). */
 function parseListFilters(req, userId) {
   const filters = {};
@@ -126,8 +138,9 @@ router.get('/geocode', async (req, res) => {
   if (!context) return res.status(403).json({ error: 'Tenant context missing' });
   const q = (req.query.q || '').toString().trim();
   if (!q) return res.status(400).json({ error: 'q query parameter is required' });
+  const viewbox = parseViewbox(req.query.viewbox); // optional map-view bias; null if absent/invalid
   try {
-    const { results, cached } = await geocodeService.geocode(q, { context });
+    const { results, cached } = await geocodeService.geocode(q, { context, viewbox });
     return res.json({ data: results, meta: { total: results.length, cached } });
   } catch (err) {
     dtLogger.error('geofences_geocode_failed', { error: err.message });

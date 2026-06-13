@@ -203,5 +203,24 @@ describe('geocode-service (FN-1761)', () => {
         assert.strictEqual('countrycodes' in p, false);
       });
     });
+
+    it('adds viewbox (no bounded) when opts.viewbox is set', () => {
+      const p = geocode.buildSearchParams('dallas', 5, { viewbox: '-97,32,-96,33' });
+      assert.strictEqual(p.viewbox, '-97,32,-96,33');
+      assert.strictEqual('bounded' in p, false);
+    });
+
+    it('adds bounded=1 only when opts.bounded is set alongside viewbox', () => {
+      const p = geocode.buildSearchParams('dallas', 5, {
+        viewbox: '-97,32,-96,33',
+        bounded: true,
+      });
+      assert.strictEqual(p.bounded, 1);
+    });
+
+    it('omits viewbox when not provided', () => {
+      const p = geocode.buildSearchParams('dallas', 5);
+      assert.strictEqual('viewbox' in p, false);
+    });
   });
 });
