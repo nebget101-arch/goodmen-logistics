@@ -490,6 +490,38 @@ describe('geofences route (FN-1665)', () => {
     });
     assert.strictEqual(withRadius.body.data.length, 1);
   });
+
+  it('filters by vehicle_id (scoped + tenant-wide triggers, per-unit view)', async () => {
+    // A: trigger scoped to veh-1; B: scoped to veh-2; C: tenant-wide (no vehicle); D: no triggers.
+    await request(server, {
+      method: 'POST',
+      path: '/api/geofences',
+      headers: auth,
+      body: { ...CIRCLE, name: 'A', triggers: [{ eventKind: 'enter', action: 'notify', vehicleId: 'veh-1' }] },
+    });
+    await request(server, {
+      method: 'POST',
+      path: '/api/geofences',
+      headers: auth,
+      body: { ...POLYGON, name: 'B', triggers: [{ eventKind: 'enter', action: 'notify', vehicleId: 'veh-2' }] },
+    });
+    await request(server, {
+      method: 'POST',
+      path: '/api/geofences',
+      headers: auth,
+      body: { ...CIRCLE, name: 'C', triggers: [{ eventKind: 'exit', action: 'notify' }] },
+    });
+    await request(server, { method: 'POST', path: '/api/geofences', headers: auth, body: { ...CIRCLE, name: 'D' } });
+
+    const res = await request(server, {
+      method: 'GET',
+      path: '/api/geofences?vehicle_id=veh-1',
+      headers: auth,
+    });
+    assert.strictEqual(res.status, 200);
+    const names = res.body.data.map((g) => g.name).sort();
+    assert.deepStrictEqual(names, ['A', 'C']); // scoped-to-veh-1 + tenant-wide; not veh-2, not untriggered
+  });
 });
 
 // ─── Trigger management ─────────────────────────────────────────────────────

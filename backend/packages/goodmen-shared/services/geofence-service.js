@@ -345,6 +345,10 @@ function triggerInsertRow(geofenceId, trigger) {
  *   near:             { lng, lat } — keep geofences containing the point, or
  *                     (with nearRadiusMeters) within that distance
  *   nearRadiusMeters: number — distance bound for the near filter
+ *   vehicleId:        vehicle id — keep geofences with a trigger scoped to this
+ *                     vehicle, or a tenant-wide (vehicle_id NULL) trigger that
+ *                     also applies to it. Geofences with no applicable trigger
+ *                     are dropped. Powers the per-unit view.
  * Results are nearest-first when `near` is supplied; each carries its triggers.
  */
 async function listGeofences(context, filters = {}, conn = getDb()) {
@@ -378,7 +382,19 @@ async function listGeofences(context, filters = {}, conn = getDb()) {
 
   const ids = selected.map((g) => g.id);
   const triggersByGeofence = await loadTriggers(ids, conn);
-  return selected.map((g) => toWireGeofence(g, triggersByGeofence[g.id] || []));
+
+  let withTriggers = selected.map((g) => ({ row: g, triggers: triggersByGeofence[g.id] || [] }));
+
+  // Per-unit view: a geofence is relevant to a vehicle when it has a trigger
+  // scoped to that vehicle, or a tenant-wide trigger (vehicle_id NULL) that
+  // applies to every vehicle including this one.
+  if (filters.vehicleId) {
+    withTriggers = withTriggers.filter(({ triggers }) =>
+      triggers.some((t) => t.vehicle_id === filters.vehicleId || t.vehicle_id == null)
+    );
+  }
+
+  return withTriggers.map(({ row, triggers }) => toWireGeofence(row, triggers));
 }
 
 async function loadTriggers(geofenceIds, conn = getDb()) {
