@@ -190,6 +190,27 @@
   color: rgba(148, 163, 184, 1);
 }
 
+/* Position → Google Maps deep-link. Accent token reused from .vt-title-icon. */
+.vt-maps-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: rgba(45, 212, 191, 0.95);
+  text-decoration: none;
+  transition: color 0.15s ease;
+}
+
+.vt-maps-link:hover,
+.vt-maps-link:focus-visible {
+  color: rgba(45, 212, 191, 1);
+  text-decoration: underline;
+}
+
+.vt-maps-icon {
+  font-size: 0.95rem;
+  line-height: 1;
+}
+
 /* ── Fault codes ────────────────────────────────────────────────────── */
 .vt-faults {
   list-style: none;

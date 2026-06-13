@@ -364,6 +364,16 @@ export class VehicleTrackingComponent implements OnInit, AfterViewInit, OnDestro
     return `${this.telemetry!.latitude.toFixed(4)}, ${this.telemetry!.longitude.toFixed(4)}`;
   }
 
+  /**
+   * Google Maps deep-link for the current position, or `null` when there is
+   * no position. Uses the raw lat/lng (not the 4-decimal display string) so
+   * the pin lands on the exact coordinate.
+   */
+  googleMapsUrl(): string | null {
+    if (!this.hasPosition(this.telemetry)) return null;
+    return `https://www.google.com/maps?q=${this.telemetry!.latitude},${this.telemetry!.longitude}`;
+  }
+
   speedDisplay(): string {
     const s = this.telemetry?.speed_mph;
     return Number.isFinite(s as number) ? `${Math.round(s as number)} mph` : '—';
