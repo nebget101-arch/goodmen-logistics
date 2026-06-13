@@ -8,7 +8,6 @@ import {
   Output,
   ViewChild,
 } from '@angular/core';
-import * as QRCode from 'qrcode';
 import { ApiService } from '../../../services/api.service';
 
 /**
@@ -104,11 +103,11 @@ export class BarcodeScannerDialogComponent implements OnInit, OnDestroy {
         this.bridgeMobileUrl = data.mobileUrl || '';
         this.bridgeSessionId = data.sessionId || '';
         if (this.bridgeMobileUrl) {
-          QRCode.toDataURL(this.bridgeMobileUrl, {
+          import('qrcode').then(QRCode => QRCode.toDataURL(this.bridgeMobileUrl, {
             width: 220,
             margin: 2,
             color: { dark: '#000000', light: '#ffffff' },
-          })
+          }))
             .then((url: string) => {
               this.qrCodeDataUrl = url;
             })

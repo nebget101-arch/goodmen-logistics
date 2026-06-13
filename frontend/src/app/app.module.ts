@@ -26,7 +26,6 @@ import { DriversComponent } from './components/drivers/drivers.component';
 import { DispatchDriversComponent } from './components/dispatch-drivers/dispatch-drivers.component';
 import { DriverEditComponent } from './components/driver-edit/driver-edit.component';
 import { VehiclesComponent } from './components/vehicles/vehicles.component';
-import { VehicleTrackingComponent } from './components/vehicle-tracking/vehicle-tracking.component';
 import { VehicleFormComponent } from './components/vehicles/vehicle-form/vehicle-form.component';
 import { HosComponent } from './components/hos/hos.component';
 // FN-770: MaintenanceComponent, WorkOrderComponent (+ tabs), LoadsDashboardComponent,
@@ -118,7 +117,6 @@ import { ControlCenterComponent } from './components/control-center/control-cent
     DispatchDriversComponent,
     DriverEditComponent,
     VehiclesComponent,
-    VehicleTrackingComponent,
     VehicleFormComponent,
     HosComponent,
     LoadsComponent,

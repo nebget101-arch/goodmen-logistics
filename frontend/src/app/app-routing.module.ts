@@ -9,7 +9,6 @@ import { DriversComponent } from './components/drivers/drivers.component';
 import { DispatchDriversComponent } from './components/dispatch-drivers/dispatch-drivers.component';
 import { DriverEditComponent } from './components/driver-edit/driver-edit.component';
 import { VehiclesComponent } from './components/vehicles/vehicles.component';
-import { VehicleTrackingComponent } from './components/vehicle-tracking/vehicle-tracking.component';
 import { HosComponent } from './components/hos/hos.component';
 import { LoadsComponent } from './components/loads/loads.component';
 import { DispatchBoardComponent } from './components/dispatch-board/dispatch-board.component';
@@ -104,13 +103,9 @@ const routes: Routes = [
     }
   },
   {
+    // Lazy-loaded to keep Leaflet out of the initial bundle (FN-770 pattern).
     path: 'vehicle-tracking',
-    component: VehicleTrackingComponent,
-    canActivate: [AuthGuard, PlanGuard, PermissionGuard],
-    data: {
-      planPath: '/vehicle-tracking',
-      anyPermission: [PERMISSIONS.VEHICLES_VIEW]
-    }
+    loadChildren: () => import('./components/vehicle-tracking/vehicle-tracking.module').then(m => m.VehicleTrackingModule)
   },
   { path: 'hos', component: HosComponent, canActivate: [AuthGuard, PlanGuard], data: { planPath: '/hos' } },
   // FN-770: lazy-load heavy routes to keep initial bundle under budget.

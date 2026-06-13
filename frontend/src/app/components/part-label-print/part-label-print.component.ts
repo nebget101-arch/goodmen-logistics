@@ -10,7 +10,6 @@ import {
   ViewChild,
 } from '@angular/core';
 import * as JsBarcode from 'jsbarcode';
-import * as QRCode from 'qrcode';
 
 export interface PartLabelInput {
   name?: string;
@@ -70,7 +69,7 @@ export class PartLabelPrintComponent implements AfterViewInit, OnChanges {
       this.renderError = `Could not render barcode: ${err?.message || err}`;
     }
 
-    QRCode.toString(value, { type: 'svg', margin: 1, width: 120 })
+    import('qrcode').then(QRCode => QRCode.toString(value, { type: 'svg', margin: 1, width: 120 }))
       .then((svg: string) => {
         this.qrSvgMarkup = svg;
         this.cdr.markForCheck();
