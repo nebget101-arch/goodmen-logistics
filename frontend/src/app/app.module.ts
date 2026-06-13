@@ -67,6 +67,7 @@ import { MultiMcAdminComponent } from './components/multi-mc-admin/multi-mc-admi
 // FN-1549: TrialRequestsAdminComponent moved into TrialRequestsAdminModule
 // (lazy-loaded at /admin/trial-requests).
 import { InboundEmailSettingsComponent } from './components/admin/inbound-email-settings/inbound-email-settings.component';
+import { BrandingSettingsComponent } from './settings/branding/branding-settings.component';
 // FN-1549: FmcsaImportsAdminComponent moved into FmcsaImportsAdminModule
 // (lazy-loaded at /admin/fmcsa-imports).
 // FN-1549: EmploymentApplicationComponent moved into EmploymentApplicationModule
@@ -160,6 +161,7 @@ import { ControlCenterComponent } from './components/control-center/control-cent
     AutoReplenishmentComponent,
     AiExtractionFlowComponent,
     InboundEmailSettingsComponent,
+    BrandingSettingsComponent,
     IncidentDetailComponent,
     PhotoUploaderComponent,
     FeedbackFormComponent,
