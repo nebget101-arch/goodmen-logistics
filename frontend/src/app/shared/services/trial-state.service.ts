@@ -6,6 +6,15 @@ import { ApiService } from '../../services/api.service';
 export interface TrialState {
   /** e.g. 'trial' | 'expired' | 'converted' | null */
   trialStatus: string | null;
+  /**
+   * True when trial-status loaded successfully but the trial has not been
+   * admin-approved yet: the tenant exists, but `trial_status` is null and there
+   * is no managed subscription. The UI renders an explicit "pending activation"
+   * state instead of a blank banner / empty trial fields. A genuine non-trial
+   * user instead errors out (403/404) and yields a null state, so this never
+   * fires for them. See FN-1732 / FN-1734.
+   */
+  pending: boolean;
   trialEnd: Date | null;
   daysRemaining: number | null;
   planAmount: number | null;
@@ -76,6 +85,9 @@ export class TrialStateService {
 
         this._state$.next({
           trialStatus: s.trial_status ?? null,
+          // Pending = loaded OK, but no trial status and no managed subscription
+          // (tenant created via self-signup, awaiting admin trial approval).
+          pending: !s.trial_status && !sub.status,
           trialEnd: s.trial_end ? new Date(s.trial_end) : null,
           daysRemaining: Number.isFinite(Number(s.daysRemaining))
             ? Math.max(0, Math.floor(Number(s.daysRemaining)))

@@ -115,6 +115,11 @@ export class BillingComponent implements OnInit, OnDestroy {
     return this.state?.trialStatus === 'converted';
   }
 
+  /** Trial exists but is awaiting admin approval — show pending state, not empty fields (FN-1734). */
+  get isPending(): boolean {
+    return Boolean(this.state?.pending);
+  }
+
   get isPastDue(): boolean {
     return this.state?.subscriptionStatus === 'past_due' || this.state?.subscriptionStatus === 'unpaid';
   }
@@ -127,7 +132,7 @@ export class BillingComponent implements OnInit, OnDestroy {
   get statusSeverity(): 'good' | 'info' | 'warning' | 'critical' {
     if (this.isPastDue || this.isExpired) return 'critical';
     if (this.cancelAtPeriodEnd) return 'warning';
-    if (this.isInTrial) return 'info';
+    if (this.isInTrial || this.isPending) return 'info';
     return 'good';
   }
 

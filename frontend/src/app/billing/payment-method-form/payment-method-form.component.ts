@@ -5,6 +5,10 @@ import { MatDialogRef } from '@angular/material/dialog';
 import { ApiService } from '../../services/api.service';
 import { environment } from '../../../environments/environment';
 
+/** Friendly fallback shown when billing setup (setup-intent) fails — never the raw API error. FN-1734. */
+const SETUP_FALLBACK_ERROR =
+  "We couldn't start the payment setup right now. Please try again in a moment — if the problem persists, contact support@fleetneuron.com.";
+
 @Component({
   selector: 'app-payment-method-form',
   templateUrl: './payment-method-form.component.html',
@@ -134,7 +138,11 @@ export class PaymentMethodFormComponent implements OnInit, OnDestroy {
       await this.createSetupIntent();
       this.mountCardElement();
     } catch (err: any) {
-      this.error = err?.error?.error || err?.message || 'Failed to initialize billing setup.';
+      // Don't surface raw backend errors (e.g. "Stripe customer is not
+      // initialized for this tenant"). After FN-1733's lazy-customer fix this
+      // path shouldn't occur, but for any remaining 4xx/5xx show a friendly,
+      // actionable fallback with a support hint instead. FN-1734.
+      this.error = SETUP_FALLBACK_ERROR;
     } finally {
       this.loading = false;
     }
