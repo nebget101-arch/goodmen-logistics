@@ -68,6 +68,18 @@
   }
 }
 
+/* ── Pending — AI dark theme (trial awaiting activation, FN-1734) ──
+   Tokens only (no new hex): routes through the dark palette in styles.css. */
+.banner-pending {
+  background: var(--card-background);
+  border-bottom: 2px solid var(--ai-accent-info);
+  color: var(--ai-text-body);
+
+  .banner-icon {
+    color: var(--ai-accent-info);
+  }
+}
+
 /* ── CTA button base ── */
 .banner-cta {
   display: inline-flex;

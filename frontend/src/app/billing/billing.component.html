@@ -30,7 +30,7 @@
       <!-- ── Contextual status banner ── -->
       <div class="status-banner ai-panel-flat" [attr.data-severity]="statusSeverity" role="status">
         <span class="material-symbols-outlined banner-icon">
-          {{ isPastDue ? 'error' : isExpired ? 'warning' : cancelAtPeriodEnd ? 'event_busy' : isInTrial ? 'schedule' : 'verified' }}
+          {{ isPastDue ? 'error' : isExpired ? 'warning' : cancelAtPeriodEnd ? 'event_busy' : isPending ? 'hourglass_top' : isInTrial ? 'schedule' : 'verified' }}
         </span>
         <div class="banner-body">
           <ng-container *ngIf="isPastDue">
@@ -55,7 +55,12 @@
             <strong>Trial ended.</strong>
             Add a payment method to reactivate your account.
           </ng-container>
-          <ng-container *ngIf="!isPastDue && !cancelAtPeriodEnd && !isInTrial && !isExpired">
+          <ng-container *ngIf="!isPastDue && !cancelAtPeriodEnd && !isExpired && isPending">
+            <strong>Trial pending activation.</strong>
+            Your trial is awaiting approval — your trial end date will appear here once it's activated.
+            You can add a payment method now so you're ready to go.
+          </ng-container>
+          <ng-container *ngIf="!isPastDue && !cancelAtPeriodEnd && !isInTrial && !isExpired && !isPending">
             <strong>Subscription active.</strong>
             <ng-container *ngIf="state.nextRenewal">
               Renews {{ state.nextRenewal | date:'mediumDate' }}.
@@ -75,7 +80,7 @@
 
         <app-kpi-card
           label="Status"
-          [value]="isPastDue ? 'Past due' : isExpired ? 'Expired' : cancelAtPeriodEnd ? 'Cancelling' : isInTrial ? 'Trial' : 'Active'"
+          [value]="isPastDue ? 'Past due' : isExpired ? 'Expired' : cancelAtPeriodEnd ? 'Cancelling' : isPending ? 'Pending' : isInTrial ? 'Trial' : 'Active'"
           [status]="statusSeverity"
         ></app-kpi-card>
 
