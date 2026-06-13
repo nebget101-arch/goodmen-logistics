@@ -8,7 +8,12 @@ import {
 } from '@angular/core';
 import * as L from 'leaflet';
 import { forkJoin } from 'rxjs';
-import { ApiService, VehicleTelemetry } from '../../services/api.service';
+import {
+  ApiService,
+  FaultDiagnosisPerFault,
+  VehicleFaultDiagnosis,
+  VehicleTelemetry
+} from '../../services/api.service';
 import { AiSelectOption } from '../../shared/ai-select/ai-select.component';
 
 interface TruckRow {
@@ -50,6 +55,13 @@ export class VehicleTrackingComponent implements OnInit, AfterViewInit, OnDestro
   loadingTelemetry = false;
   trucksError = '';
   telemetryError = '';
+
+  // ── AI fault diagnosis (FN-1771) ────────────────────────────────────────
+  diagnosis: VehicleFaultDiagnosis | null = null;
+  loadingDiagnosis = false;
+  diagnosisError = '';
+  /** Per-fault AI interpretation keyed by fault `code` for template lookup. */
+  private perFaultByCode: Record<string, FaultDiagnosisPerFault> = {};
 
   /** Fallback center (continental US) until we have a position to focus. */
   private static readonly DEFAULT_CENTER: L.LatLngExpression = [39.5, -98.35];
@@ -117,6 +129,7 @@ export class VehicleTrackingComponent implements OnInit, AfterViewInit, OnDestro
     this.selectedTruckId = id;
     this.telemetry = null;
     this.telemetryError = '';
+    this.resetDiagnosis();
     if (!id) {
       this.clearSelectedMarker();
       return;
@@ -128,6 +141,7 @@ export class VehicleTrackingComponent implements OnInit, AfterViewInit, OnDestro
         this.telemetry = t;
         this.loadingTelemetry = false;
         this.focusTelemetry(t);
+        this.loadDiagnosis(t);
       },
       error: (err) => {
         console.error('Vehicle Tracking — failed to load telemetry:', err);
@@ -135,6 +149,59 @@ export class VehicleTrackingComponent implements OnInit, AfterViewInit, OnDestro
         this.loadingTelemetry = false;
       }
     });
+  }
+
+  // ── AI fault diagnosis (FN-1771) ────────────────────────────────────────
+  private resetDiagnosis(): void {
+    this.diagnosis = null;
+    this.diagnosisError = '';
+    this.loadingDiagnosis = false;
+    this.perFaultByCode = {};
+  }
+
+  /**
+   * Fetch the AI diagnosis for the telemetry's active faults. No call is made
+   * when there are no fault codes — the AI section simply never renders.
+   */
+  private loadDiagnosis(t: VehicleTelemetry): void {
+    this.resetDiagnosis();
+    const faults = t.fault_codes || [];
+    if (!faults.length) return;
+
+    this.loadingDiagnosis = true;
+    const unitNumber = this.trucksById.get(String(t.vehicle_id))?.unit_number || null;
+
+    this.api
+      .getVehicleFaultDiagnosis({
+        vehicleId: t.vehicle_id,
+        unitNumber,
+        faultCodes: faults.map((f) => ({
+          code: f.code,
+          description: f.description,
+          severity: f.severity
+        }))
+      })
+      .subscribe({
+        next: (d) => {
+          this.diagnosis = d;
+          const byCode: Record<string, FaultDiagnosisPerFault> = {};
+          (d?.perFault || []).forEach((pf) => {
+            if (pf?.code) byCode[pf.code] = pf;
+          });
+          this.perFaultByCode = byCode;
+          this.loadingDiagnosis = false;
+        },
+        error: (err) => {
+          console.error('Vehicle Tracking — fault diagnosis failed:', err);
+          this.diagnosisError = 'AI diagnosis is unavailable right now. Showing raw fault codes.';
+          this.loadingDiagnosis = false;
+        }
+      });
+  }
+
+  /** Template helper — likely cause for a fault code, or null. */
+  likelyCauseFor(code: string): string | null {
+    return this.perFaultByCode[code]?.likelyCause || null;
   }
 
   // ── Map ───────────────────────────────────────────────────────────────
