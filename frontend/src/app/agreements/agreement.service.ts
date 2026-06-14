@@ -64,6 +64,20 @@ export class AgreementService {
   }
 
   /**
+   * FN-1839 — fetch the source document bytes through the auth-gated backend
+   * proxy (`GET /templates/:id/source`) instead of the R2 presigned URL. Going
+   * through HttpClient means the auth interceptor attaches the bearer token and
+   * the gateway returns the right CORS headers, so the placement editor can hand
+   * the ArrayBuffer to pdf.js (`getDocument({ data })`) — the direct R2 fetch
+   * was blocked by the bucket's missing CORS policy.
+   */
+  getTemplateSource(id: string): Observable<ArrayBuffer> {
+    return this.http.get(`${this.base}/templates/${id}/source`, {
+      responseType: 'arraybuffer',
+    });
+  }
+
+  /**
    * Persist reviewed role assignments / labels. Backend honors only `role` and
    * `label` per field. Pass `finalize: true` to flip the template to `ready`.
    */

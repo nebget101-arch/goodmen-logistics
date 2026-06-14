@@ -28,11 +28,12 @@ const crypto = require('crypto');
 const router = express.Router();
 
 const dtLogger = require('../utils/logger');
-const { uploadBuffer, getSignedUploadUrl } = require('../storage/r2-storage');
+const { uploadBuffer, getSignedUploadUrl, getObjectStream } = require('../storage/r2-storage');
 const {
   createTemplate,
   detectAndPersistFields,
   getTemplateWithFields,
+  getTemplateSource,
   listTemplates,
   updateTemplateFields
 } = require('../services/agreement-service');
@@ -222,6 +223,64 @@ router.get('/templates/:id', async (req, res) => {
   } catch (err) {
     dtLogger.error('agreements_get_template_failed', err);
     return res.status(500).json({ error: 'Failed to load agreement template' });
+  }
+});
+
+/**
+ * @openapi
+ * /api/agreements/templates/{id}/source:
+ *   get:
+ *     summary: Stream the template's source document through the auth-gated API
+ *     description: >
+ *       Proxies the source PDF/image bytes from R2 same-origin so the field
+ *       placement editor (FN-1807) can render it with pdf.js without hitting the
+ *       R2 presigned URL directly — that cross-origin fetch was blocked by the
+ *       bucket's missing CORS policy (FN-1839). Tenant-scoped: a tenant can only
+ *       fetch the source of its own template.
+ *     tags: [Agreements]
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       200: { description: The source document bytes (application/pdf by default) }
+ *       401: { description: Tenant context required }
+ *       404: { description: Template or source not found }
+ */
+router.get('/templates/:id/source', async (req, res) => {
+  const tid = requireTenant(req, res);
+  if (!tid) return undefined;
+
+  try {
+    const source = await getTemplateSource({ templateId: req.params.id, tenantId: tid });
+    if (!source || !source.storageKey) {
+      return res.status(404).json({ error: 'Agreement source document not found' });
+    }
+
+    const object = await getObjectStream(source.storageKey);
+    res.setHeader('Content-Type', object.contentType || 'application/pdf');
+    if (object.contentLength != null) {
+      res.setHeader('Content-Length', String(object.contentLength));
+    }
+    res.setHeader('Content-Disposition', 'inline');
+    // Source bytes are tenant-private; don't let shared caches retain them.
+    res.setHeader('Cache-Control', 'private, no-store');
+
+    object.body.on('error', (streamErr) => {
+      dtLogger.error('agreements_stream_source_failed', streamErr);
+      if (!res.headersSent) {
+        res.status(502).json({ error: 'Failed to stream agreement source' });
+      } else {
+        res.destroy(streamErr);
+      }
+    });
+
+    return object.body.pipe(res);
+  } catch (err) {
+    dtLogger.error('agreements_get_source_failed', err);
+    return res.status(500).json({ error: 'Failed to load agreement source' });
   }
 });
 
