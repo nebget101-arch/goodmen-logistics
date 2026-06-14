@@ -21,7 +21,12 @@
             "tsConfig": "tsconfig.app.json",
             "assets": [
               "src/favicon.ico",
-              "src/assets"
+              "src/assets",
+              {
+                "glob": "pdf.worker.min.js",
+                "input": "node_modules/pdfjs-dist/build/",
+                "output": "assets/pdfjs/"
+              }
             ],
             "styles": [
               "node_modules/@angular/cdk/overlay-prebuilt.css",

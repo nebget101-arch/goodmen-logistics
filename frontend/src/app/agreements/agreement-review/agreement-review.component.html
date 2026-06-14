@@ -9,9 +9,15 @@
         <span class="status-pill" [class.ready]="template.status === 'ready'">{{ template.status }}</span>
       </p>
     </div>
-    <a class="link-back" *ngIf="template?.sourceDownloadUrl" [href]="template?.sourceDownloadUrl" target="_blank" rel="noopener">
-      <span class="material-symbols-outlined">open_in_new</span> View source PDF
-    </a>
+    <div class="head-actions" *ngIf="template">
+      <!-- FN-1807 — open the visual bbox placement editor. -->
+      <a class="link-back" [routerLink]="['/agreements', templateId, 'placement']">
+        <span class="material-symbols-outlined">edit_location_alt</span> Edit field placement
+      </a>
+      <a class="link-back" *ngIf="template?.sourceDownloadUrl" [href]="template?.sourceDownloadUrl" target="_blank" rel="noopener">
+        <span class="material-symbols-outlined">open_in_new</span> View source PDF
+      </a>
+    </div>
   </header>
 
   <!-- Loading / error states -->
