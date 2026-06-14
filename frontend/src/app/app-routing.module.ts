@@ -184,6 +184,11 @@ const routes: Routes = [
     loadComponent: () =>
       import('./public-track/public-track.component').then(m => m.PublicTrackComponent)
   },
+  // FN-1798 — public, unauthenticated signer interface (tokenized e-sign link).
+  // Mounted at `agreements/sign/:token` to match the backend-generated link
+  // (`<PUBLIC_APP_URL>/agreements/sign/<token>`, FN-1797). MUST be declared BEFORE the
+  // authed `agreements` module below so `/agreements/sign/...` resolves to the public page.
+  { path: 'agreements/sign', loadChildren: () => import('./public-sign/public-sign.module').then(m => m.PublicSignModule) },
   // FN-1794 — agreement upload + AI field-mapping review (lazy module).
   { path: 'agreements', loadChildren: () => import('./agreements/agreements.module').then(m => m.AgreementsModule) },
   { path: 'shop-clients', loadChildren: () => import('./customer-management/customer-management.module').then(m => m.CustomerManagementModule) },

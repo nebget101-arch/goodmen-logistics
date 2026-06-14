@@ -101,6 +101,15 @@
         <span class="material-symbols-outlined">check</span>
         Finalize template
       </button>
+      <!-- FN-1798: once finalized, the template can be filled and sent for signature. -->
+      <a
+        *ngIf="template?.status === 'ready'"
+        class="btn-primary"
+        [routerLink]="['/agreements', templateId, 'send']"
+      >
+        <span class="material-symbols-outlined">send</span>
+        Fill &amp; send for signature
+      </a>
     </div>
   </ng-container>
 </div>
