@@ -1,5 +1,6 @@
 import { Component, EventEmitter, Input, OnInit, OnChanges, OnDestroy, SimpleChanges, Output } from '@angular/core';
 import { ApiService } from '../../../services/api.service';
+import { VehicleService, VehicleReadiness, ReadinessDocState } from '../../../services/vehicle.service';
 
 export type OwnershipType = 'company' | 'oo' | 'leased';
 
@@ -137,6 +138,7 @@ export class VehicleFormComponent implements OnInit, OnChanges, OnDestroy {
     { value: 'inspection', label: 'Annual Inspection' },
     { value: 'registration', label: 'Registration' },
     { value: 'insurance', label: 'Insurance' },
+    { value: 'ifta', label: 'IFTA' },
     { value: 'maintenance', label: 'Repairs & Maintenance' },
     { value: 'other', label: 'Other Documents' }
   ];
@@ -145,9 +147,16 @@ export class VehicleFormComponent implements OnInit, OnChanges, OnDestroy {
     inspection: 'verified_user',
     registration: 'assignment',
     insurance: 'security',
+    ifta: 'receipt_long',
     maintenance: 'build',
     other: 'smart_toy'
   };
+
+  // FN-1784: DOT document readiness (server-driven). Drives the activation gate
+  // and the readiness checklist. `null` until loaded (or for brand-new units
+  // that have no id yet — those rely on the backend 422 guard instead).
+  readiness: VehicleReadiness | null = null;
+  readinessLoading = false;
 
   states = [
     'AL', 'AK', 'AZ', 'AR', 'CA', 'CO', 'CT', 'DE', 'FL', 'GA',
@@ -267,7 +276,10 @@ export class VehicleFormComponent implements OnInit, OnChanges, OnDestroy {
   errors: any = {};
   submitted = false;
 
-  constructor(private apiService: ApiService) {}
+  constructor(
+    private apiService: ApiService,
+    private vehicleService: VehicleService
+  ) {}
 
   ngOnInit(): void {
     console.log('[VEHICLE-FORM] ngOnInit, isOpen:', this.isOpen, 'vehicleType:', this.vehicleType);
@@ -369,6 +381,10 @@ export class VehicleFormComponent implements OnInit, OnChanges, OnDestroy {
 
       // Auto-expand trailer details when there's existing data worth showing.
       this.trailerDetailsExpanded = this.isTrailerMode && this.hasTrailerDetailContent(this.trailerForm);
+
+      // FN-1784: pull the server-driven readiness for the activation gate +
+      // checklist. New units (no id yet) skip this — they rely on the 422 guard.
+      this.loadReadiness();
     } else {
       this.isEditMode = false;
       this.unitNumberManuallyEdited = false;
@@ -404,6 +420,8 @@ export class VehicleFormComponent implements OnInit, OnChanges, OnDestroy {
       this.equipmentOwnerResults = [];
       this.equipmentOwnerDropdownOpen = false;
       this.trailerDetailsExpanded = false;
+      this.readiness = null;
+      this.readinessLoading = false;
     }
   }
 
@@ -746,6 +764,104 @@ export class VehicleFormComponent implements OnInit, OnChanges, OnDestroy {
     return this.getExpiryStatus(this.formData.inspection_expiry);
   }
 
+  // ---- FN-1784: DOT document readiness gate -------------------------------
+
+  /** Load the readiness contract for the unit being edited. */
+  loadReadiness(): void {
+    const id = this.formData.id || this.vehicle?.id;
+    if (!id) {
+      this.readiness = null;
+      return;
+    }
+    this.readinessLoading = true;
+    this.vehicleService.getReadiness(id).subscribe({
+      next: (readiness) => {
+        this.readiness = this.normalizeReadiness(readiness);
+        this.readinessLoading = false;
+      },
+      error: () => {
+        // Readiness is advisory in the form; if it can't load, fall back to the
+        // backend 422 guard on save rather than blocking the user outright.
+        this.readiness = null;
+        this.readinessLoading = false;
+      }
+    });
+  }
+
+  /** True once readiness has loaded and the unit is NOT eligible for activation. */
+  get blockInService(): boolean {
+    return !!(this.readiness && this.readiness.ready === false);
+  }
+
+  /** The set of required documents to render in the checklist (server-driven). */
+  get readinessDocuments(): string[] {
+    return this.readiness?.requiredDocuments ?? [];
+  }
+
+  /** Derive a single required document's state from the readiness response. */
+  getRequiredDocState(docType: string): ReadinessDocState {
+    if (this.readiness?.expired?.includes(docType)) return 'expired';
+    if (this.readiness?.missing?.includes(docType)) return 'missing';
+    return 'valid';
+  }
+
+  /** Human label for a document type (reuses the upload list labels). */
+  readinessDocLabel(docType: string): string {
+    const match = this.documentTypes.find(d => d.value === docType);
+    if (match) return match.label;
+    if (docType === 'ifta') return 'IFTA';
+    return docType.charAt(0).toUpperCase() + docType.slice(1);
+  }
+
+  /** Compose the gating message listing what's missing / expired. */
+  buildReadinessMessage(readiness: VehicleReadiness): string {
+    const parts: string[] = [];
+    if (readiness.missing?.length) {
+      parts.push(`missing ${readiness.missing.map(d => this.readinessDocLabel(d)).join(', ')}`);
+    }
+    if (readiness.expired?.length) {
+      parts.push(`expired ${readiness.expired.map(d => this.readinessDocLabel(d)).join(', ')}`);
+    }
+    const detail = parts.length ? ` (${parts.join('; ')})` : '';
+    return `This ${this.formTitle.toLowerCase()} cannot be set In Service until all required DOT documents are valid${detail}.`;
+  }
+
+  /** Coerce a (possibly partial) readiness payload into a safe, fully-formed object. */
+  private normalizeReadiness(raw: Partial<VehicleReadiness> | null | undefined): VehicleReadiness {
+    const missing = Array.isArray(raw?.missing) ? raw!.missing : [];
+    const expired = Array.isArray(raw?.expired) ? raw!.expired : [];
+    let requiredDocuments = Array.isArray(raw?.requiredDocuments) ? raw!.requiredDocuments : [];
+    // A 422 body carries missing/expired but no requiredDocuments — surface at
+    // least the problem docs so the checklist still renders something useful.
+    if (!requiredDocuments.length) {
+      requiredDocuments = Array.from(new Set([...missing, ...expired]));
+    }
+    return {
+      vehicleId: raw?.vehicleId,
+      vehicleType: raw?.vehicleType,
+      ready: typeof raw?.ready === 'boolean' ? raw!.ready : (missing.length === 0 && expired.length === 0),
+      requiredDocuments,
+      missing,
+      expired
+    };
+  }
+
+  /** Apply a backend 422 VEHICLE_NOT_READY body to the local readiness state. */
+  private applyReadinessError(body: { missing?: string[]; expired?: string[] }): void {
+    this.readiness = this.normalizeReadiness({
+      ...(this.readiness || {}),
+      ready: false,
+      missing: body?.missing ?? this.readiness?.missing ?? [],
+      expired: body?.expired ?? this.readiness?.expired ?? []
+    });
+    this.errors.readiness = this.buildReadinessMessage(this.readiness);
+  }
+
+  /** Recognise the backend's 422 VEHICLE_NOT_READY activation-guard response. */
+  private isNotReadyError(error: any): boolean {
+    return error?.status === 422 && error?.error?.code === 'VEHICLE_NOT_READY';
+  }
+
   validateForm(): boolean {
     this.errors = {};
 
@@ -799,6 +915,13 @@ export class VehicleFormComponent implements OnInit, OnChanges, OnDestroy {
 
   onSubmit(): void {
     if (!this.validateForm()) {
+      return;
+    }
+
+    // FN-1784: client-side activation gate. Block setting In Service while the
+    // unit is known-not-ready; the backend 422 guard is the authoritative backstop.
+    if ((this.formData.status || 'in-service') === 'in-service' && this.blockInService && this.readiness) {
+      this.errors.readiness = this.buildReadinessMessage(this.readiness);
       return;
     }
 
@@ -869,7 +992,11 @@ export class VehicleFormComponent implements OnInit, OnChanges, OnDestroy {
         error: (error) => {
           console.error('Error updating vehicle:', error);
           this.saving = false;
-          this.errors.submit = error?.error?.message || error?.error?.error || 'Failed to update vehicle';
+          if (this.isNotReadyError(error)) {
+            this.applyReadinessError(error.error);
+          } else {
+            this.errors.submit = error?.error?.message || error?.error?.error || 'Failed to update vehicle';
+          }
         }
       });
     } else {
@@ -882,7 +1009,11 @@ export class VehicleFormComponent implements OnInit, OnChanges, OnDestroy {
         error: (error) => {
           console.error('Error creating vehicle:', error);
           this.saving = false;
-          this.errors.submit = error?.error?.message || error?.error?.error || 'Failed to create vehicle';
+          if (this.isNotReadyError(error)) {
+            this.applyReadinessError(error.error);
+          } else {
+            this.errors.submit = error?.error?.message || error?.error?.error || 'Failed to create vehicle';
+          }
         }
       });
     }
