@@ -60,6 +60,7 @@ const dbExampleRouter = require(path.join(sharedRoot, 'routes', 'db-example'));
 const settlementsRouter = require(path.join(sharedRoot, 'routes', 'settlements'));
 const leaseFinancingRouter = require(path.join(sharedRoot, 'routes', 'lease-financing'));
 const agreementsRouter = require(path.join(sharedRoot, 'routes', 'agreements'));
+const publicAgreementsRouter = require(path.join(sharedRoot, 'routes', 'public-agreements'));
 const iftaRouter = require(path.join(sharedRoot, 'routes', 'ifta'));
 const expensePaymentCategoriesRouter = require(path.join(sharedRoot, 'routes', 'expense-payment-categories'));
 const referenceRouter = require(path.join(sharedRoot, 'routes', 'reference'));
@@ -101,6 +102,11 @@ app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 // never runs for /api/track/:token. The router itself hashes the token and
 // resolves the share link — there is no session/tenant context here.
 app.use('/api/track', publicTrackRouter);
+
+// FN-1797: Public, UNAUTHENTICATED e-signature signer routes. The token in the
+// URL is the credential; the router rate-limits and validates it. Mounted ahead
+// of the authed `/api/...` groups so the auth guard never runs for signers.
+app.use('/public/agreements', publicAgreementsRouter);
 
 app.use('/api/fuel', authMiddleware, tenantContextMiddleware, requireActiveSubscription, fuelRouter);
 app.use('/api/tolls', authMiddleware, tenantContextMiddleware, requireActiveSubscription, tollsRouter);
