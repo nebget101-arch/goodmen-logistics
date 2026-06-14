@@ -806,7 +806,7 @@ export class VehiclesComponent implements OnInit, OnDestroy {
    */
   startLeaseAgreement(vehicle: Vehicle | null): void {
     if (!vehicle) return;
-    this.router.navigate(['/agreements'], {
+    this.router.navigate(['/agreements', 'new'], {
       queryParams: {
         subjectType: 'vehicle',
         subjectId: vehicle.id,

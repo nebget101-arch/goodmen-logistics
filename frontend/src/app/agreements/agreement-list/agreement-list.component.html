@@ -1,0 +1,70 @@
+<div class="agreements-page">
+  <header class="page-head">
+    <div>
+      <h1>Agreement Templates</h1>
+      <p class="sub">Browse the templates you've uploaded, re-open one to edit its field map, or send it for signature.</p>
+    </div>
+    <button type="button" class="btn-primary" (click)="uploadNew()">
+      <span class="material-symbols-outlined">upload_file</span>
+      Upload new agreement
+    </button>
+  </header>
+
+  <!-- Loading -->
+  <div class="state-card" *ngIf="loading">
+    <span class="material-symbols-outlined spin">progress_activity</span>
+    <p>Loading templates…</p>
+  </div>
+
+  <!-- Error -->
+  <div class="state-card error" *ngIf="!loading && error">
+    <span class="material-symbols-outlined">error</span>
+    <p>{{ error }}</p>
+    <button type="button" class="link-btn" (click)="load()">Retry</button>
+  </div>
+
+  <!-- Empty -->
+  <div class="state-card empty" *ngIf="!loading && !error && templates.length === 0">
+    <span class="material-symbols-outlined">description</span>
+    <p class="empty-title">No agreement templates yet</p>
+    <p class="empty-sub">Upload a PDF and let AI detect the fields and signature blocks.</p>
+    <button type="button" class="btn-primary" (click)="uploadNew()">
+      <span class="material-symbols-outlined">upload_file</span>
+      Upload new agreement
+    </button>
+  </div>
+
+  <!-- List -->
+  <div class="card list-card" *ngIf="!loading && !error && templates.length > 0">
+    <table class="templates-table">
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th class="num">Pages</th>
+          <th>Status</th>
+          <th>Created</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr
+          *ngFor="let t of templates; trackBy: trackById"
+          class="row"
+          (click)="open(t)"
+          tabindex="0"
+          (keydown.enter)="open(t)"
+        >
+          <td class="name">{{ t.name }}</td>
+          <td class="type">{{ formatDocumentType(t.documentType) }}</td>
+          <td class="num">{{ t.pageCount || '—' }}</td>
+          <td>
+            <span class="status" [class.ready]="t.status === 'ready'" [class.draft]="t.status === 'draft'">
+              {{ t.status === 'ready' ? 'Ready' : 'Draft' }}
+            </span>
+          </td>
+          <td class="created">{{ t.createdAt ? (t.createdAt | date: 'MMM d, y') : '—' }}</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</div>
