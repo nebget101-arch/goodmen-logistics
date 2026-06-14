@@ -56,6 +56,16 @@
 .link-back:hover { text-decoration: underline; }
 .link-back .material-symbols-outlined { font-size: 16px; }
 
+/* FN-1807 — header action group (placement editor + source PDF links). */
+.head-actions {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+.head-actions .link-back { cursor: pointer; }
+
 .state {
   margin-top: 20px;
   padding: 24px;

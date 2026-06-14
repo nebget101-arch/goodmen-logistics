@@ -1,0 +1,203 @@
+<div class="placement-page">
+  <header class="page-head">
+    <div>
+      <h1>Field Placement Editor</h1>
+      <p class="sub" *ngIf="template">
+        <strong>{{ template.name }}</strong>
+        <span class="dot">•</span>{{ template.documentType }}
+        <span class="dot">•</span>{{ pageCount }} page{{ pageCount === 1 ? '' : 's' }}
+        <span class="status-pill" [class.ready]="template.status === 'ready'">{{ template.status }}</span>
+      </p>
+    </div>
+    <button type="button" class="link-back" (click)="backToReview()">
+      <span class="material-symbols-outlined">arrow_back</span> Back to field review
+    </button>
+  </header>
+
+  <div class="card state" *ngIf="loading">Loading document…</div>
+  <div class="card state error" *ngIf="loadError">{{ loadError }}</div>
+
+  <ng-container *ngIf="!loading && !loadError && template">
+    <!-- Toolbar -->
+    <div class="toolbar">
+      <button
+        type="button"
+        class="tool-btn"
+        [class.active]="drawMode"
+        (click)="toggleDrawMode()"
+        title="Draw a new field box on the page"
+      >
+        <span class="material-symbols-outlined">add_box</span>
+        {{ drawMode ? 'Drawing… click-drag on the page' : 'Add field' }}
+      </button>
+      <button
+        type="button"
+        class="tool-btn danger"
+        [disabled]="!selectedField"
+        (click)="deleteSelected()"
+      >
+        <span class="material-symbols-outlined">delete</span> Delete box
+      </button>
+
+      <div class="spacer"></div>
+
+      <div class="pager">
+        <button type="button" class="pager-btn" [disabled]="currentPage <= 1" (click)="goToPage(currentPage - 1)">
+          <span class="material-symbols-outlined">chevron_left</span>
+        </button>
+        <span class="pager-label">Page {{ currentPage }} / {{ pageCount }}</span>
+        <button type="button" class="pager-btn" [disabled]="currentPage >= pageCount" (click)="goToPage(currentPage + 1)">
+          <span class="material-symbols-outlined">chevron_right</span>
+        </button>
+      </div>
+    </div>
+
+    <div class="preview-banner" *ngIf="previewUnavailable">
+      <span class="material-symbols-outlined">image_not_supported</span>
+      Document preview unavailable — you can still reposition boxes on a blank page of the correct size.
+    </div>
+
+    <div class="editor-grid">
+      <!-- Canvas + box overlay -->
+      <div class="stage-wrap">
+        <div
+          class="stage"
+          [class.draw-mode]="drawMode"
+          [style.width.px]="renderedWidth"
+          [style.height.px]="renderedHeight"
+        >
+          <canvas #pageCanvas class="page-canvas"></canvas>
+
+          <div
+            #overlay
+            class="box-overlay"
+            (pointerdown)="onOverlayPointerDown($event)"
+          >
+            <div
+              *ngFor="let field of visibleFields; trackBy: trackByLocalId"
+              class="field-box"
+              [class.selected]="isSelected(field)"
+              [class.low-confidence]="isLowConfidence(field)"
+              [class.is-new]="field.isNew"
+              [ngStyle]="boxStyle(field)"
+              (pointerdown)="onBoxPointerDown($event, field)"
+            >
+              <span class="box-tag">
+                <span class="material-symbols-outlined">{{ typeIcon(field.fieldType) }}</span>
+                {{ field.label }}
+              </span>
+              <span
+                *ngFor="let h of handles"
+                class="handle handle-{{ h }}"
+                (pointerdown)="onHandlePointerDown($event, field, h)"
+              ></span>
+            </div>
+
+            <!-- Live draw preview -->
+            <div
+              class="draw-preview"
+              *ngIf="drawPreview as dp"
+              [style.left.px]="dp.left"
+              [style.top.px]="dp.top"
+              [style.width.px]="dp.width"
+              [style.height.px]="dp.height"
+            ></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Side inspector + field list -->
+      <aside class="inspector">
+        <div class="card insp-card" *ngIf="selectedField as f">
+          <div class="insp-head">
+            <span class="material-symbols-outlined">{{ typeIcon(f.fieldType) }}</span>
+            Selected field
+            <span class="flag-pill" *ngIf="isLowConfidence(f)">low confidence</span>
+            <span class="flag-pill new" *ngIf="f.isNew">new</span>
+          </div>
+
+          <label class="insp-label">Label</label>
+          <input
+            class="form-input"
+            type="text"
+            [ngModel]="f.label"
+            (ngModelChange)="setLabel(f, $event)"
+            aria-label="Field label"
+          />
+
+          <label class="insp-label">Type</label>
+          <select class="form-input" [ngModel]="f.fieldType" (ngModelChange)="setType(f, $event)" aria-label="Field type">
+            <option *ngFor="let t of fieldTypes" [value]="t">{{ t }}</option>
+          </select>
+
+          <label class="insp-label">Role</label>
+          <div class="role-toggle" role="group" aria-label="Field role">
+            <button type="button" class="role-opt" [class.active]="f.role === 'internal'" (click)="setRole(f, 'internal')">Internal</button>
+            <button type="button" class="role-opt" [class.active]="f.role === 'signer'" (click)="setRole(f, 'signer')">Signer</button>
+          </div>
+
+          <div class="insp-geom">
+            <span>page {{ f.page }}</span>
+            <span>x {{ f.bbox[0] }}</span>
+            <span>y {{ f.bbox[1] }}</span>
+            <span>w {{ f.bbox[2] }}</span>
+            <span>h {{ f.bbox[3] }}</span>
+          </div>
+
+          <button type="button" class="btn-ghost danger full" (click)="deleteSelected()">
+            <span class="material-symbols-outlined">delete</span> Delete this box
+          </button>
+        </div>
+
+        <div class="card insp-card empty-insp" *ngIf="!selectedField">
+          <span class="material-symbols-outlined">ads_click</span>
+          Select a box to edit its label, type, role, or position — or use <strong>Add field</strong> to draw a new one.
+        </div>
+
+        <!-- Field list -->
+        <div class="card list-card">
+          <div class="list-head">
+            <span>Fields ({{ visibleFields.length }} on this page)</span>
+          </div>
+          <button
+            type="button"
+            class="list-row"
+            *ngFor="let field of fields; trackBy: trackByLocalId"
+            [class.selected]="isSelected(field)"
+            [class.low-confidence]="isLowConfidence(field)"
+            [class.off-page]="field.page !== currentPage"
+            [hidden]="field.deleted"
+            (click)="focusField(field)"
+          >
+            <span class="material-symbols-outlined row-type">{{ typeIcon(field.fieldType) }}</span>
+            <span class="row-label">{{ field.label }}</span>
+            <span class="row-meta">p{{ field.page }}</span>
+            <span class="material-symbols-outlined row-flag" *ngIf="isLowConfidence(field)" title="Low confidence">flag</span>
+            <span
+              class="material-symbols-outlined row-del"
+              role="button"
+              title="Delete field"
+              (click)="$event.stopPropagation(); deleteFieldByLocalId(field.localId)"
+            >close</span>
+          </button>
+          <div class="empty" *ngIf="fields.length === 0">No fields yet. Use <strong>Add field</strong> to draw one.</div>
+        </div>
+      </aside>
+    </div>
+
+    <!-- Footer actions -->
+    <div class="alert alert-error" *ngIf="saveError">{{ saveError }}</div>
+    <div class="alert alert-ok" *ngIf="saveNotice">{{ saveNotice }}</div>
+
+    <div class="footer-actions">
+      <span class="dirty-hint" *ngIf="hasChanges">Unsaved placement changes</span>
+      <button type="button" class="btn-ghost" [disabled]="saving" (click)="save(false)">
+        {{ saving ? 'Saving…' : 'Save placement' }}
+      </button>
+      <button type="button" class="btn-primary" [disabled]="saving" (click)="save(true)">
+        <span class="material-symbols-outlined">check</span>
+        Save &amp; finalize
+      </button>
+    </div>
+  </ng-container>
+</div>

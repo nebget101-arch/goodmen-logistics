@@ -6,11 +6,13 @@ import { SharedModule } from '../shared/shared.module';
 
 import { AgreementUploadComponent } from './agreement-upload/agreement-upload.component';
 import { AgreementReviewComponent } from './agreement-review/agreement-review.component';
+import { AgreementPlacementComponent } from './agreement-placement/agreement-placement.component';
 
 @NgModule({
   declarations: [
     AgreementUploadComponent,
     AgreementReviewComponent,
+    AgreementPlacementComponent,
   ],
   imports: [
     CommonModule,
