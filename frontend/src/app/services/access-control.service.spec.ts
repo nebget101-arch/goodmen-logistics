@@ -106,4 +106,30 @@ describe('AccessControlService RBAC compatibility', () => {
     expect(service.hasPermission(PERMISSIONS.VEHICLES_CREATE)).toBeTrue();
     expect(service.hasPermission(PERMISSIONS.DOCUMENTS_UPLOAD)).toBeTrue();
   });
+
+  // FN-1841: the agreements nav tab must be gated on the permission code that the
+  // backend actually seeds (agreement.templates.view), not the un-granted
+  // `agreements.view`. These guard against the gate drifting back to an
+  // un-seeded code, which hid the Agreements link for everyone.
+  it('shows the agreements tab to users granted agreement.templates.view', () => {
+    expect(PERMISSIONS.AGREEMENTS_VIEW).toBe('agreement.templates.view');
+
+    service.setAccessFromLoginResponse({
+      role: 'accounting',
+      user: { id: 'u9' },
+      permissions: [PERMISSIONS.AGREEMENTS_VIEW]
+    });
+
+    expect(service.canSee('agreements')).toBeTrue();
+  });
+
+  it('hides the agreements tab from users without agreement.templates.view', () => {
+    service.setAccessFromLoginResponse({
+      role: 'driver',
+      user: { id: 'u10' },
+      permissions: [PERMISSIONS.DRIVERS_VIEW]
+    });
+
+    expect(service.canSee('agreements')).toBeFalse();
+  });
 });

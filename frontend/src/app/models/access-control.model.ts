@@ -248,9 +248,11 @@ export const PERMISSIONS = {
   FMCSA_SAFETY_SCRAPE: 'fmcsa_safety.scrape',
 
   // Agreements (e-sign template surface) — FN-1836 nav entry.
-  // Backend grants for this code land in FN-1792; until then only
-  // super_admin/admin/company_admin resolve it (see hasPermission wildcard).
-  AGREEMENTS_VIEW: 'agreements.view',
+  // The /agreements route IS the agreement-templates surface (FN-1837), so the
+  // nav tab is gated on `agreement.templates.view` — the code actually seeded by
+  // migration 20260613120100_add_agreement_permissions.js (FN-1841 fix). The
+  // older `agreements.view` code was never granted to any role.
+  AGREEMENTS_VIEW: 'agreement.templates.view',
 
   // Locations admin
   LOCATIONS_VIEW: 'locations.view',
