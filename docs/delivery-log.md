@@ -20,3 +20,23 @@ Track all work progress through the development lifecycle.
 | FN-1783 | Subtask Created | 2026-06-14 | Backend: readiness rule engine + /readiness endpoint + activation guard (422) — Selected for Dev |
 | FN-1784 | Subtask Created | 2026-06-14 | Frontend: activation gating + document-readiness checklist + badge — Selected for Dev |
 | FN-1785 | Subtask Created | 2026-06-14 | QA: validate DOT readiness gate (API + UI) — Blocked pending FN-1783, FN-1784 |
+| FN-1786 | Epic Created | 2026-06-14 | Customer-uploaded agreements: AI field detection + in-house e-signature engine — Backlog |
+| FN-1787 | Story Created | 2026-06-14 | Agreement upload + AI field & signature detection with role assignment — Backlog |
+| FN-1791 | Subtask Created | 2026-06-14 | AI: field/signature detection vision handler (FN-1787) — Selected for Dev |
+| FN-1792 | Subtask Created | 2026-06-14 | Database: agreement_templates + fields schema (FN-1787) — Selected for Dev |
+| FN-1793 | Subtask Created | 2026-06-14 | Backend: upload + template persistence + field-map CRUD (FN-1787) — Selected for Dev |
+| FN-1794 | Subtask Created | 2026-06-14 | Frontend: upload + field-mapping/role-assignment UI (FN-1787) — Selected for Dev |
+| FN-1795 | Subtask Created | 2026-06-14 | QA: scan + role assignment (FN-1787) — Blocked pending FN-1791..1794 |
+| FN-1788 | Story Created | 2026-06-14 | Fill fields, send e-sign link, capture signature, generate signed PDF — Backlog (blocked by FN-1787) |
+| FN-1796 | Subtask Created | 2026-06-14 | Database: signature_requests/fields/signatures schema (FN-1788) — Backlog |
+| FN-1797 | Subtask Created | 2026-06-14 | Backend: fill + tokenized send + public sign + signed PDF (FN-1788) — Backlog |
+| FN-1798 | Subtask Created | 2026-06-14 | Frontend: internal fill + public signer UI + signature capture (FN-1788) — Backlog |
+| FN-1799 | Subtask Created | 2026-06-14 | QA: fill→send→sign→signed PDF (FN-1788) — Blocked pending FN-1796..1798 |
+| FN-1789 | Story Created | 2026-06-14 | Adapter: Equipment / Motor-Carrier Lease Agreement signing — Backlog (blocked by FN-1787,1788) |
+| FN-1800 | Subtask Created | 2026-06-14 | Backend: link equipment-lease signing to vehicle/equipment-owner (FN-1789) — Backlog |
+| FN-1801 | Subtask Created | 2026-06-14 | Frontend: entry point + signing status on vehicle record (FN-1789) — Backlog |
+| FN-1802 | Subtask Created | 2026-06-14 | QA: equipment lease signing flow (FN-1789) — Blocked pending FN-1800,1801 |
+| FN-1790 | Story Created | 2026-06-14 | Adapter: Lease-to-Own driver agreement signing — Backlog (blocked by FN-1787,1788) |
+| FN-1803 | Subtask Created | 2026-06-14 | Backend: wire send/sign into lease_agreements lifecycle (FN-1790) — Backlog |
+| FN-1804 | Subtask Created | 2026-06-14 | Frontend: send-for-signature + driver signing entry + status (FN-1790) — Backlog |
+| FN-1805 | Subtask Created | 2026-06-14 | QA: lease-to-own driver signing + lifecycle (FN-1790) — Blocked pending FN-1803,1804 |
