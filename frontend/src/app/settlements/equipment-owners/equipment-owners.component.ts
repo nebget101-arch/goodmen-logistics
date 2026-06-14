@@ -222,4 +222,22 @@ export class EquipmentOwnersComponent implements OnInit {
     const state = (owner?.state || '').trim();
     return [city, state].filter((part) => !!part).join(', ') || '—';
   }
+
+  /**
+   * FN-1801 — start an Equipment/Motor-Carrier Lease Agreement signing for this
+   * equipment owner / lessor. Routes into the agreements upload/prepare flow
+   * carrying the equipment-owner subject context (document_type lease_agreement);
+   * the send step links the signed agreement back to this owner.
+   */
+  startLeaseAgreement(owner: EquipmentOwner): void {
+    if (!owner?.id) return;
+    this.router.navigate(['/agreements'], {
+      queryParams: {
+        subjectType: 'equipment_owner',
+        subjectId: owner.id,
+        subjectLabel: owner.name,
+        documentType: 'lease_agreement',
+      },
+    });
+  }
 }

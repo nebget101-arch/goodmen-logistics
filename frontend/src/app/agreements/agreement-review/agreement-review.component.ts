@@ -36,6 +36,11 @@ export class AgreementReviewComponent implements OnInit {
   loadError = '';
   saveError = '';
 
+  /** FN-1801 — equipment-subject context carried through the flow (optional). */
+  subjectType = '';
+  subjectId = '';
+  subjectLabel = '';
+
   readonly roleLabel = roleLabel;
   readonly lowConfidenceThreshold = LOW_CONFIDENCE_THRESHOLD;
 
@@ -47,7 +52,16 @@ export class AgreementReviewComponent implements OnInit {
 
   ngOnInit(): void {
     this.templateId = this.route.snapshot.paramMap.get('id') || '';
+    const qp = this.route.snapshot.queryParamMap;
+    this.subjectType = qp.get('subjectType') || '';
+    this.subjectId = qp.get('subjectId') || '';
+    this.subjectLabel = qp.get('subjectLabel') || '';
     if (this.templateId) this.load();
+  }
+
+  /** FN-1801 — true when this template is being prepared for an equipment subject. */
+  get hasSubjectContext(): boolean {
+    return !!this.subjectType && !!this.subjectId;
   }
 
   load(): void {
@@ -118,7 +132,16 @@ export class AgreementReviewComponent implements OnInit {
           .slice()
           .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
         if (finalize) {
-          this.router.navigate(['/agreements']);
+          // FN-1801 — when scoped to an equipment subject, continue into the
+          // fill/send step (carrying the subject context) so the signing links
+          // back to the vehicle / equipment-owner. Otherwise return to the list.
+          if (this.hasSubjectContext) {
+            this.router.navigate(['/agreements', this.templateId, 'send'], {
+              queryParamsHandling: 'preserve',
+            });
+          } else {
+            this.router.navigate(['/agreements']);
+          }
         }
       },
       error: (err) => {

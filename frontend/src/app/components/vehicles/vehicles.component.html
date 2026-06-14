@@ -378,6 +378,17 @@
           (click)="selectDetailTab('maintenance')">
           Maintenance History
         </button>
+        <!-- FN-1801 — lease agreement tab, leased units only -->
+        <button
+          *ngIf="isLeasedVehicle(selectedVehicleDetails)"
+          type="button"
+          role="tab"
+          class="detail-tab"
+          [class.is-active]="activeDetailTab === 'lease'"
+          [attr.aria-selected]="activeDetailTab === 'lease'"
+          (click)="selectDetailTab('lease')">
+          Lease Agreement
+        </button>
       </nav>
 
       <div class="details-grid" *ngIf="activeDetailTab === 'overview'">
@@ -596,6 +607,67 @@
               (click)="onMaintenancePageChange(maintenancePage + 1)">Next</button>
           </div>
         </div>
+      </section>
+
+      <!-- Lease Agreement tab (FN-1801 — equipment-lease adapter, story FN-1789) -->
+      <section class="lease-agreement-tab" *ngIf="activeDetailTab === 'lease'" role="tabpanel" aria-label="Lease agreement">
+        <div class="lease-header-strip">
+          <p class="lease-intro">
+            Upload a lease PDF, prepare it with AI field detection, and send it to the lessor / equipment owner to e-sign.
+            Signed agreements are linked back to this unit.
+          </p>
+          <button type="button" class="btn btn-primary" (click)="startLeaseAgreement(selectedVehicleDetails)">
+            <span class="material-symbols-outlined">upload_file</span>
+            Upload &amp; send lease agreement
+          </button>
+        </div>
+
+        <div *ngIf="leaseSigningsLoading" class="lease-state">Loading lease agreements…</div>
+        <div *ngIf="leaseSigningsError" class="lease-state lease-state--error">
+          {{ leaseSigningsError }}
+          <button type="button" class="link-btn" (click)="retryLeaseSignings()">Retry</button>
+        </div>
+
+        <ng-container *ngIf="!leaseSigningsLoading && !leaseSigningsError">
+          <div *ngIf="leaseSignings.length === 0" class="lease-empty">
+            No lease agreements yet for this unit.
+          </div>
+
+          <table *ngIf="leaseSignings.length > 0" class="lease-signings-table">
+            <thead>
+              <tr>
+                <th scope="col">Signer</th>
+                <th scope="col">Status</th>
+                <th scope="col">Sent</th>
+                <th scope="col">Signed</th>
+                <th scope="col">Signed PDF</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr *ngFor="let s of leaseSignings">
+                <td>{{ s.request?.signerName || '—' }}</td>
+                <td>
+                  <span class="badge lease-status lease-status--{{ s.request?.status || 'unknown' }}">
+                    {{ s.request ? statusLabel(s.request.status) : '—' }}
+                  </span>
+                </td>
+                <td>{{ (s.request?.sentAt | date:'mediumDate') || '—' }}</td>
+                <td>{{ (s.request?.signedAt | date:'mediumDate') || '—' }}</td>
+                <td>
+                  <a
+                    *ngIf="s.request?.signedPdfUrl; else noPdf"
+                    class="lease-download-link"
+                    [href]="s.request?.signedPdfUrl"
+                    target="_blank"
+                    rel="noopener">
+                    <span class="material-symbols-outlined">download</span> Download
+                  </a>
+                  <ng-template #noPdf><span class="lease-download-empty">—</span></ng-template>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </ng-container>
       </section>
 
       <div class="modal-actions">

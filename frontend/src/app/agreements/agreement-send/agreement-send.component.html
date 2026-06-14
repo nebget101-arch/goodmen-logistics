@@ -13,6 +13,12 @@
     </a>
   </header>
 
+  <!-- FN-1801 — equipment-lease context banner; the signing links to this subject. -->
+  <div class="alert alert-info subject-banner" *ngIf="hasSubjectContext && subjectLabel">
+    <span class="material-symbols-outlined">link</span>
+    Equipment lease agreement for <strong>{{ subjectLabel }}</strong> — once sent &amp; signed, it will appear on this record.
+  </div>
+
   <div class="card state" *ngIf="loading">Loading template…</div>
   <div class="card state error" *ngIf="loadError">{{ loadError }}</div>
 
