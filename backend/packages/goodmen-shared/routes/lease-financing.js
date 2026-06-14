@@ -20,7 +20,10 @@ const {
   calculateAndStoreRiskSnapshot,
   applyPayment,
   getNextDueSchedule,
+  chooseSignatureTemplate,
 } = require('../services/lease-financing-service');
+const { createSignatureRequest } = require('../services/signature-service');
+const { listTemplates } = require('../services/agreement-service');
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 20 * 1024 * 1024 } });
 
@@ -1357,6 +1360,141 @@ router.post('/lease-agreements/:id/sign', canEdit, async (req, res) => {
     await trx.rollback();
     dtLogger.error('lease_sign_failed', err);
     res.status(500).json({ error: 'Failed to sign agreement' });
+  }
+});
+
+/**
+ * @openapi
+ * /api/lease-agreements/{id}/send-for-signature:
+ *   post:
+ *     summary: Send a lease-to-own agreement to its driver for e-signature
+ *     description: >
+ *       Creates an e-signature request for the agreement's driver via the generic
+ *       agreements/signature engine (FN-1788) using a finalized `lease_agreement`
+ *       template, sends the secure signing link (email/SMS), links the request to
+ *       this agreement, and sets `sent_for_signature_at` + `status=pending_signature`.
+ *       On the driver's signature the engine's completion hook flips the lease to
+ *       `active`. No duplicate signing logic — reuses the generic engine.
+ *     tags:
+ *       - Lease & Financing
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               templateId:
+ *                 type: string
+ *                 format: uuid
+ *                 nullable: true
+ *                 description: Optional finalized lease_agreement template; defaults to the newest finalized one.
+ *     responses:
+ *       200:
+ *         description: Agreement is now pending_signature; returns the updated agreement and signer link.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 agreement:
+ *                   type: object
+ *                 signature_request_id:
+ *                   type: string
+ *                 signer_link:
+ *                   type: string
+ *                   nullable: true
+ *       400:
+ *         description: Driver has no contact on file, or no finalized lease-agreement template exists.
+ *       404:
+ *         description: Lease agreement not found
+ *       409:
+ *         description: Agreement is not in a sendable state (must be draft or pending_signature).
+ *       401:
+ *         description: Unauthorized
+ *       500:
+ *         description: Internal server error
+ */
+router.post('/lease-agreements/:id/send-for-signature', canEdit, async (req, res) => {
+  try {
+    const tid = requireTenant(req, res); if (!tid) return;
+    const agreement = await findScopedAgreement(req, req.params.id);
+    if (!agreement) return res.status(404).json({ error: 'Lease agreement not found' });
+
+    if (!['draft', 'pending_signature'].includes(agreement.status)) {
+      return res.status(409).json({ error: `Agreement cannot be sent for signature while ${agreement.status}` });
+    }
+
+    // The driver is the signer — we need a contact channel for the secure link.
+    const driver = await knex('drivers')
+      .where({ id: agreement.driver_id })
+      .first('first_name', 'last_name', 'email', 'phone');
+    if (!driver || (!driver.email && !driver.phone)) {
+      return res.status(400).json({ error: 'Driver has no email or phone on file to send the signing link' });
+    }
+
+    // Reuse the generic engine: a signature request is created from a finalized
+    // (`ready`) lease_agreement template. No duplicate signing logic here.
+    const templates = await listTemplates({ tenantId: tid });
+    const template = chooseSignatureTemplate(templates, req.body?.templateId);
+    if (!template) {
+      return res.status(400).json({
+        error: 'No finalized lease-agreement template found. Upload and finalize one in Agreements first.',
+      });
+    }
+
+    const signerName = [driver.first_name, driver.last_name].filter(Boolean).join(' ').trim() || null;
+    const created = await createSignatureRequest({
+      templateId: template.id,
+      tenantId: tid,
+      operatingEntityId: operatingEntityId(req),
+      signer: { name: signerName, email: driver.email || null, phone: driver.phone || null, role: 'Driver' },
+      createdBy: req.user?.id || null,
+    });
+
+    const trx = await knex.transaction();
+    let updated;
+    try {
+      [updated] = await trx('lease_agreements').where({ id: agreement.id }).update({
+        signature_request_id: created.requestId,
+        sent_for_signature_at: trx.fn.now(),
+        status: 'pending_signature',
+        updated_by: req.user?.id || null,
+        updated_at: trx.fn.now(),
+      }).returning('*');
+      await logAgreementEvent(trx, agreement.id, tid, req.user?.id || null, 'agreement_sent_for_signature', {
+        signature_request_id: created.requestId,
+        template_id: template.id,
+        delivery: created.send || null,
+      });
+      await trx.commit();
+    } catch (e) {
+      await trx.rollback();
+      throw e;
+    }
+
+    let documentDownloadUrl = null;
+    if (updated.document_storage_key) {
+      documentDownloadUrl = await getSignedDownloadUrl(updated.document_storage_key)
+        .catch(() => updated.document_url || null);
+    }
+
+    res.json({
+      agreement: { ...updated, document_download_url: documentDownloadUrl, signer_link: created.signerLink || null },
+      signature_request_id: created.requestId,
+      signer_link: created.signerLink || null,
+    });
+  } catch (err) {
+    dtLogger.error('lease_send_for_signature_failed', err);
+    res.status(500).json({ error: 'Failed to send agreement for signature' });
   }
 });
 

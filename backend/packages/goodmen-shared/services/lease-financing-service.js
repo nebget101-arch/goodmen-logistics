@@ -1,6 +1,7 @@
 'use strict';
 
 const knex = require('../config/knex');
+const dtLogger = require('../utils/logger');
 
 function toDateOnly(value) {
   if (!value) return null;
@@ -334,6 +335,118 @@ async function applyLeaseDeductionForSettlement(trx, settlement) {
   return txn;
 }
 
+/**
+ * FN-1803 — pick the agreement template for a lease-to-own signature request.
+ * Prefers an explicitly requested `templateId` (must be a finalized — `ready` —
+ * `lease_agreement` template); otherwise falls back to the newest finalized
+ * `lease_agreement` template for the tenant. Pure (operates on listTemplates()
+ * output), returns the chosen template or null.
+ *
+ * @param {Object[]} templates  - agreement-service listTemplates() output (newest first)
+ * @param {string}   [templateId] - optional explicit template id
+ */
+function chooseSignatureTemplate(templates, templateId) {
+  const ready = (Array.isArray(templates) ? templates : []).filter(
+    (t) => t && t.status === 'ready' && t.documentType === 'lease_agreement'
+  );
+  if (templateId) return ready.find((t) => t.id === templateId) || null;
+  return ready[0] || null;
+}
+
+/**
+ * FN-1803 — pure decision for the signature-completion transition. Given the
+ * current agreement row, whether a signed-PDF key is available, and whether the
+ * truck already has a competing active lease, decide what to change and whether
+ * to auto-activate. Timestamps are applied by the caller (they need the trx
+ * clock). Returns null for a missing agreement.
+ *
+ * Lifecycle rule: only auto-activate out of `pending_signature`, and only when
+ * the truck has no other active/overdue lease — otherwise record the signature
+ * but leave the status untouched for a human to resolve the conflict.
+ *
+ * @param {Object} agreement - lease_agreements row
+ * @param {{signedPdfStorageKey?: string|null, hasTruckConflict?: boolean}} opts
+ * @returns {{documentStorageKey: (string|null), activate: boolean, nextStatus: string}|null}
+ */
+function planSignatureCompletion(agreement, { signedPdfStorageKey = null, hasTruckConflict = false } = {}) {
+  if (!agreement) return null;
+  const activate = agreement.status === 'pending_signature' && !hasTruckConflict;
+  return {
+    documentStorageKey: signedPdfStorageKey || null, // null => leave column unchanged
+    activate,
+    nextStatus: activate ? 'active' : agreement.status,
+  };
+}
+
+/**
+ * FN-1803 — signature-completion hook handler. Invoked by signature-service when
+ * any request is signed; no-ops unless the request belongs to a lease agreement
+ * (linked via `lease_agreements.signature_request_id`). Sets `signed_at`, persists
+ * the signed-PDF key into `document_storage_key`, and advances the lease lifecycle
+ * `pending_signature -> active` (mirroring the `/activate` guard + vehicle update).
+ * Idempotent: re-running on an already-active lease only refreshes signed_at /
+ * document key without regressing status or re-activating the vehicle.
+ *
+ * @returns {Promise<{agreement: Object, activated: boolean}|null>}
+ */
+async function applySignatureCompletion({ requestId, documentType, signedPdfStorageKey, db = knex } = {}) {
+  if (!requestId) return null;
+  if (documentType && documentType !== 'lease_agreement') return null;
+
+  return db.transaction(async (trx) => {
+    const agreement = await trx('lease_agreements').where({ signature_request_id: requestId }).first();
+    if (!agreement) return null;
+
+    let hasTruckConflict = false;
+    if (agreement.status === 'pending_signature') {
+      const conflict = await trx('lease_agreements')
+        .where({ tenant_id: agreement.tenant_id, truck_id: agreement.truck_id })
+        .whereIn('status', ['active', 'overdue'])
+        .whereNot('id', agreement.id)
+        .first();
+      hasTruckConflict = !!conflict;
+    }
+
+    const plan = planSignatureCompletion(agreement, { signedPdfStorageKey, hasTruckConflict });
+
+    const patch = { signed_at: trx.fn.now(), updated_at: trx.fn.now() };
+    if (plan.documentStorageKey) patch.document_storage_key = plan.documentStorageKey;
+    if (plan.activate) {
+      patch.status = 'active';
+      patch.activated_at = trx.fn.now();
+    }
+
+    const [updated] = await trx('lease_agreements').where({ id: agreement.id }).update(patch).returning('*');
+
+    if (plan.activate) {
+      await trx('vehicles').where({ id: agreement.truck_id }).update({
+        owner_type: 'lease_to_own',
+        leased_driver_id: agreement.driver_id,
+        title_status: 'financing_active',
+        updated_at: trx.fn.now(),
+      });
+      await calculateAndStoreRiskSnapshot(trx, agreement.id);
+    }
+
+    await logAgreementEvent(trx, agreement.id, agreement.tenant_id, null, 'agreement_signed_esign', {
+      signature_request_id: requestId,
+      signed_pdf_storage_key: signedPdfStorageKey || null,
+      auto_activated: plan.activate,
+    });
+
+    return { agreement: updated, activated: plan.activate };
+  });
+}
+
+// Register the lease-to-own signature-completion hook on the generic engine.
+// Lazy-required so this module still loads in contexts where the engine isn't
+// present (the engine never imports this adapter, so there's no require cycle).
+try {
+  require('./signature-service').onSigned(applySignatureCompletion);
+} catch (err) {
+  dtLogger.warn('lease_signature_hook_register_failed', { message: err && err.message });
+}
+
 module.exports = {
   toDateOnly,
   round2,
@@ -347,4 +460,7 @@ module.exports = {
   applyPayment,
   getNextDueSchedule,
   applyLeaseDeductionForSettlement,
+  chooseSignatureTemplate,
+  planSignatureCompletion,
+  applySignatureCompletion,
 };

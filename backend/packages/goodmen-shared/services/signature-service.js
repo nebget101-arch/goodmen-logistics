@@ -73,6 +73,35 @@ const DEFAULT_CONSENT_TEXT =
   'recorded as part of the signature.';
 
 // ---------------------------------------------------------------------------
+// Signature-completion hooks
+// ---------------------------------------------------------------------------
+
+/**
+ * Adapter modules (e.g. lease-to-own, FN-1803) register a handler here to react
+ * when a request they own transitions to `signed`. Keeping the engine hook-based
+ * — never importing an adapter — preserves "reuse the generic engine, no adapter
+ * coupling in the engine". Handlers run in-process (all signing + adapter routes
+ * are mounted in the same logistics-service) and are best-effort: a throwing
+ * handler is logged and never fails the signature.
+ */
+const signedHooks = [];
+
+/** Register a `(ctx) => Promise<void>` handler invoked after a request is signed. */
+function onSigned(handler) {
+  if (typeof handler === 'function') signedHooks.push(handler);
+}
+
+async function fireSignedHooks(ctx) {
+  for (const handler of signedHooks) {
+    try {
+      await handler(ctx);
+    } catch (err) {
+      dtLogger.error('signature_signed_hook_failed', err, { requestId: ctx && ctx.requestId });
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Pure helpers (no DB / network — unit-tested)
 // ---------------------------------------------------------------------------
 
@@ -586,18 +615,31 @@ async function submitSignature({
   // 4) Generate + store the signed PDF (non-fatal: the signature is already
   // recorded; a PDF failure leaves status `signed` with no key, retryable).
   let signedPdfUrl = null;
+  let signedPdfStorageKey = null;
   try {
     const { storageKey } = await generateAndStoreSignedPdf({
       request,
       signature: { signerName: name, signatureValue: sigValue, ipAddress, userAgent, consentText: DEFAULT_CONSENT_TEXT },
       db
     });
+    signedPdfStorageKey = storageKey || null;
     if (storageKey) {
       signedPdfUrl = await getR2().getSignedDownloadUrl(storageKey).catch(() => null);
     }
   } catch (err) {
     dtLogger.error('signature_signed_pdf_generate_failed', err, { requestId: request.id });
   }
+
+  // Notify adapters (e.g. lease-to-own) that a request they own has been signed.
+  // Best-effort: hook failures never fail the signature itself.
+  await fireSignedHooks({
+    requestId: request.id,
+    tenantId: request.tenant_id,
+    documentType: request.document_type,
+    signedPdfStorageKey,
+    signerName: name,
+    db
+  });
 
   return { status: 'signed', signedPdfUrl };
 }
@@ -662,6 +704,8 @@ module.exports = {
   generateAndStoreSignedPdf,
   sendSignerLink,
   resolveToken,
+  // signature-completion hooks (adapter integration — FN-1803)
+  onSigned,
   // pure helpers (exported for unit tests + reuse)
   normalizeStatus,
   normalizeRole,
