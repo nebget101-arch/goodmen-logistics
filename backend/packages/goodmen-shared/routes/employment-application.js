@@ -229,7 +229,20 @@ router.get('/applications/driver/:driverId', async (req, res) => {
 router.post('/applications/:id/submit', async (req, res) => {
   try {
     const userId = req.context?.userId || req.user?.id || null;
-    const result = await emService.submitApplication(req.params.id, req.body, userId, req.context);
+    // FN-1834: capture signature audit trail server-side (client cannot be trusted to
+    // self-report). Persisted into applicant_snapshot.auditTrail and rendered on the PDF.
+    const forwardedFor = req.headers['x-forwarded-for'];
+    const ipAddress = (typeof forwardedFor === 'string' && forwardedFor.split(',')[0].trim())
+      || req.ip
+      || req.connection?.remoteAddress
+      || null;
+    const auditTrail = {
+      ipAddress,
+      userAgent: req.headers['user-agent'] || null,
+      submittedAt: new Date().toISOString()
+    };
+    const context = { ...req.context, auditTrail };
+    const result = await emService.submitApplication(req.params.id, req.body, userId, context);
     res.json(result);
   } catch (e) {
     res.status(400).json({ error: e.message });

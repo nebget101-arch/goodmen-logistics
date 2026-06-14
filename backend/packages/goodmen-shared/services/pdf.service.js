@@ -8,6 +8,23 @@ function asText(v) {
   return String(v);
 }
 
+/**
+ * Truncate text with an ellipsis so it fits within maxWidth at the given font/size.
+ * Prevents long values (e.g. employer names, company headers) from overflowing
+ * their underline/box into the adjacent field.
+ */
+function fitText(text, font, size, maxWidth) {
+  const s = asText(text);
+  if (!s || maxWidth <= 0) return s;
+  if (font.widthOfTextAtSize(s, size) <= maxWidth) return s;
+  const ellipsis = '…';
+  let t = s;
+  while (t.length > 1 && font.widthOfTextAtSize(t + ellipsis, size) > maxWidth) {
+    t = t.slice(0, -1);
+  }
+  return t + ellipsis;
+}
+
 function fmtDate(v) {
   if (!v) return '';
   const d = new Date(v);
@@ -74,16 +91,18 @@ function drawPageHeader(page, font, boldFont, companyName, companyAddress, logoI
       textX = marginLeft + dims.width + 10;
     }
   }
-  // Company name bold 13pt
-  page.drawText(companyName || '', { x: textX, y: 755, size: 13, font: boldFont, color: COLORS.primary });
-  // Address 8pt
-  if (companyAddress) {
-    page.drawText(companyAddress, { x: textX, y: 742, size: 8, font, color: COLORS.label });
-  }
   // Title right-aligned
   const title = 'DRIVER EMPLOYMENT APPLICATION';
   const titleWidth = boldFont.widthOfTextAtSize(title, 10);
   page.drawText(title, { x: pageWidth - marginRight - titleWidth, y: 755, size: 10, font: boldFont, color: COLORS.primary });
+  // Company name/address fit the space left of the title so long values don't collide.
+  const textMaxWidth = (pageWidth - marginRight - titleWidth - 12) - textX;
+  // Company name bold 13pt
+  page.drawText(fitText(companyName || '', boldFont, 13, textMaxWidth), { x: textX, y: 755, size: 13, font: boldFont, color: COLORS.primary });
+  // Address 8pt
+  if (companyAddress) {
+    page.drawText(fitText(companyAddress, font, 8, pageWidth - marginRight - textX), { x: textX, y: 742, size: 8, font, color: COLORS.label });
+  }
   // Horizontal line
   page.drawLine({
     start: { x: marginLeft, y: 735 },
@@ -133,26 +152,31 @@ function drawSectionBanner(page, boldFont, title, y) {
   return y - 24;
 }
 
-function drawFieldPair(page, font, boldFont, label1, value1, label2, value2, y) {
+function drawFieldPair(page, font, boldFont, label1, value1, label2, value2, y, opts = {}) {
   const { marginLeft, contentWidth } = LAYOUT;
-  const halfWidth = contentWidth / 2 - 5;
+  const gap = 10;
+  // opts.ratio1 lets a field claim more than half the row (e.g. EMPLOYER NAME) so
+  // long values fit; defaults to an even split matching the prior layout.
+  const ratio1 = label2 ? (opts.ratio1 || 0.5) : 1;
+  const width1 = (contentWidth - (label2 ? gap : 0)) * ratio1;
+  const width2 = (contentWidth - gap) * (1 - ratio1);
   // Field 1
   page.drawText(label1, { x: marginLeft, y: y + 10, size: 7, font, color: COLORS.label });
-  page.drawText(asText(value1), { x: marginLeft, y: y - 2, size: 9, font: boldFont, color: COLORS.text });
+  page.drawText(fitText(value1, boldFont, 9, width1), { x: marginLeft, y: y - 2, size: 9, font: boldFont, color: COLORS.text });
   page.drawLine({
     start: { x: marginLeft, y: y - 6 },
-    end: { x: marginLeft + halfWidth, y: y - 6 },
+    end: { x: marginLeft + width1, y: y - 6 },
     thickness: 0.5,
     color: COLORS.border
   });
   // Field 2
   if (label2) {
-    const x2 = marginLeft + halfWidth + 10;
+    const x2 = marginLeft + width1 + gap;
     page.drawText(label2, { x: x2, y: y + 10, size: 7, font, color: COLORS.label });
-    page.drawText(asText(value2), { x: x2, y: y - 2, size: 9, font: boldFont, color: COLORS.text });
+    page.drawText(fitText(value2, boldFont, 9, width2), { x: x2, y: y - 2, size: 9, font: boldFont, color: COLORS.text });
     page.drawLine({
       start: { x: x2, y: y - 6 },
-      end: { x: x2 + halfWidth, y: y - 6 },
+      end: { x: x2 + width2, y: y - 6 },
       thickness: 0.5,
       color: COLORS.border
     });
@@ -164,7 +188,7 @@ function drawSingleField(page, font, boldFont, label, value, y, fullWidth) {
   const { marginLeft, contentWidth } = LAYOUT;
   const w = fullWidth ? contentWidth : contentWidth / 2 - 5;
   page.drawText(label, { x: marginLeft, y: y + 10, size: 7, font, color: COLORS.label });
-  page.drawText(asText(value), { x: marginLeft, y: y - 2, size: 9, font: boldFont, color: COLORS.text });
+  page.drawText(fitText(value, boldFont, 9, w), { x: marginLeft, y: y - 2, size: 9, font: boldFont, color: COLORS.text });
   page.drawLine({
     start: { x: marginLeft, y: y - 6 },
     end: { x: marginLeft + w, y: y - 6 },
@@ -208,10 +232,12 @@ function drawTableRow(page, font, columns, values, y, isAlt) {
   return y - 14;
 }
 
-function drawQuestionRow(page, font, boldFont, question, answer, y) {
+function drawQuestionRow(page, font, boldFont, question, answer, y, adverseAnswer = 'YES') {
   const { marginLeft, contentWidth } = LAYOUT;
   page.drawText(question, { x: marginLeft + 8, y, size: 8, font, color: COLORS.text });
-  const ansColor = answer === 'YES' ? rgb(0.7, 0.15, 0.15) : COLORS.primary;
+  // Red only on the adverse selection for this specific question (e.g. NO for
+  // "legally authorized to work"; YES for felony/ADA/drug-alcohol questions).
+  const ansColor = answer && answer === adverseAnswer ? rgb(0.7, 0.15, 0.15) : COLORS.primary;
   const ansWidth = boldFont.widthOfTextAtSize(answer, 9);
   page.drawText(answer, { x: marginLeft + contentWidth - ansWidth - 8, y, size: 9, font: boldFont, color: ansColor });
   page.drawLine({
@@ -364,11 +390,13 @@ async function generateEmploymentApplicationPdf(fullApp, context = {}) {
   });
   y -= 18;
 
-  // 49 CFR Notice box
-  const noticeBoxHeight = 72;
+  // 49 CFR Notice box — taller with comfortable inner padding so the text isn't cramped.
+  const noticeBoxHeight = 96;
+  const noticeBoxTop = y + 14;
+  const noticePadX = 12;
   page.drawRectangle({
     x: LAYOUT.marginLeft,
-    y: y - noticeBoxHeight + 14,
+    y: noticeBoxTop - noticeBoxHeight,
     width: LAYOUT.contentWidth,
     height: noticeBoxHeight,
     color: rgb(0.99, 0.97, 0.93),
@@ -376,8 +404,9 @@ async function generateEmploymentApplicationPdf(fullApp, context = {}) {
     borderWidth: 0.5
   });
 
-  page.drawText('PLEASE READ COMPLETELY', { x: LAYOUT.marginLeft + 8, y, size: 8, font: bold, color: COLORS.primary });
-  y -= 11;
+  let ny = noticeBoxTop - 15;
+  page.drawText('PLEASE READ COMPLETELY', { x: LAYOUT.marginLeft + noticePadX, y: ny, size: 8, font: bold, color: COLORS.primary });
+  ny -= 13;
   const notice = [
     'The information requested on this form is required by federal law (49 CFR) to be provided by any driver applying for',
     'a commercial driver position as defined in 49 CFR 390.5. Failure to complete required areas can place both the',
@@ -385,14 +414,15 @@ async function generateEmploymentApplicationPdf(fullApp, context = {}) {
     'various parts of 49 CFR, including Part 382 and Part 391.'
   ];
   for (const line of notice) {
-    page.drawText(line, { x: LAYOUT.marginLeft + 8, y, size: 7, font, color: COLORS.text });
-    y -= 9;
+    page.drawText(line, { x: LAYOUT.marginLeft + noticePadX, y: ny, size: 7, font, color: COLORS.text });
+    ny -= 9.5;
   }
-  y -= 2;
-  page.drawText('PLEASE PRINT CLEARLY AND SIGN YOUR FULL LEGAL NAME AT THE END WHERE REQUIRED.', { x: LAYOUT.marginLeft + 8, y, size: 7, font: bold, color: rgb(0.6, 0.15, 0.15) });
-  y -= 9;
-  page.drawText('FALSE STATEMENTS MAY RESULT IN REFUSAL TO HIRE OR IMMEDIATE TERMINATION.', { x: LAYOUT.marginLeft + 8, y, size: 7, font: bold, color: rgb(0.6, 0.15, 0.15) });
-  y -= 16;
+  ny -= 4;
+  page.drawText('PLEASE PRINT CLEARLY AND SIGN YOUR FULL LEGAL NAME AT THE END WHERE REQUIRED.', { x: LAYOUT.marginLeft + noticePadX, y: ny, size: 7, font: bold, color: rgb(0.6, 0.15, 0.15) });
+  ny -= 9.5;
+  page.drawText('FALSE STATEMENTS MAY RESULT IN REFUSAL TO HIRE OR IMMEDIATE TERMINATION.', { x: LAYOUT.marginLeft + noticePadX, y: ny, size: 7, font: bold, color: rgb(0.6, 0.15, 0.15) });
+  // Resume layout below the box with a small gap.
+  y = noticeBoxTop - noticeBoxHeight - 14;
 
   // === APPLICANT INFORMATION ===
   y = drawSectionBanner(page, bold, 'APPLICANT INFORMATION', y);
@@ -438,13 +468,13 @@ async function generateEmploymentApplicationPdf(fullApp, context = {}) {
   y = drawSectionBanner(page, bold, 'WORK AUTHORIZATION & BACKGROUND', y);
   y -= 2;
 
-  y = drawQuestionRow(page, font, bold, 'Legally authorized to work in U.S. under 49 CFR?', yn(workAuth.legallyAuthorizedToWork), y);
-  y = drawQuestionRow(page, font, bold, 'Convicted of a felony?', yn(workAuth.convictedOfFelony), y);
+  y = drawQuestionRow(page, font, bold, 'Legally authorized to work in U.S. under 49 CFR?', yn(workAuth.legallyAuthorizedToWork), y, 'NO');
+  y = drawQuestionRow(page, font, bold, 'Convicted of a felony?', yn(workAuth.convictedOfFelony), y, 'YES');
   if (workAuth.convictedOfFelony === 'yes' && workAuth.felonyDetails) {
     page.drawText(`Details: ${asText(workAuth.felonyDetails).slice(0, 90)}`, { x: LAYOUT.marginLeft + 16, y, size: 7.5, font, color: COLORS.text });
     y -= 14;
   }
-  y = drawQuestionRow(page, font, bold, 'Unable to perform job functions / ADA consideration?', yn(workAuth.unableToPerformFunctions), y);
+  y = drawQuestionRow(page, font, bold, 'Unable to perform job functions / ADA consideration?', yn(workAuth.unableToPerformFunctions), y, 'YES');
   if (workAuth.unableToPerformFunctions === 'yes' && workAuth.adaDetails) {
     page.drawText(`Details: ${asText(workAuth.adaDetails).slice(0, 90)}`, { x: LAYOUT.marginLeft + 16, y, size: 7.5, font, color: COLORS.text });
     y -= 14;
@@ -475,7 +505,7 @@ async function generateEmploymentApplicationPdf(fullApp, context = {}) {
     page.drawText(empLabel, { x: LAYOUT.marginLeft + 10, y, size: 9, font: bold, color: COLORS.primary });
     y -= 18;
 
-    y = drawFieldPair(page, font, bold, 'EMPLOYER NAME', e.company_name || e.employerName, 'PHONE', e.phone || e.phoneNumber, y);
+    y = drawFieldPair(page, font, bold, 'EMPLOYER NAME', e.company_name || e.employerName, 'PHONE', e.phone || e.phoneNumber, y, { ratio1: 0.64 });
     y = drawSingleField(page, font, bold, 'ADDRESS', `${asText(e.street_address || e.streetAddress)} ${asText(e.city)}, ${asText(e.state)} ${asText(e.zip_code || e.zipCode)}`, y, true);
     y = drawFieldPair(page, font, bold, 'POSITION HELD', e.position_held || e.positionHeld, 'CONTACT PERSON', e.contact_person || e.contactPerson, y);
     y = drawFieldPair(page, font, bold, 'FROM', e.from_month_year || e.fromDate, 'TO', e.to_month_year || e.toDate, y);

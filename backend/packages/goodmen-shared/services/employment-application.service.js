@@ -73,7 +73,9 @@ async function createDraft(driverId, payload, userId, context = null) {
     const rows = payload.residencies.map((r) => ({
       application_id: row.id,
       residency_type: r.residencyType || r.residency_type || null,
-      street: r.street || null,
+      // FN-1834: accept camelCase/snake_case street keys so previous-address rows
+      // (which the form sends as `streetAddress`) don't persist as NULL.
+      street: r.street || r.streetAddress || r.street_address || null,
       city: r.city || null,
       state: r.state || null,
       zip_code: r.zip || r.zipCode || r.zip_code || null,
@@ -220,7 +222,8 @@ async function updateDraft(applicationId, payload, userId, context = null) {
             rows = payload[c.key].map((r) => ({
               application_id: applicationId,
               residency_type: r.residencyType || r.residency_type || null,
-              street: r.street || null,
+              // FN-1834: accept camelCase/snake_case street keys (see createDraft).
+              street: r.street || r.streetAddress || r.street_address || null,
               city: r.city || null,
               state: r.state || null,
               zip_code: r.zip || r.zipCode || r.zip_code || null,
@@ -333,26 +336,48 @@ async function submitApplication(applicationId, payload, userId, context = null)
       });
     }
 
+    // FN-1834: capture the signature audit trail (IP / user-agent / submit timestamp)
+    // forwarded by the submit route and persist it into applicant_snapshot.auditTrail
+    // (JSONB column — no migration). The PDF's audit-trail block reads it back via pdfContext.
+    let existingSnapshot = app.applicant_snapshot || {};
+    if (typeof existingSnapshot === 'string') {
+      try { existingSnapshot = JSON.parse(existingSnapshot); } catch { existingSnapshot = {}; }
+    }
+    const auditTrail = {
+      ipAddress: context?.auditTrail?.ipAddress || null,
+      userAgent: context?.auditTrail?.userAgent || null,
+      submittedAt: context?.auditTrail?.submittedAt || new Date().toISOString()
+    };
+    const mergedSnapshot = { ...existingSnapshot, auditTrail };
+
     // persist final snapshot
     await trx('employment_applications').where({ id: applicationId }).update({
       status: 'submitted_pending_document',
       submitted_at: trx.fn.now(),
+      // FN-1834: stamp the certification signature time on submit (if not already set)
+      // so the PDF renders the date signed.
+      signed_certification_at: app.signed_certification_at || trx.fn.now(),
+      applicant_snapshot: JSON.stringify(mergedSnapshot),
       updated_at: trx.fn.now(),
       updated_by: userId || app.updated_by
     });
 
     const fullApp = await getById(applicationId);
 
-    // FN-260: Build PDF context with operating entity (auto-lookup if not passed)
+    // FN-260 / FN-1834: Build PDF context with operating entity. Prefer a caller-supplied
+    // profile only when it actually carries a name; otherwise resolve reliably via the
+    // operating_entity_id chain (application → request context → driver) so the header never
+    // falls back to placeholder text when a profile exists.
     const pdfContext = {};
-    if (context?.operatingEntity) {
+    if (context?.operatingEntity && context.operatingEntity.name) {
       pdfContext.operatingEntity = context.operatingEntity;
     } else {
       try {
-        const oeId = app.operating_entity_id || null;
+        const candidateIds = [app.operating_entity_id, context?.operatingEntityId].filter(Boolean);
         let oeRow = null;
-        if (oeId) {
+        for (const oeId of candidateIds) {
           oeRow = await trx('operating_entities').where({ id: oeId }).first();
+          if (oeRow) break;
         }
         if (!oeRow) {
           const driverRow = await trx('drivers').where({ id: app.driver_id }).select('operating_entity_id').first();
@@ -362,7 +387,7 @@ async function submitApplication(applicationId, payload, userId, context = null)
         }
         if (oeRow) {
           pdfContext.operatingEntity = {
-            name: oeRow.name || oeRow.legal_name || '',
+            name: oeRow.name || oeRow.dba_name || oeRow.legal_name || '',
             address: [oeRow.address_line1, oeRow.address_line2, oeRow.city, oeRow.state, oeRow.zip_code].filter(Boolean).join(', '),
             phone: oeRow.phone || '',
             email: oeRow.email || '',
