@@ -1,0 +1,22 @@
+import { NgModule } from '@angular/core';
+import { CommonModule } from '@angular/common';
+import { FormsModule } from '@angular/forms';
+import { AgreementsRoutingModule } from './agreements-routing.module';
+import { SharedModule } from '../shared/shared.module';
+
+import { AgreementUploadComponent } from './agreement-upload/agreement-upload.component';
+import { AgreementReviewComponent } from './agreement-review/agreement-review.component';
+
+@NgModule({
+  declarations: [
+    AgreementUploadComponent,
+    AgreementReviewComponent,
+  ],
+  imports: [
+    CommonModule,
+    FormsModule,
+    SharedModule,
+    AgreementsRoutingModule,
+  ],
+})
+export class AgreementsModule {}

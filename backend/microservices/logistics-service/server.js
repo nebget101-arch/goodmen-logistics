@@ -59,6 +59,7 @@ const creditRouter = require(path.join(sharedRoot, 'routes', 'credit'));
 const dbExampleRouter = require(path.join(sharedRoot, 'routes', 'db-example'));
 const settlementsRouter = require(path.join(sharedRoot, 'routes', 'settlements'));
 const leaseFinancingRouter = require(path.join(sharedRoot, 'routes', 'lease-financing'));
+const agreementsRouter = require(path.join(sharedRoot, 'routes', 'agreements'));
 const iftaRouter = require(path.join(sharedRoot, 'routes', 'ifta'));
 const expensePaymentCategoriesRouter = require(path.join(sharedRoot, 'routes', 'expense-payment-categories'));
 const referenceRouter = require(path.join(sharedRoot, 'routes', 'reference'));
@@ -120,6 +121,7 @@ app.use('/api/credit', authMiddleware, tenantContextMiddleware, requireActiveSub
 app.use('/api/db-example', authMiddleware, tenantContextMiddleware, requireActiveSubscription, dbExampleRouter);
 app.use('/api/settlements', authMiddleware, tenantContextMiddleware, requireActiveSubscription, requireSettlementsPlan, settlementsRouter);
 app.use('/api', authMiddleware, tenantContextMiddleware, requireActiveSubscription, requireLeaseFinancingPlan, leaseFinancingRouter);
+app.use('/api/agreements', authMiddleware, tenantContextMiddleware, requireActiveSubscription, agreementsRouter);
 app.use('/api', authMiddleware, tenantContextMiddleware, requireActiveSubscription, requireIftaPlan, iftaRouter);
 app.use('/api/expense-payment-categories', authMiddleware, tenantContextMiddleware, requireActiveSubscription, expensePaymentCategoriesRouter);
 app.use('/api/expense-categories', authMiddleware, tenantContextMiddleware, requireActiveSubscription, expensePaymentCategoriesRouter);
