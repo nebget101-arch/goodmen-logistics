@@ -613,6 +613,21 @@ async function getTemplateWithFields({
   return template;
 }
 
+/**
+ * Look up a template's source-document storage location, tenant-scoped. Returns
+ * `{ storageKey, name }` or null when the template doesn't exist or belongs to
+ * another tenant. Used by the auth-gated source proxy (FN-1839) to stream the
+ * bytes from R2 without ever handing a presigned URL to the browser — a tenant
+ * can only resolve a key for its own template.
+ */
+async function getTemplateSource({ templateId, tenantId, db = getKnex() }) {
+  const row = await db(TEMPLATES_TABLE)
+    .where({ id: templateId, tenant_id: tenantId })
+    .first('source_storage_key', 'name');
+  if (!row) return null;
+  return { storageKey: row.source_storage_key || null, name: row.name || null };
+}
+
 /** List a tenant's templates (newest first), without field maps. */
 async function listTemplates({ tenantId, db = getKnex() }) {
   const rows = await db(TEMPLATES_TABLE)
@@ -729,6 +744,7 @@ module.exports = {
   detectAndPersistFields,
   persistDetectedFields,
   getTemplateWithFields,
+  getTemplateSource,
   listTemplates,
   updateTemplateFields,
   callDetectFieldsAi,

@@ -153,7 +153,7 @@ export class AgreementPlacementComponent implements OnInit, AfterViewInit, OnDes
     this.agreements.getTemplate(this.templateId).subscribe({
       next: (res) => {
         this.template = res;
-        this.openPdf(res.sourceDownloadUrl || null, res.fields || [], res.pageCount || 0);
+        this.loadSource(res.fields || [], res.pageCount || 0);
       },
       error: (err) => {
         this.loadError = err?.error?.error || 'Could not load the template.';
@@ -162,18 +162,32 @@ export class AgreementPlacementComponent implements OnInit, AfterViewInit, OnDes
     });
   }
 
+  /**
+   * Fetch the source bytes through the auth-gated backend proxy (FN-1839) and
+   * render them. pdf.js can't fetch the R2 presigned URL directly (the bucket
+   * has no CORS policy for the app origin), so we pull the bytes via HttpClient
+   * — which carries the auth token and yields a CORS-clean response — and hand
+   * the ArrayBuffer to pdf.js. A failed fetch degrades to the blank-page editor.
+   */
+  private loadSource(serverFields: AgreementField[], serverPageCount: number): void {
+    this.agreements.getTemplateSource(this.templateId).subscribe({
+      next: (data) => this.openPdf(data, serverFields, serverPageCount),
+      error: () => this.openPdf(null, serverFields, serverPageCount),
+    });
+  }
+
   /** Load the PDF with pdf.js, measure pages, then build the field model. */
   private async openPdf(
-    url: string | null,
+    data: ArrayBuffer | null,
     serverFields: AgreementField[],
     serverPageCount: number
   ): Promise<void> {
     try {
-      if (!url) throw new Error('no source url');
+      if (!data || data.byteLength === 0) throw new Error('no source bytes');
       const pdfjs: any = await import('pdfjs-dist');
       pdfjs.GlobalWorkerOptions.workerSrc = 'assets/pdfjs/pdf.worker.min.js';
 
-      const doc = await pdfjs.getDocument({ url }).promise;
+      const doc = await pdfjs.getDocument({ data }).promise;
       if (this.destroyed) {
         doc.destroy?.();
         return;

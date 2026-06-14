@@ -25,6 +25,7 @@ const {
   normalizeDocumentType,
   isLowConfidence,
   callDetectFieldsAi,
+  getTemplateSource,
   stubDetectionResult,
   LOW_CONFIDENCE_THRESHOLD,
   FIELD_TYPES
@@ -458,5 +459,48 @@ describe('callDetectFieldsAi', () => {
     } finally {
       if (prev !== undefined) process.env.AGREEMENTS_AI_DETECT_STUB = prev;
     }
+  });
+});
+
+describe('getTemplateSource', () => {
+  // Minimal chainable knex stub: db(table).where(criteria).first(...cols)
+  function fakeDb(row, sink) {
+    return (table) => ({
+      where(criteria) {
+        if (sink) Object.assign(sink, { table, criteria });
+        return {
+          first: async () => row
+        };
+      }
+    });
+  }
+
+  it('returns the storage key + name for the tenant\'s own template', async () => {
+    const sink = {};
+    const db = fakeDb(
+      { source_storage_key: 'agreements/t1/doc.pdf', name: 'Lease' },
+      sink
+    );
+    const out = await getTemplateSource({ templateId: 'tmpl-1', tenantId: 't1', db });
+    assert.deepStrictEqual(out, { storageKey: 'agreements/t1/doc.pdf', name: 'Lease' });
+  });
+
+  it('scopes the lookup by both id and tenant_id', async () => {
+    const sink = {};
+    const db = fakeDb({ source_storage_key: 'k', name: 'n' }, sink);
+    await getTemplateSource({ templateId: 'tmpl-1', tenantId: 't1', db });
+    assert.deepStrictEqual(sink.criteria, { id: 'tmpl-1', tenant_id: 't1' });
+  });
+
+  it('returns null when no template matches (wrong tenant / missing)', async () => {
+    const db = fakeDb(undefined);
+    const out = await getTemplateSource({ templateId: 'tmpl-x', tenantId: 'other', db });
+    assert.strictEqual(out, null);
+  });
+
+  it('returns a null storageKey when the source was never stored', async () => {
+    const db = fakeDb({ source_storage_key: null, name: 'Draft' });
+    const out = await getTemplateSource({ templateId: 'tmpl-1', tenantId: 't1', db });
+    assert.deepStrictEqual(out, { storageKey: null, name: 'Draft' });
   });
 });

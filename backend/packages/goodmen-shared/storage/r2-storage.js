@@ -147,6 +147,30 @@ async function downloadBuffer(key) {
   return Buffer.concat(chunks);
 }
 
+/**
+ * Fetch an object as a readable stream plus its content metadata, for proxying
+ * the bytes straight to an HTTP response without buffering the whole object in
+ * memory (FN-1839 — auth-gated source-PDF proxy). `body` is the AWS SDK v3
+ * Node.js readable stream (`response.Body`); pipe it to the response.
+ */
+async function getObjectStream(key) {
+  const client = getClient();
+  const { bucket } = getR2Config();
+
+  const response = await client.send(
+    new GetObjectCommand({
+      Bucket: bucket,
+      Key: key
+    })
+  );
+
+  return {
+    body: response.Body,
+    contentType: response.ContentType || null,
+    contentLength: response.ContentLength != null ? Number(response.ContentLength) : null
+  };
+}
+
 async function deleteObject(key) {
   const client = getClient();
   const { bucket } = getR2Config();
@@ -164,6 +188,7 @@ module.exports = {
   uploadBuffer,
   uploadStream,
   downloadBuffer,
+  getObjectStream,
   getSignedUploadUrl,
   getSignedDownloadUrl,
   deleteObject
