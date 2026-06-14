@@ -10,6 +10,7 @@ const {
   createConsentRequest
 } = require('../services/consent-service');
 const { generateConsentPdf } = require('../services/driver-onboarding-pdf');
+const { composeEntityAddress, buildConsentCompany } = require('../services/consent-company-profile');
 const { createDriverDocument } = require('../services/driver-storage-service');
 const { upsertRequirementStatus, computeAndUpdateDqfCompleteness } = require('../services/dqf-service');
 
@@ -90,15 +91,7 @@ function replaceTemplatePlaceholders(bodyText, { driver, operatingEntity }) {
   if (!bodyText) return bodyText;
 
   const companyName = operatingEntity?.name || operatingEntity?.legal_name || 'Company Name';
-  const companyAddress = operatingEntity
-    ? [
-      operatingEntity.address_line1,
-      operatingEntity.address_line2,
-      operatingEntity.city,
-      operatingEntity.state,
-      operatingEntity.zip_code
-    ].filter(Boolean).join(', ')
-    : '';
+  const companyAddress = composeEntityAddress(operatingEntity);
   const driverFullName = driver
     ? `${driver.first_name || ''} ${driver.last_name || ''}`.trim()
     : '';
@@ -325,15 +318,7 @@ router.get('/:packetId/:consentKey', rateLimited, async (req, res) => {
     dtLogger.trackRequest('GET', `/public/consents/${packetId}/${consentKey}`, 200, duration);
 
     const companyName = operatingEntity?.name || operatingEntity?.legal_name || 'Company Name';
-    const companyAddress = operatingEntity
-      ? [
-        operatingEntity.address_line1,
-        operatingEntity.address_line2,
-        operatingEntity.city,
-        operatingEntity.state,
-        operatingEntity.zip_code
-      ].filter(Boolean).join(', ')
-      : '';
+    const companyAddress = composeEntityAddress(operatingEntity);
     const driverFullName = driver
       ? `${driver.first_name || ''} ${driver.last_name || ''}`.trim()
       : '';
@@ -508,17 +493,6 @@ router.post('/:packetId/:consentKey/sign', rateLimited, async (req, res) => {
       const template = await getTemplateByKey(consentKey);
       const { driver, operatingEntity } = await loadDriverAndEntity(packet.driver_id, packet.operating_entity_id);
 
-      const companyName = operatingEntity?.name || operatingEntity?.legal_name || 'Company Name';
-      const companyAddress = operatingEntity
-        ? [
-          operatingEntity.address_line1,
-          operatingEntity.address_line2,
-          operatingEntity.city,
-          operatingEntity.state,
-          operatingEntity.zip_code
-        ].filter(Boolean).join(', ')
-        : '';
-
       const pdfBuffer = await generateConsentPdf({
         template,
         consent: {
@@ -528,12 +502,7 @@ router.post('/:packetId/:consentKey/sign', rateLimited, async (req, res) => {
           ip_address: signed.ip_address || req.ip,
           capture_data: captureData || {}
         },
-        company: {
-          name: companyName,
-          address: companyAddress,
-          logo_storage_key: operatingEntity?.logo_storage_key,
-          logo_mime_type: operatingEntity?.logo_mime_type
-        },
+        company: buildConsentCompany(operatingEntity),
         driver
       });
 

@@ -667,6 +667,12 @@ async function generateConsentPdf({ template, consent, company, driver }) {
 
   const companyName = company?.name || 'Company Name';
   const companyAddress = company?.address || '';
+  // FN-1832: header contact line = address (+ phone/email when present). Filtering
+  // keeps a partial profile clean (no stray separators) and avoids ever rendering
+  // the literal [ADDRESS, PHONE, EMAIL] placeholder when a profile exists.
+  const companyContact = [companyAddress, company?.phone, company?.email]
+    .filter(Boolean)
+    .join('   |   ');
   const docId = consent.id || 'N/A';
   const genDate = new Date().toISOString().slice(0, 10);
 
@@ -683,9 +689,9 @@ async function generateConsentPdf({ template, consent, company, driver }) {
     }
     // Company name bold 13pt
     pg.drawText(companyName, { x: textX, y: 755, size: 13, font: boldFont, color: C.primary });
-    // Address
-    if (companyAddress) {
-      pg.drawText(companyAddress, { x: textX, y: 742, size: 8, font, color: C.label });
+    // Address + phone/email (only the pieces that exist)
+    if (companyContact) {
+      pg.drawText(companyContact, { x: textX, y: 742, size: 8, font, color: C.label });
     }
     // Document type right-aligned
     const docType = 'CONSENT FORM';
