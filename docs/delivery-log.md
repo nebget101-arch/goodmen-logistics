@@ -40,3 +40,7 @@ Track all work progress through the development lifecycle.
 | FN-1803 | Subtask Created | 2026-06-14 | Backend: wire send/sign into lease_agreements lifecycle (FN-1790) — Backlog |
 | FN-1804 | Subtask Created | 2026-06-14 | Frontend: send-for-signature + driver signing entry + status (FN-1790) — Backlog |
 | FN-1805 | Subtask Created | 2026-06-14 | QA: lease-to-own driver signing + lifecycle (FN-1790) — Blocked pending FN-1803,1804 |
+| FN-1806 | Story Created | 2026-06-14 | Visual bbox field-placement editor (drag fields onto document preview) — Backlog (blocked by FN-1787) |
+| FN-1807 | Subtask Created | 2026-06-14 | Frontend: drag/resize/add/delete field boxes on document preview (FN-1806) — Backlog |
+| FN-1808 | Subtask Created | 2026-06-14 | Backend: field-map endpoint accepts bbox/page edits, adds, deletes (FN-1806) — Backlog |
+| FN-1809 | Subtask Created | 2026-06-14 | QA: bbox editor + signed-PDF placement round-trip (FN-1806) — Blocked pending FN-1807,1808 |
