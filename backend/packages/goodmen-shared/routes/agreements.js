@@ -12,8 +12,10 @@
  *                                                   then run AI field detection
  *   GET    /api/agreements/templates              → list tenant templates
  *   GET    /api/agreements/templates/:id          → template + ordered field map
- *   PATCH  /api/agreements/templates/:id/fields   → edit roles/labels/defaults,
- *                                                   finalize (status=ready)
+ *   PATCH  /api/agreements/templates/:id/fields   → edit roles/labels +
+ *                                                   geometry (page/bbox), add
+ *                                                   user-drawn boxes, delete
+ *                                                   fields, finalize (ready)
  *
  * Mounted in logistics-service behind authMiddleware + tenantContextMiddleware,
  * so req.context.tenantId is populated. Source bytes live in R2; the field map
@@ -227,11 +229,18 @@ router.get('/templates/:id', async (req, res) => {
  * @openapi
  * /api/agreements/templates/{id}/fields:
  *   patch:
- *     summary: Update field role assignments / labels / defaults, finalize template
+ *     summary: Edit field roles/labels + geometry, add/delete field boxes, finalize
  *     description: >
- *       Body `{ fields: [{ id, role, label, valueDefault }], finalize }`. Only
- *       role (internal↔signer), label and valueDefault are mutable. When
- *       `finalize` is true the template status advances to `ready`.
+ *       Body `{ fields, adds, deletes, finalize }`.
+ *       `fields`: `[{ id, role?, label?, page?, bbox? }]` edits to existing
+ *       fields — role (internal↔signer), label, and the placement geometry
+ *       `page` + `bbox` (FN-1808 visual editor). `adds`:
+ *       `[{ fieldType, page, bbox, label?, role?, fieldKey? }]` user-drawn
+ *       boxes (persisted with `confidence: null`). `deletes`: `[fieldId]` (or
+ *       `[{ id }]`) fields to remove. `bbox` is `[x, y, w, h]` in top-left PDF
+ *       points (see docs/design/agreements-bbox-coordinates.md); page/bbox are
+ *       validated against the template's `page_count`. When `finalize` is true
+ *       the template status advances to `ready`.
  *     tags: [Agreements]
  *     security: [{ bearerAuth: [] }]
  *     parameters:
@@ -249,12 +258,16 @@ router.patch('/templates/:id/fields', async (req, res) => {
 
   try {
     const updates = Array.isArray(req.body?.fields) ? req.body.fields : [];
+    const adds = Array.isArray(req.body?.adds) ? req.body.adds : [];
+    const deletes = Array.isArray(req.body?.deletes) ? req.body.deletes : [];
     const finalize = req.body?.finalize === true || String(req.body?.finalize) === 'true';
 
     const template = await updateTemplateFields({
       templateId: req.params.id,
       tenantId: tid,
       updates,
+      adds,
+      deletes,
       finalize
     });
     if (!template) return res.status(404).json({ error: 'Agreement template not found' });
