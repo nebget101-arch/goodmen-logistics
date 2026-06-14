@@ -5,6 +5,9 @@ import { debounceTime, forkJoin, Subject, Subscription } from 'rxjs';
 import { PermissionHelperService } from '../../services/permission-helper.service';
 import { PERMISSIONS } from '../../models/access-control.model';
 import { environment } from '../../../environments/environment';
+import { AgreementService } from '../../agreements/agreement.service';
+import { EquipmentLeaseSigning } from '../../agreements/equipment-lease-signing.model';
+import { statusLabel } from '../../agreements/signature-request.model';
 
 interface Vehicle {
   id: string;
@@ -49,7 +52,7 @@ type SortField = 'unit_number' | 'inspection_expiry';
 type SortOrder = 'asc' | 'desc';
 type Ownership = 'company' | 'oo' | 'leased';
 type OwnershipFilter = 'all' | Ownership;
-type DetailTab = 'overview' | 'maintenance';
+type DetailTab = 'overview' | 'maintenance' | 'lease';
 
 interface MaintenanceInvoice {
   id: string;
@@ -153,6 +156,13 @@ export class VehiclesComponent implements OnInit, OnDestroy {
     recentIncidents: []
   };
 
+  // Lease-agreement signing state (FN-1801 — equipment-lease adapter, FN-1789)
+  leaseSigningsLoading = false;
+  leaseSigningsError = '';
+  leaseSigningsLoaded = false;
+  leaseSignings: EquipmentLeaseSigning[] = [];
+  readonly statusLabel = statusLabel;
+
   // Pagination state
   currentPage = 1;
   itemsPerPage = 100;
@@ -181,7 +191,8 @@ export class VehiclesComponent implements OnInit, OnDestroy {
     private apiService: ApiService,
     private route: ActivatedRoute,
     private router: Router,
-    private permissions: PermissionHelperService
+    private permissions: PermissionHelperService,
+    private agreements: AgreementService
   ) { }
 
   /**
@@ -725,6 +736,7 @@ export class VehiclesComponent implements OnInit, OnDestroy {
     this.showVehicleDetails = true;
     this.activeDetailTab = 'overview';
     this.resetMaintenanceHistoryState();
+    this.resetLeaseSigningsState();
     this.loadEquipmentSafetySummary(vehicle.id);
   }
 
@@ -733,6 +745,7 @@ export class VehiclesComponent implements OnInit, OnDestroy {
     this.selectedVehicleDetails = null;
     this.activeDetailTab = 'overview';
     this.resetMaintenanceHistoryState();
+    this.resetLeaseSigningsState();
     this.equipmentSafetyError = '';
     this.equipmentSafetySummary = {
       totalIncidents: 0,
@@ -751,6 +764,63 @@ export class VehiclesComponent implements OnInit, OnDestroy {
     if (tab === 'maintenance' && !this.maintenanceHistoryLoaded && this.selectedVehicleDetails) {
       this.loadMaintenanceHistory(this.selectedVehicleDetails.id, 1);
     }
+    if (tab === 'lease' && !this.leaseSigningsLoaded && this.selectedVehicleDetails) {
+      this.loadLeaseSignings(this.selectedVehicleDetails.id);
+    }
+  }
+
+  // ── Lease agreements (FN-1801 — equipment-lease adapter, story FN-1789) ─────
+
+  /** Whether this vehicle is a leased unit (only leased units show the tab). */
+  isLeasedVehicle(vehicle: Vehicle | null): boolean {
+    return !!vehicle && this.getOwnership(vehicle) === 'leased';
+  }
+
+  /** Load the vehicle's equipment-lease signings (status + signed-PDF URL). */
+  loadLeaseSignings(vehicleId: string): void {
+    if (!vehicleId) return;
+    this.leaseSigningsLoading = true;
+    this.leaseSigningsError = '';
+    this.agreements.listEquipmentLeaseSignings('vehicle', vehicleId).subscribe({
+      next: (rows) => {
+        this.leaseSignings = Array.isArray(rows) ? rows : [];
+        this.leaseSigningsLoaded = true;
+        this.leaseSigningsLoading = false;
+      },
+      error: () => {
+        this.leaseSigningsError = 'Unable to load lease agreements.';
+        this.leaseSigningsLoading = false;
+      }
+    });
+  }
+
+  retryLeaseSignings(): void {
+    if (!this.selectedVehicleDetails) return;
+    this.loadLeaseSignings(this.selectedVehicleDetails.id);
+  }
+
+  /**
+   * Entry point — start an Equipment Lease Agreement signing for this unit.
+   * Routes into the agreements upload/prepare flow carrying the vehicle subject
+   * context (document_type lease_agreement); the send step links it back here.
+   */
+  startLeaseAgreement(vehicle: Vehicle | null): void {
+    if (!vehicle) return;
+    this.router.navigate(['/agreements'], {
+      queryParams: {
+        subjectType: 'vehicle',
+        subjectId: vehicle.id,
+        subjectLabel: `Unit ${vehicle.unit_number}`,
+        documentType: 'lease_agreement',
+      },
+    });
+  }
+
+  private resetLeaseSigningsState(): void {
+    this.leaseSigningsLoading = false;
+    this.leaseSigningsError = '';
+    this.leaseSigningsLoaded = false;
+    this.leaseSignings = [];
   }
 
   loadMaintenanceHistory(vehicleId: string, page: number): void {

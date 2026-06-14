@@ -1,6 +1,7 @@
 import { Injectable } from '@angular/core';
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, HttpParams } from '@angular/common/http';
 import { Observable } from 'rxjs';
+import { map } from 'rxjs/operators';
 import { environment } from '../../environments/environment';
 import {
   AgreementTemplate,
@@ -11,6 +12,12 @@ import {
   CreateSignatureRequestPayload,
   SignatureRequest,
 } from './signature-request.model';
+import {
+  EquipmentLeaseSigning,
+  EquipmentLeaseSubjectType,
+  StartEquipmentLeaseSigningPayload,
+  StartEquipmentLeaseSigningResult,
+} from './equipment-lease-signing.model';
 
 /**
  * FN-1794 — client for the agreement template / field-map endpoints (FN-1793).
@@ -24,6 +31,13 @@ import {
  *
  *   POST   /api/agreements/:templateId/requests → create request, send signer link
  *   GET    /api/agreements/requests/:id         → request status + signed-PDF URL
+ *
+ * FN-1801 — equipment / motor-carrier lease adapter (FN-1800):
+ *
+ *   POST   /api/agreements/equipment-lease/requests           → start a lease
+ *            signing for a vehicle / equipment-owner subject (links it back)
+ *   GET    /api/agreements/equipment-lease/requests?subjectType=&subjectId=
+ *            → the subject's lease signings with live status + signed-PDF URL
  *
  * Every template-returning endpoint serves the flat template DTO with a nested
  * `fields` array (FN-1793 `getTemplateWithFields`). Upload is a direct multipart
@@ -88,5 +102,39 @@ export class AgreementService {
   /** Poll a request's status and signed-PDF download URL once signed. */
   getRequest(id: string): Observable<SignatureRequest> {
     return this.http.get<SignatureRequest>(`${this.base}/requests/${id}`);
+  }
+
+  // ── FN-1801: equipment / motor-carrier lease adapter (FN-1800) ──────────────
+
+  /**
+   * Start an Equipment/Motor-Carrier Lease Agreement signing for a subject (a
+   * fleet vehicle or an equipment-owner / lessor payee). Delegates to the generic
+   * engine and records the equipment linkage so the signing shows on the
+   * subject's record. Returns `{ requestId, signerLink, status, link }`.
+   */
+  startEquipmentLeaseSigning(
+    payload: StartEquipmentLeaseSigningPayload
+  ): Observable<StartEquipmentLeaseSigningResult> {
+    return this.http.post<StartEquipmentLeaseSigningResult>(
+      `${this.base}/equipment-lease/requests`,
+      payload
+    );
+  }
+
+  /**
+   * List a subject's lease signings (newest first), each enriched with the live
+   * request status (sent / viewed / signed) and a signed-PDF download URL once
+   * signed. Backs the lease-status display on the vehicle / equipment-owner record.
+   */
+  listEquipmentLeaseSignings(
+    subjectType: EquipmentLeaseSubjectType,
+    subjectId: string
+  ): Observable<EquipmentLeaseSigning[]> {
+    const params = new HttpParams()
+      .set('subjectType', subjectType)
+      .set('subjectId', subjectId);
+    return this.http
+      .get<{ data: EquipmentLeaseSigning[] }>(`${this.base}/equipment-lease/requests`, { params })
+      .pipe(map((res) => res?.data ?? []));
   }
 }
