@@ -58,6 +58,11 @@
               <span class="material-symbols-outlined">auto_fix_high</span>
               Edit
             </button>
+            <!-- FN-1801 — equipment-lease entry point -->
+            <button type="button" class="btn-sm btn-outline btn-ai btn-ai-sm" (click)="startLeaseAgreement(owner)">
+              <span class="material-symbols-outlined">upload_file</span>
+              Lease agreement
+            </button>
             <button type="button" class="btn-sm btn-danger btn-ai-danger" (click)="deactivate(owner)" [disabled]="!owner.is_active">Deactivate</button>
           </td>
         </tr>

@@ -6,6 +6,12 @@
     </div>
   </header>
 
+  <!-- FN-1801 — equipment-lease context banner when scoped to a subject. -->
+  <div class="alert alert-info subject-banner" *ngIf="subjectLabel">
+    <span class="material-symbols-outlined">link</span>
+    Lease agreement for <strong>{{ subjectLabel }}</strong> — once signed, it will be linked to this record.
+  </div>
+
   <div class="card upload-card">
     <label class="field-label" for="agreement-name">Template name</label>
     <input

@@ -38,6 +38,8 @@ describe('AgreementReviewComponent', () => {
   let fixture: ComponentFixture<AgreementReviewComponent>;
   let component: AgreementReviewComponent;
   let serviceStub: jasmine.SpyObj<AgreementService>;
+  // FN-1801 — query params the ActivatedRoute stub serves; mutate before setup().
+  let routeQueryParams: Record<string, string>;
 
   function setup(fields: AgreementField[]): void {
     serviceStub.getTemplate.and.returnValue(of(detail(fields)));
@@ -47,6 +49,7 @@ describe('AgreementReviewComponent', () => {
   }
 
   beforeEach(() => {
+    routeQueryParams = {};
     serviceStub = jasmine.createSpyObj<AgreementService>('AgreementService', [
       'getTemplate', 'saveFields',
     ]);
@@ -59,7 +62,12 @@ describe('AgreementReviewComponent', () => {
         { provide: Router, useValue: { navigate: jasmine.createSpy('navigate') } },
         {
           provide: ActivatedRoute,
-          useValue: { snapshot: { paramMap: { get: () => 't1' } } },
+          useValue: {
+            snapshot: {
+              paramMap: { get: () => 't1' },
+              queryParamMap: { get: (k: string) => routeQueryParams[k] ?? null },
+            },
+          },
         },
       ],
     }).overrideComponent(AgreementReviewComponent, {
@@ -142,5 +150,20 @@ describe('AgreementReviewComponent', () => {
     const [, , finalize] = serviceStub.saveFields.calls.mostRecent().args;
     expect(finalize).toBeFalse();
     expect(router.navigate).not.toHaveBeenCalled();
+  });
+
+  // FN-1801 — when scoped to an equipment subject, finalize continues into send.
+  it('finalize continues into the send step (preserving params) when scoped to a subject', () => {
+    routeQueryParams = { subjectType: 'vehicle', subjectId: 'veh-1', subjectLabel: 'Unit 12' };
+    setup([field({ role: 'internal' })]);
+    expect(component.hasSubjectContext).toBeTrue();
+    const router = TestBed.inject(Router);
+
+    component.save(true);
+
+    expect(router.navigate).toHaveBeenCalledWith(
+      ['/agreements', 't1', 'send'],
+      { queryParamsHandling: 'preserve' }
+    );
   });
 });

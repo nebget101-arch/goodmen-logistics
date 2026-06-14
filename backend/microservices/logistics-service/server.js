@@ -60,6 +60,7 @@ const dbExampleRouter = require(path.join(sharedRoot, 'routes', 'db-example'));
 const settlementsRouter = require(path.join(sharedRoot, 'routes', 'settlements'));
 const leaseFinancingRouter = require(path.join(sharedRoot, 'routes', 'lease-financing'));
 const agreementsRouter = require(path.join(sharedRoot, 'routes', 'agreements'));
+const equipmentLeaseSigningsRouter = require(path.join(sharedRoot, 'routes', 'equipment-lease-signings'));
 const publicAgreementsRouter = require(path.join(sharedRoot, 'routes', 'public-agreements'));
 const iftaRouter = require(path.join(sharedRoot, 'routes', 'ifta'));
 const expensePaymentCategoriesRouter = require(path.join(sharedRoot, 'routes', 'expense-payment-categories'));
@@ -127,6 +128,11 @@ app.use('/api/credit', authMiddleware, tenantContextMiddleware, requireActiveSub
 app.use('/api/db-example', authMiddleware, tenantContextMiddleware, requireActiveSubscription, dbExampleRouter);
 app.use('/api/settlements', authMiddleware, tenantContextMiddleware, requireActiveSubscription, requireSettlementsPlan, settlementsRouter);
 app.use('/api', authMiddleware, tenantContextMiddleware, requireActiveSubscription, requireLeaseFinancingPlan, leaseFinancingRouter);
+// FN-1800: Equipment Lease Agreement adapter. Mounted BEFORE the generic
+// agreements router because the generic router owns POST /:templateId/requests,
+// which would otherwise swallow /api/agreements/equipment-lease/requests with
+// templateId="equipment-lease". The more specific mount must win.
+app.use('/api/agreements/equipment-lease', authMiddleware, tenantContextMiddleware, requireActiveSubscription, equipmentLeaseSigningsRouter);
 app.use('/api/agreements', authMiddleware, tenantContextMiddleware, requireActiveSubscription, agreementsRouter);
 app.use('/api', authMiddleware, tenantContextMiddleware, requireActiveSubscription, requireIftaPlan, iftaRouter);
 app.use('/api/expense-payment-categories', authMiddleware, tenantContextMiddleware, requireActiveSubscription, expensePaymentCategoriesRouter);

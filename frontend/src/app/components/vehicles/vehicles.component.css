@@ -1521,3 +1521,141 @@
   font-size: 14px;
   line-height: 1;
 }
+
+/* ── FN-1801: Lease Agreement tab (equipment-lease adapter, story FN-1789) ─── */
+.vehicles-details-modal .lease-agreement-tab {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.vehicles-details-modal .lease-header-strip {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  background: rgba(30, 41, 59, 0.5);
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  border-left: 4px solid rgba(59, 130, 246, 0.6);
+  border-radius: 12px;
+  padding: 14px 18px;
+}
+
+.vehicles-details-modal .lease-intro {
+  margin: 0;
+  flex: 1 1 280px;
+  font-size: 12.5px;
+  color: rgba(203, 213, 225, 0.9);
+}
+
+.vehicles-details-modal .lease-state {
+  padding: 18px;
+  border-radius: 12px;
+  text-align: center;
+  font-size: 13px;
+  background: rgba(30, 41, 59, 0.4);
+  border: 1px dashed rgba(148, 163, 184, 0.3);
+  color: rgba(203, 213, 225, 0.85);
+}
+
+.vehicles-details-modal .lease-state--error {
+  border-style: solid;
+  border-color: rgba(239, 68, 68, 0.5);
+  color: rgba(252, 165, 165, 0.95);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: center;
+}
+
+.vehicles-details-modal .lease-empty {
+  padding: 18px;
+  border-radius: 12px;
+  text-align: center;
+  font-size: 13px;
+  background: rgba(30, 41, 59, 0.4);
+  border: 1px dashed rgba(148, 163, 184, 0.3);
+  color: rgba(148, 163, 184, 0.95);
+}
+
+.vehicles-details-modal .lease-signings-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12.5px;
+  color: var(--text-dark);
+  background: rgba(30, 41, 59, 0.5);
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.vehicles-details-modal .lease-signings-table thead th {
+  background: rgba(15, 23, 42, 0.6);
+  color: rgba(148, 163, 184, 0.95);
+  font-weight: 600;
+  text-transform: uppercase;
+  font-size: 10.5px;
+  letter-spacing: 0.06em;
+  text-align: left;
+  padding: 10px 12px;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.25);
+}
+
+.vehicles-details-modal .lease-signings-table tbody td {
+  padding: 10px 12px;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.12);
+}
+
+.vehicles-details-modal .lease-status {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: rgba(148, 163, 184, 0.18);
+  border: 1px solid rgba(148, 163, 184, 0.4);
+  color: rgba(203, 213, 225, 0.95);
+  white-space: nowrap;
+}
+
+.vehicles-details-modal .lease-status--sent,
+.vehicles-details-modal .lease-status--viewed {
+  background: rgba(245, 158, 11, 0.18);
+  border-color: rgba(245, 158, 11, 0.5);
+  color: #fcd34d;
+}
+
+.vehicles-details-modal .lease-status--signed,
+.vehicles-details-modal .lease-status--completed {
+  background: rgba(34, 197, 94, 0.18);
+  border-color: rgba(34, 197, 94, 0.5);
+  color: #86efac;
+}
+
+.vehicles-details-modal .lease-status--expired,
+.vehicles-details-modal .lease-status--voided {
+  background: rgba(239, 68, 68, 0.18);
+  border-color: rgba(239, 68, 68, 0.5);
+  color: #fca5a5;
+}
+
+.vehicles-details-modal .lease-download-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: #93c5fd;
+  text-decoration: none;
+  font-weight: 600;
+}
+
+.vehicles-details-modal .lease-download-link:hover {
+  text-decoration: underline;
+}
+
+.vehicles-details-modal .lease-download-link .material-symbols-outlined {
+  font-size: 16px;
+}
+
+.vehicles-details-modal .lease-download-empty {
+  color: rgba(148, 163, 184, 0.7);
+}

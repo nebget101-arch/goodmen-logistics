@@ -9,6 +9,7 @@ import {
   statusLabel,
   isComplete,
 } from '../signature-request.model';
+import { EquipmentLeaseSubjectType } from '../equipment-lease-signing.model';
 
 /**
  * FN-1798 — internal "fill & send for signature" screen.
@@ -18,6 +19,12 @@ import {
  * backend (FN-1797) generates a tokenized signer link and dispatches it; we
  * surface the link + live status, and the signed-PDF download once the signer
  * completes it.
+ *
+ * FN-1801 — when this screen is reached with equipment-subject context
+ * (`subjectType`/`subjectId` query params, set by the vehicle / equipment-owner
+ * entry point), the send is routed through the equipment-lease adapter (FN-1800)
+ * so the resulting signature request is linked back to that subject. No new
+ * signing UI — the only change is which endpoint the send call hits.
  */
 @Component({
   selector: 'app-agreement-send',
@@ -37,6 +44,11 @@ export class AgreementSendComponent implements OnInit {
   values: Record<string, string | boolean> = {};
 
   signer: SignerContact = { name: '', email: '', phone: '', role: '' };
+
+  /** FN-1801 — equipment-subject context (optional); routes the send via FN-1800. */
+  subjectType = '';
+  subjectId = '';
+  subjectLabel = '';
 
   loading = false;
   sending = false;
@@ -58,7 +70,16 @@ export class AgreementSendComponent implements OnInit {
 
   ngOnInit(): void {
     this.templateId = this.route.snapshot.paramMap.get('id') || '';
+    const qp = this.route.snapshot.queryParamMap;
+    this.subjectType = qp.get('subjectType') || '';
+    this.subjectId = qp.get('subjectId') || '';
+    this.subjectLabel = qp.get('subjectLabel') || '';
     if (this.templateId) this.load();
+  }
+
+  /** FN-1801 — true when the send should link to an equipment subject (FN-1800). */
+  get hasSubjectContext(): boolean {
+    return !!this.subjectType && !!this.subjectId;
   }
 
   load(): void {
@@ -134,25 +155,52 @@ export class AgreementSendComponent implements OnInit {
       fieldValues[f.fieldKey] = this.values[f.fieldKey];
     }
 
-    const payload: CreateSignatureRequestPayload = {
-      fieldValues,
-      signer: {
-        name: this.signer.name.trim(),
-        email: this.signer.email?.trim() || undefined,
-        phone: this.signer.phone?.trim() || undefined,
-        role: this.signer.role?.trim() || undefined,
-      },
+    const signer = {
+      name: this.signer.name.trim(),
+      email: this.signer.email?.trim() || undefined,
+      phone: this.signer.phone?.trim() || undefined,
+      role: this.signer.role?.trim() || undefined,
     };
+
+    const onError = (err: any) => {
+      this.sending = false;
+      this.sendError = err?.error?.error || 'Could not send the request. Please try again.';
+    };
+
+    // FN-1801 — equipment-lease subject: route through the FN-1800 adapter so the
+    // signing is linked back to the vehicle / equipment-owner. The response is a
+    // superset of the generic create result (requestId + signerLink + status).
+    if (this.hasSubjectContext) {
+      this.agreements
+        .startEquipmentLeaseSigning({
+          subjectType: this.subjectType as EquipmentLeaseSubjectType,
+          subjectId: this.subjectId,
+          templateId: this.templateId,
+          fieldValues,
+          signer,
+        })
+        .subscribe({
+          next: (res) => {
+            this.sending = false;
+            this.result = {
+              requestId: res.requestId,
+              status: res.status,
+              signerLink: res.signerLink,
+            };
+          },
+          error: onError,
+        });
+      return;
+    }
+
+    const payload: CreateSignatureRequestPayload = { fieldValues, signer };
 
     this.agreements.createRequest(this.templateId, payload).subscribe({
       next: (res) => {
         this.sending = false;
         this.result = res;
       },
-      error: (err) => {
-        this.sending = false;
-        this.sendError = err?.error?.error || 'Could not send the request. Please try again.';
-      },
+      error: onError,
     });
   }
 
