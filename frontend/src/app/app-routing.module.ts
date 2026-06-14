@@ -184,6 +184,8 @@ const routes: Routes = [
     loadComponent: () =>
       import('./public-track/public-track.component').then(m => m.PublicTrackComponent)
   },
+  // FN-1794 — agreement upload + AI field-mapping review (lazy module).
+  { path: 'agreements', loadChildren: () => import('./agreements/agreements.module').then(m => m.AgreementsModule) },
   { path: 'shop-clients', loadChildren: () => import('./customer-management/customer-management.module').then(m => m.CustomerManagementModule) },
   { path: 'invoices', loadChildren: () => import('./invoicing/invoicing.module').then(m => m.InvoicingModule) },
   { path: 'settlements', loadChildren: () => import('./settlements/settlements.module').then(m => m.SettlementsModule) },

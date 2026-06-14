@@ -1,0 +1,116 @@
+.agreements-page {
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 24px 16px 64px;
+}
+
+.page-head h1 {
+  margin: 0 0 4px;
+  font-size: 22px;
+  font-weight: 700;
+  color: #f1f5f9;
+}
+
+.page-head .sub {
+  margin: 0;
+  font-size: 14px;
+  color: #94a3b8;
+  max-width: 56ch;
+}
+
+.upload-card {
+  margin-top: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.field-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: #cbd5e1;
+}
+
+/* Drop zone — mirrors the fuel import wizard pattern. */
+.drop-zone {
+  border: 2px dashed rgba(255, 255, 255, 0.15);
+  border-radius: 12px;
+  padding: 44px 24px;
+  text-align: center;
+  transition: all 0.2s;
+  cursor: pointer;
+}
+
+.drop-zone.drag-over {
+  border-color: #38bdf8;
+  background: rgba(56, 189, 248, 0.06);
+}
+
+.drop-zone.has-file {
+  border-color: rgba(34, 197, 94, 0.4);
+  background: rgba(34, 197, 94, 0.04);
+}
+
+.drop-inner { display: flex; flex-direction: column; align-items: center; gap: 10px; }
+.drop-icon { font-size: 52px; color: rgba(56, 189, 248, 0.55); }
+.green-icon { color: #4ade80 !important; }
+.drop-inner p { font-size: 15px; color: #cbd5e1; margin: 0; }
+.drop-or { font-size: 12px; color: #475569; }
+.file-name { font-size: 15px; font-weight: 600; color: #f1f5f9; margin: 0; }
+.file-size { font-size: 12px; color: #64748b; }
+
+.browse-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  background: #38bdf8;
+  color: #0f172a;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.browse-btn:hover { background: #0ea5e9; }
+
+.link-btn {
+  background: none;
+  border: none;
+  color: #94a3b8;
+  font-size: 12px;
+  text-decoration: underline;
+  cursor: pointer;
+  padding: 0;
+}
+.link-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.alert-error {
+  background: rgba(239, 68, 68, 0.12);
+  border: 1px solid rgba(239, 68, 68, 0.4);
+  color: #fca5a5;
+  border-radius: 10px;
+  padding: 10px 12px;
+  font-size: 13px;
+}
+
+.actions { display: flex; justify-content: flex-end; }
+
+.btn-primary {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 18px;
+  background: linear-gradient(135deg, #2563eb, #1d4ed8);
+  color: #fff;
+  border: none;
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: filter 0.15s, opacity 0.15s;
+}
+.btn-primary:hover:not(:disabled) { filter: brightness(1.08); }
+.btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+.btn-primary .material-symbols-outlined { font-size: 18px; }

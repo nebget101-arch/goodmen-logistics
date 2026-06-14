@@ -1,0 +1,106 @@
+<div class="agreements-page">
+  <header class="page-head">
+    <div>
+      <h1>Review Detected Fields</h1>
+      <p class="sub" *ngIf="template">
+        <strong>{{ template.name }}</strong>
+        <span class="dot">•</span>{{ template.documentType }}
+        <span class="dot">•</span>{{ template.pageCount }} page{{ template.pageCount === 1 ? '' : 's' }}
+        <span class="status-pill" [class.ready]="template.status === 'ready'">{{ template.status }}</span>
+      </p>
+    </div>
+    <a class="link-back" *ngIf="template?.sourceDownloadUrl" [href]="template?.sourceDownloadUrl" target="_blank" rel="noopener">
+      <span class="material-symbols-outlined">open_in_new</span> View source PDF
+    </a>
+  </header>
+
+  <!-- Loading / error states -->
+  <div class="card state" *ngIf="loading">Loading field map…</div>
+  <div class="card state error" *ngIf="loadError">{{ loadError }}</div>
+
+  <ng-container *ngIf="!loading && !loadError && template">
+    <!-- Review summary banner -->
+    <div class="review-banner" [class.has-flags]="lowConfidenceCount > 0">
+      <span class="material-symbols-outlined">{{ lowConfidenceCount > 0 ? 'warning' : 'task_alt' }}</span>
+      <span *ngIf="lowConfidenceCount > 0">
+        {{ lowConfidenceCount }} of {{ fields.length }} field{{ fields.length === 1 ? '' : 's' }}
+        below {{ (lowConfidenceThreshold * 100) }}% confidence — please review the highlighted rows.
+      </span>
+      <span *ngIf="lowConfidenceCount === 0">
+        All {{ fields.length }} detected fields are above the confidence threshold.
+      </span>
+    </div>
+
+    <div class="card fields-card">
+      <div class="fields-head">
+        <span class="col-field">Field</span>
+        <span class="col-type">Type</span>
+        <span class="col-page">Page</span>
+        <span class="col-conf">Confidence</span>
+        <span class="col-role">Role</span>
+      </div>
+
+      <div
+        class="field-row"
+        *ngFor="let field of fields; trackBy: trackByField"
+        [class.low-confidence]="isLowConfidence(field)"
+      >
+        <div class="col-field">
+          <span class="material-symbols-outlined flag-icon" *ngIf="isLowConfidence(field)" title="Low confidence — review">flag</span>
+          <div class="field-label-wrap">
+            <input class="form-input label-input" type="text" [(ngModel)]="field.label" [attr.aria-label]="'Label for ' + field.fieldKey" />
+            <span class="field-key">{{ field.fieldKey }}</span>
+          </div>
+        </div>
+
+        <div class="col-type">
+          <span class="type-chip" [attr.data-type]="field.fieldType">
+            <span class="material-symbols-outlined">{{ typeIcon(field.fieldType) }}</span>
+            {{ field.fieldType }}
+          </span>
+        </div>
+
+        <div class="col-page">{{ field.page }}</div>
+
+        <div class="col-conf">
+          <app-confidence-badge variant="field" [score]="field.confidence"></app-confidence-badge>
+          <span class="conf-pct" [class.low]="isLowConfidence(field)">{{ confidencePercent(field) }}%</span>
+        </div>
+
+        <div class="col-role">
+          <div class="role-toggle" role="group" [attr.aria-label]="'Role for ' + field.label">
+            <button
+              type="button"
+              class="role-opt"
+              [class.active]="field.role === 'internal'"
+              (click)="setFieldRole(field, 'internal')"
+            >Internal</button>
+            <button
+              type="button"
+              class="role-opt"
+              [class.active]="field.role === 'signer'"
+              (click)="setFieldRole(field, 'signer')"
+            >Signer</button>
+          </div>
+          <span class="ai-hint" *ngIf="isRoleOverridden(field)" title="Changed from the AI suggestion">
+            AI suggested {{ roleLabel(field.suggestedRole) }}
+          </span>
+        </div>
+      </div>
+
+      <div class="empty" *ngIf="fields.length === 0">No fields were detected in this document.</div>
+    </div>
+
+    <div class="alert alert-error" *ngIf="saveError">{{ saveError }}</div>
+
+    <div class="footer-actions">
+      <button type="button" class="btn-ghost" [disabled]="saving" (click)="save(false)">
+        {{ saving ? 'Saving…' : 'Save draft' }}
+      </button>
+      <button type="button" class="btn-primary" [disabled]="saving || fields.length === 0" (click)="save(true)">
+        <span class="material-symbols-outlined">check</span>
+        Finalize template
+      </button>
+    </div>
+  </ng-container>
+</div>

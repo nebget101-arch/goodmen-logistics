@@ -1,0 +1,55 @@
+<div class="agreements-page">
+  <header class="page-head">
+    <div>
+      <h1>New Agreement Template</h1>
+      <p class="sub">Upload a PDF and let AI detect the fields and signature blocks. You'll review the field map before finalizing.</p>
+    </div>
+  </header>
+
+  <div class="card upload-card">
+    <label class="field-label" for="agreement-name">Template name</label>
+    <input
+      id="agreement-name"
+      class="form-input"
+      type="text"
+      placeholder="e.g. Motor Carrier Lease Agreement"
+      [(ngModel)]="templateName"
+      [disabled]="uploading"
+    />
+
+    <div
+      class="drop-zone"
+      [class.drag-over]="dragOver"
+      [class.has-file]="!!selectedFile"
+      (dragover)="onDragOver($event)"
+      (dragleave)="onDragLeave()"
+      (drop)="onDrop($event)"
+    >
+      <div class="drop-inner" *ngIf="!selectedFile">
+        <span class="material-symbols-outlined drop-icon">picture_as_pdf</span>
+        <p>Drag &amp; drop a PDF here</p>
+        <span class="drop-or">or</span>
+        <label class="browse-btn">
+          Browse Files
+          <input type="file" accept="application/pdf,.pdf" (change)="onFileChange($event)" hidden />
+        </label>
+      </div>
+
+      <div class="drop-inner" *ngIf="selectedFile">
+        <span class="material-symbols-outlined drop-icon green-icon">check_circle</span>
+        <p class="file-name">{{ selectedFile.name }}</p>
+        <span class="file-size">{{ (selectedFile.size / 1024 / 1024).toFixed(2) }} MB</span>
+        <button type="button" class="link-btn" (click)="clearFile()" [disabled]="uploading">Choose a different file</button>
+      </div>
+    </div>
+
+    <div class="alert alert-error" *ngIf="error">{{ error }}</div>
+
+    <div class="actions">
+      <button type="button" class="btn-primary" [disabled]="!canSubmit" (click)="submit()">
+        <span class="material-symbols-outlined" *ngIf="!uploading">auto_awesome</span>
+        {{ uploading ? 'Detecting fields…' : 'Upload & detect fields' }}
+      </button>
+    </div>
+  </div>
+</div>
