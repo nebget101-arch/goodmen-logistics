@@ -16,3 +16,7 @@ Track all work progress through the development lifecycle.
 | FN-569 | Subtask Created | 2026-03-31 | Backend: Fix expense responsibility POST close old records + GET sort order — Selected for Dev |
 | FN-570 | Subtask Created | 2026-03-31 | Frontend: Decouple saveExpenseResponsibility from savePayeeAssignment — Selected for Dev |
 | FN-571 | Subtask Created | 2026-03-31 | QA: Validate expense responsibility persists — Blocked pending FN-569, FN-570 |
+| FN-1782 | Story Created | 2026-06-14 | Enforce DOT document readiness before a truck/trailer can be made Active — Backlog |
+| FN-1783 | Subtask Created | 2026-06-14 | Backend: readiness rule engine + /readiness endpoint + activation guard (422) — Selected for Dev |
+| FN-1784 | Subtask Created | 2026-06-14 | Frontend: activation gating + document-readiness checklist + badge — Selected for Dev |
+| FN-1785 | Subtask Created | 2026-06-14 | QA: validate DOT readiness gate (API + UI) — Blocked pending FN-1783, FN-1784 |
