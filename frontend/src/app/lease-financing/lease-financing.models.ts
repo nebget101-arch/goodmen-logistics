@@ -26,6 +26,27 @@ export interface LeaseAgreement {
   risk_level?: 'low' | 'medium' | 'high';
   risk_score?: number;
   status: LeaseAgreementStatus;
+  // FN-1804 / FN-1803 — e-sign lifecycle fields surfaced from `lease_agreements`.
+  // Set by the backend send-for-signature endpoint and signature-completion hook.
+  sent_for_signature_at?: string | null;
+  signed_at?: string | null;
+  document_storage_key?: string | null;
+  document_download_url?: string | null;
+  /** Public signing URL for the driver, returned when a request is created/sent. */
+  signer_link?: string | null;
+  /** Linked signature-request id (engine) for status polling, if exposed. */
+  signature_request_id?: string | null;
+}
+
+/**
+ * FN-1804 — response of `POST /api/lease-agreements/:id/send-for-signature` (FN-1803).
+ * Returns the updated agreement (now `pending_signature`) plus the engine's
+ * signer link so the carrier can share/copy it without leaving the lease detail.
+ */
+export interface SendForSignatureResult {
+  agreement: LeaseAgreement;
+  signature_request_id?: string;
+  signer_link?: string | null;
 }
 
 export interface LeaseScheduleRow {

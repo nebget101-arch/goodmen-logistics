@@ -13,7 +13,7 @@ import { LeaseFinancingService } from '../../lease-financing.service';
           <p class="hero-pill">🤖 AI-optimized lease control</p>
           <h2>Agreement {{ agreement.agreement_number }}</h2>
           <p class="subtitle">
-            <span class="status-pill" [ngClass]="statusClass(agreement.status)">{{ agreement.status }}</span>
+            <span class="status-pill" [ngClass]="statusClass(agreement.status)">{{ statusLabel(agreement.status) }}</span>
             <span>Driver: {{ agreement.driver_name || agreement.driver_id }}</span>
             <span>Truck: {{ agreement.truck_label || agreement.truck_id }}</span>
           </p>
@@ -21,6 +21,13 @@ import { LeaseFinancingService } from '../../lease-financing.service';
         </div>
 
         <div class="actions">
+          <button
+            type="button"
+            class="btn btn-signature"
+            *ngIf="canSendForSignature()"
+            (click)="sendForSignature()"
+            [disabled]="sending"
+          >{{ sending ? 'Sending…' : (agreement.status==='pending_signature' ? '✍️ Resend for signature' : '✍️ Send for signature') }}</button>
           <button
             type="button"
             class="btn btn-primary"
@@ -44,6 +51,30 @@ import { LeaseFinancingService } from '../../lease-financing.service';
           <button type="button" class="btn btn-primary" (click)="uploadContract()" [disabled]="!selectedFile">Upload</button>
           <a *ngIf="agreement.document_download_url" class="btn btn-ghost link-btn" [href]="agreement.document_download_url" target="_blank" rel="noreferrer">Download</a>
         </div>
+      </div>
+
+      <div class="glass-card section signing-section"
+           *ngIf="agreement.status==='pending_signature' || agreement.signed_at || agreement.sent_for_signature_at || signerLink">
+        <h3>✍️ Driver Signature</h3>
+        <p class="signing-status">
+          <span class="status-pill" [ngClass]="statusClass(agreement.status)">{{ statusLabel(agreement.status) }}</span>
+        </p>
+        <ul class="signing-meta">
+          <li *ngIf="agreement.sent_for_signature_at">
+            Sent for signature: <strong>{{ agreement.sent_for_signature_at | date:'medium' }}</strong>
+          </li>
+          <li *ngIf="agreement.signed_at">
+            Signed: <strong>{{ agreement.signed_at | date:'medium' }}</strong>
+          </li>
+          <li *ngIf="agreement.status==='pending_signature' && !agreement.signed_at" class="muted">
+            Awaiting the driver's e-signature. The secure signing link was sent to {{ agreement.driver_name || 'the driver' }}.
+          </li>
+        </ul>
+        <div class="signing-actions" *ngIf="signerLink">
+          <a class="btn btn-ghost link-btn" [href]="signerLink" target="_blank" rel="noreferrer">Open signing page</a>
+          <button type="button" class="btn btn-ghost" (click)="copySignerLink()">{{ linkCopied ? '✓ Copied' : '🔗 Copy link' }}</button>
+        </div>
+        <p *ngIf="sendError" class="error">{{ sendError }}</p>
       </div>
 
       <div class="glass-card section">
@@ -164,7 +195,17 @@ import { LeaseFinancingService } from '../../lease-financing.service';
       border-color: rgba(133, 167, 255, .42);
       color: #d9e4ff;
     }
+    .btn-signature {
+      background: linear-gradient(135deg, #8b5cf6 0%, #6366f1 100%);
+      box-shadow: 0 10px 18px rgba(124, 92, 255, .26);
+    }
     .link-btn { text-decoration: none; display: inline-flex; align-items: center; }
+
+    .signing-meta { list-style: none; margin: .6rem 0 0; padding: 0; display: grid; gap: .35rem; }
+    .signing-meta li { color: #cfe0ff; font-size: .9rem; }
+    .signing-meta .muted { color: #9fb4e6; }
+    .signing-status { margin: 0; }
+    .signing-actions { display: flex; flex-wrap: wrap; gap: .55rem; margin-top: .75rem; }
 
     .section { margin-top: .95rem; position: relative; }
     .glass-card {
@@ -236,6 +277,7 @@ import { LeaseFinancingService } from '../../lease-financing.service';
       color: #8bffd4;
     }
     .status-pill.pending,
+    .status-pill.pending_signature,
     .status-pill.medium,
     .status-pill.partial {
       background: rgba(255, 187, 64, .18);
@@ -267,6 +309,10 @@ export class LeaseAgreementDetailComponent implements OnInit {
   error = '';
   selectedFile: File | null = null;
   manual: { amount_paid: number | null; reference_number: string } = { amount_paid: null, reference_number: '' };
+  sending = false;
+  sendError = '';
+  signerLink: string | null = null;
+  linkCopied = false;
 
   constructor(private route: ActivatedRoute, private router: Router, private lease: LeaseFinancingService) {}
 
@@ -276,9 +322,46 @@ export class LeaseAgreementDetailComponent implements OnInit {
     const id = this.route.snapshot.paramMap.get('id') || '';
     this.loading = true;
     this.lease.getAgreement(id).subscribe({
-      next: (res) => { this.agreement = res; this.loading = false; },
+      next: (res) => {
+        this.agreement = res;
+        // Surface a signer link if the backend exposes one on the agreement.
+        if (res?.signer_link) this.signerLink = res.signer_link;
+        this.loading = false;
+      },
       error: (err) => { this.error = err?.error?.error || 'Failed to load agreement'; this.loading = false; }
     });
+  }
+
+  /** Send-for-signature is offered while the lease is draft or already out for signature (resend). */
+  canSendForSignature(): boolean {
+    const s = this.agreement?.status;
+    return s === 'draft' || s === 'pending_signature';
+  }
+
+  sendForSignature(): void {
+    if (!this.agreement?.id || this.sending) return;
+    this.sending = true;
+    this.sendError = '';
+    this.linkCopied = false;
+    this.lease.sendForSignature(this.agreement.id).subscribe({
+      next: (res) => {
+        this.sending = false;
+        if (res?.signer_link) this.signerLink = res.signer_link;
+        this.load();
+      },
+      error: (err) => {
+        this.sending = false;
+        this.sendError = err?.error?.error || 'Failed to send agreement for signature';
+      }
+    });
+  }
+
+  copySignerLink(): void {
+    if (!this.signerLink) return;
+    const done = () => { this.linkCopied = true; setTimeout(() => (this.linkCopied = false), 2000); };
+    if (navigator?.clipboard?.writeText) {
+      navigator.clipboard.writeText(this.signerLink).then(done).catch(() => {});
+    }
   }
 
   toEdit(): void { this.router.navigate(['/finance/lease-to-own', this.agreement.id, 'edit']); }
@@ -305,5 +388,11 @@ export class LeaseAgreementDetailComponent implements OnInit {
 
   statusClass(status?: string): string {
     return (status || '').toLowerCase();
+  }
+
+  statusLabel(status?: string): string {
+    if (status === 'pending_signature') return 'Pending signature';
+    const s = (status || '').replace(/_/g, ' ');
+    return s ? s.charAt(0).toUpperCase() + s.slice(1) : '';
   }
 }

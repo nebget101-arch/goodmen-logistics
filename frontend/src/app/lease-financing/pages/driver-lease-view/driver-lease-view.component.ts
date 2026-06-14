@@ -16,6 +16,20 @@ import { LeaseFinancingService } from '../../lease-financing.service';
       <p *ngIf="error" class="error">{{ error }}</p>
 
       <ng-container *ngIf="agreement">
+        <div class="sign-banner" *ngIf="agreement.status === 'pending_signature' && !agreement.signed_at">
+          <div class="sign-banner-text">
+            <p class="sign-banner-title">✍️ Your lease agreement is ready to sign</p>
+            <p class="sign-banner-sub" *ngIf="agreement.signer_link">Review the agreement and apply your e-signature to activate your lease.</p>
+            <p class="sign-banner-sub" *ngIf="!agreement.signer_link">We've emailed you a secure signing link. Check your inbox to review and sign your lease agreement.</p>
+          </div>
+          <a *ngIf="agreement.signer_link" class="sign-banner-btn" [href]="agreement.signer_link" target="_blank" rel="noreferrer">Review &amp; sign</a>
+        </div>
+
+        <div class="signed-banner" *ngIf="agreement.signed_at">
+          <span>✅ Signed on {{ agreement.signed_at | date:'mediumDate' }}.</span>
+          <a *ngIf="agreement.document_download_url" [href]="agreement.document_download_url" target="_blank" rel="noreferrer">Download signed copy</a>
+        </div>
+
         <div class="kpi-grid">
           <article class="glass-card kpi">
             <p class="kpi-label">Agreement</p>
@@ -99,6 +113,44 @@ import { LeaseFinancingService } from '../../lease-financing.service';
       color: #cfe3ff;
     }
     h2 { margin: 0; color: #f5f8ff; font-size: 1.6rem; }
+
+    .sign-banner {
+      display: flex;
+      flex-wrap: wrap;
+      gap: .75rem;
+      align-items: center;
+      justify-content: space-between;
+      padding: .9rem 1rem;
+      margin-bottom: .9rem;
+      border-radius: 14px;
+      background: rgba(99, 102, 241, .16);
+      border: 1px solid rgba(139, 92, 246, .42);
+    }
+    .sign-banner-title { margin: 0; color: #e7ecff; font-weight: 700; }
+    .sign-banner-sub { margin: .2rem 0 0; color: #c3d5ff; font-size: .9rem; }
+    .sign-banner-btn {
+      text-decoration: none;
+      padding: .55rem .95rem;
+      border-radius: 10px;
+      font-weight: 700;
+      color: #fff;
+      background: linear-gradient(135deg, #8b5cf6 0%, #6366f1 100%);
+      box-shadow: 0 10px 18px rgba(124, 92, 255, .26);
+    }
+    .signed-banner {
+      display: flex;
+      flex-wrap: wrap;
+      gap: .65rem;
+      align-items: center;
+      padding: .7rem 1rem;
+      margin-bottom: .9rem;
+      border-radius: 14px;
+      background: rgba(30, 194, 136, .16);
+      border: 1px solid rgba(39, 226, 156, .4);
+      color: #8bffd4;
+      font-weight: 600;
+    }
+    .signed-banner a { color: #8bffd4; text-decoration: underline; }
 
     .kpi-grid {
       display: grid;

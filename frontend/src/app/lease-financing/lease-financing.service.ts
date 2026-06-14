@@ -2,7 +2,7 @@ import { Injectable } from '@angular/core';
 import { HttpClient, HttpParams } from '@angular/common/http';
 import { Observable } from 'rxjs';
 import { environment } from '../../environments/environment';
-import { FinancingSummary, LeaseAgreement, LeasePaymentTransaction, LeaseScheduleRow, RiskRow } from './lease-financing.models';
+import { FinancingSummary, LeaseAgreement, LeasePaymentTransaction, LeaseScheduleRow, RiskRow, SendForSignatureResult } from './lease-financing.models';
 
 @Injectable({ providedIn: 'root' })
 export class LeaseFinancingService {
@@ -42,6 +42,17 @@ export class LeaseFinancingService {
 
   signAgreement(id: string, payload: Record<string, unknown>): Observable<LeaseAgreement> {
     return this.http.post<LeaseAgreement>(`${this.baseUrl}/lease-agreements/${id}/sign`, payload);
+  }
+
+  /**
+   * FN-1804 / FN-1803 — send the lease-to-own agreement to its driver for e-signature.
+   * The backend (FN-1803) creates a signature request via the generic engine for the
+   * agreement's driver, sets `sent_for_signature_at` + `status='pending_signature'`, and
+   * returns the updated agreement plus the public signer link. No duplicate signing UI:
+   * the carrier shares/opens the engine's link from the lease detail.
+   */
+  sendForSignature(id: string, payload: Record<string, unknown> = {}): Observable<SendForSignatureResult> {
+    return this.http.post<SendForSignatureResult>(`${this.baseUrl}/lease-agreements/${id}/send-for-signature`, payload);
   }
 
   uploadContract(id: string, file: File): Observable<any> {

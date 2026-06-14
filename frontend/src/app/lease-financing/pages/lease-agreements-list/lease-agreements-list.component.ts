@@ -71,6 +71,7 @@ import { LeaseAgreement } from '../../lease-financing.models';
               <th scope="col">Next Due</th>
               <th scope="col">Status</th>
               <th scope="col">Risk</th>
+              <th scope="col">Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -83,10 +84,19 @@ import { LeaseAgreement } from '../../lease-financing.models';
               <td>{{ row.remaining_balance | number:'1.2-2' }}</td>
               <td>{{ row.next_due_date || '—' }}</td>
               <td>
-                <span class="pill" [ngClass]="'pill-' + (row.status || 'draft')">{{ row.status }}</span>
+                <span class="pill" [ngClass]="'pill-' + (row.status || 'draft')">{{ statusLabel(row.status) }}</span>
               </td>
               <td>
                 <span class="pill" [ngClass]="'pill-risk-' + (row.risk_level || 'low')">{{ row.risk_level || 'low' }}</span>
+              </td>
+              <td class="row-actions">
+                <button
+                  *ngIf="canSendForSignature(row)"
+                  type="button"
+                  class="btn-send"
+                  [disabled]="sendingId === row.id"
+                  (click)="sendForSignature(row, $event)"
+                >{{ sendingId === row.id ? 'Sending…' : (row.status === 'pending_signature' ? '✍️ Resend' : '✍️ Send for signature') }}</button>
               </td>
             </tr>
           </tbody>
@@ -231,6 +241,21 @@ import { LeaseAgreement } from '../../lease-financing.models';
     .pill-active, .pill-completed { border-color: rgba(34, 197, 94, .6); color: #86efac; }
     .pill-overdue, .pill-defaulted { border-color: rgba(239, 68, 68, .6); color: #fca5a5; }
     .pill-draft { border-color: rgba(59, 130, 246, .6); color: #93c5fd; }
+    .pill-pending_signature { border-color: rgba(245, 158, 11, .6); color: #fcd34d; }
+
+    .row-actions { white-space: nowrap; }
+    .btn-send {
+      border: 1px solid rgba(139, 92, 246, .55);
+      border-radius: 9px;
+      padding: .34rem .6rem;
+      background: rgba(99, 102, 241, .22);
+      color: #c7d2fe;
+      font-size: .76rem;
+      cursor: pointer;
+      transition: opacity .15s ease;
+    }
+    .btn-send:hover { opacity: .85; }
+    .btn-send:disabled { opacity: .55; cursor: not-allowed; }
     .pill-risk-low { border-color: rgba(34, 197, 94, .55); color: #86efac; }
     .pill-risk-medium { border-color: rgba(245, 158, 11, .55); color: #fcd34d; }
     .pill-risk-high { border-color: rgba(239, 68, 68, .55); color: #fca5a5; }
@@ -255,6 +280,7 @@ export class LeaseAgreementsListComponent implements OnInit {
   rows: LeaseAgreement[] = [];
   loading = false;
   error = '';
+  sendingId: string | null = null;
   filters: { status: string; driver_id: string; truck_id: string } = { status: '', driver_id: '', truck_id: '' };
 
   constructor(private lease: LeaseFinancingService, private router: Router) {}
@@ -273,4 +299,25 @@ export class LeaseAgreementsListComponent implements OnInit {
   create(): void { this.router.navigate(['/finance/lease-to-own/new']); }
   goDashboard(): void { this.router.navigate(['/finance/lease-to-own/dashboard']); }
   open(row: LeaseAgreement): void { this.router.navigate(['/finance/lease-to-own', row.id]); }
+
+  /** Offer send-for-signature for draft / out-for-signature (resend) agreements only. */
+  canSendForSignature(row: LeaseAgreement): boolean {
+    return row.status === 'draft' || row.status === 'pending_signature';
+  }
+
+  sendForSignature(row: LeaseAgreement, event: Event): void {
+    event.stopPropagation(); // don't open the row detail
+    if (this.sendingId) return;
+    this.sendingId = row.id;
+    this.lease.sendForSignature(row.id).subscribe({
+      next: () => { this.sendingId = null; this.load(); },
+      error: (err) => { this.sendingId = null; this.error = err?.error?.error || 'Failed to send agreement for signature'; }
+    });
+  }
+
+  statusLabel(status?: string): string {
+    if (status === 'pending_signature') return 'Pending signature';
+    const s = (status || '').replace(/_/g, ' ');
+    return s ? s.charAt(0).toUpperCase() + s.slice(1) : '';
+  }
 }
