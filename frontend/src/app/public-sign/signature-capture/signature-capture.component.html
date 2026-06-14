@@ -1,0 +1,55 @@
+<div class="sig-capture" [class.disabled]="disabled">
+  <div class="sig-tabs" role="tablist">
+    <button
+      type="button"
+      class="sig-tab"
+      role="tab"
+      [class.active]="mode === 'typed'"
+      [attr.aria-selected]="mode === 'typed'"
+      [disabled]="disabled"
+      (click)="setMode('typed')"
+    >
+      <span class="material-symbols-outlined">keyboard</span> Type
+    </button>
+    <button
+      type="button"
+      class="sig-tab"
+      role="tab"
+      [class.active]="mode === 'drawn'"
+      [attr.aria-selected]="mode === 'drawn'"
+      [disabled]="disabled"
+      (click)="setMode('drawn')"
+    >
+      <span class="material-symbols-outlined">draw</span> Draw
+    </button>
+  </div>
+
+  <!-- Typed: the legal name renders as a script-face signature preview -->
+  <div class="sig-typed" *ngIf="mode === 'typed'">
+    <div class="sig-preview" [class.empty]="!typedName.trim()">
+      {{ typedName.trim() || 'Your signature appears here' }}
+    </div>
+    <p class="sig-hint">Your typed name is your electronic signature.</p>
+  </div>
+
+  <!-- Drawn: free-hand canvas -->
+  <div class="sig-drawn" *ngIf="mode === 'drawn'">
+    <canvas
+      #canvas
+      class="sig-canvas"
+      (mousedown)="startDraw($event)"
+      (mousemove)="moveDraw($event)"
+      (mouseup)="endDraw()"
+      (mouseleave)="endDraw()"
+      (touchstart)="startDraw($event)"
+      (touchmove)="moveDraw($event)"
+      (touchend)="endDraw()"
+    ></canvas>
+    <div class="sig-drawn-foot">
+      <span class="sig-hint">Draw your signature in the box above.</span>
+      <button type="button" class="sig-clear" [disabled]="disabled || !hasDrawing" (click)="clear()">
+        <span class="material-symbols-outlined">ink_eraser</span> Clear
+      </button>
+    </div>
+  </div>
+</div>

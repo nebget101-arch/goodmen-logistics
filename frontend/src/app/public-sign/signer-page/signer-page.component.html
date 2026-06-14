@@ -1,0 +1,132 @@
+<div class="sign-shell">
+  <header class="sign-brand">
+    <span class="material-symbols-outlined brand-mark">verified</span>
+    <span class="brand-name">FleetNeuron</span>
+    <span class="brand-tag">Secure e-signature</span>
+  </header>
+
+  <!-- Loading -->
+  <div class="sign-card state" *ngIf="loading">
+    <span class="material-symbols-outlined spin">progress_activity</span>
+    Loading your agreement…
+  </div>
+
+  <!-- Hard load error / missing token -->
+  <div class="sign-card state error" *ngIf="!loading && loadError">
+    <span class="material-symbols-outlined">error</span>
+    <p>{{ loadError }}</p>
+  </div>
+
+  <ng-container *ngIf="!loading && !loadError && view">
+    <!-- Expired / voided token states -->
+    <div class="sign-card state error" *ngIf="isExpired">
+      <span class="material-symbols-outlined">schedule</span>
+      <h2>This signing link has expired</h2>
+      <p>For your security the link is no longer valid. Please contact the sender to request a new one.</p>
+    </div>
+
+    <div class="sign-card state error" *ngIf="isVoided">
+      <span class="material-symbols-outlined">block</span>
+      <h2>This request was canceled</h2>
+      <p>The sender voided this agreement. No signature is required. Please contact them with any questions.</p>
+    </div>
+
+    <!-- Confirmation (just signed, or idempotent re-open of a signed link) -->
+    <div class="sign-card confirm" *ngIf="done && !isExpired && !isVoided">
+      <span class="material-symbols-outlined ok">task_alt</span>
+      <h2>Thank you{{ signerName ? ', ' + signerName : '' }}!</h2>
+      <p>Your agreement has been signed. A copy has been recorded and shared with the sender.</p>
+      <a
+        *ngIf="signedPdfUrl"
+        class="btn-sign btn-primary"
+        [href]="signedPdfUrl"
+        target="_blank"
+        rel="noopener"
+      >
+        <span class="material-symbols-outlined">download</span> Download signed PDF
+      </a>
+      <p class="muted small" *ngIf="!signedPdfUrl">Your signed PDF will be available from the sender shortly.</p>
+    </div>
+
+    <!-- Active signing flow -->
+    <ng-container *ngIf="canSign && !done">
+      <section class="sign-card doc-head">
+        <h1>{{ view.document.name }}</h1>
+        <p class="doc-type">{{ view.document.documentType }}</p>
+        <a
+          *ngIf="view.document.sourceDownloadUrl"
+          class="doc-link"
+          [href]="view.document.sourceDownloadUrl"
+          target="_blank"
+          rel="noopener"
+        >
+          <span class="material-symbols-outlined">picture_as_pdf</span> View the full document
+        </a>
+      </section>
+
+      <!-- Read-only details filled by the sender -->
+      <section class="sign-card" *ngIf="internalFields.length">
+        <h2 class="sec-title">Agreement details</h2>
+        <dl class="detail-list">
+          <ng-container *ngFor="let f of internalFields; trackBy: trackByField">
+            <dt>{{ f.label }}</dt>
+            <dd>{{ displayValue(f) }}</dd>
+          </ng-container>
+        </dl>
+      </section>
+
+      <!-- Fields the signer completes -->
+      <section class="sign-card" *ngIf="signerFields.length">
+        <h2 class="sec-title">Your information</h2>
+        <div class="field" *ngFor="let f of signerFields; trackBy: trackByField">
+          <label class="f-label" [attr.for]="'sf-' + f.fieldKey">
+            <span class="material-symbols-outlined">{{ typeIcon(f.fieldType) }}</span>
+            {{ f.label }}<span class="req" *ngIf="isRequired(f)">*</span>
+          </label>
+
+          <label class="checkbox-row" *ngIf="f.fieldType === 'checkbox'">
+            <input type="checkbox" [(ngModel)]="values[f.fieldKey]" [name]="'sf-' + f.fieldKey" />
+            <span>I agree / Yes</span>
+          </label>
+
+          <input
+            *ngIf="f.fieldType !== 'checkbox'"
+            [id]="'sf-' + f.fieldKey"
+            class="f-input"
+            [type]="inputType(f.fieldType)"
+            [(ngModel)]="values[f.fieldKey]"
+            [name]="'sf-' + f.fieldKey"
+            [placeholder]="f.label"
+          />
+        </div>
+      </section>
+
+      <!-- Signature -->
+      <section class="sign-card">
+        <h2 class="sec-title">Sign</h2>
+        <div class="field">
+          <label class="f-label" for="legal-name">Full legal name<span class="req">*</span></label>
+          <input id="legal-name" class="f-input" type="text" [(ngModel)]="signerName" name="legal-name" placeholder="Type your full name" />
+        </div>
+
+        <app-signature-capture
+          [typedName]="signerName"
+          (signatureChange)="onSignatureChange($event)"
+        ></app-signature-capture>
+
+        <label class="consent-row">
+          <input type="checkbox" [(ngModel)]="consent" name="consent" />
+          <span>{{ consentText }}</span>
+        </label>
+
+        <div class="sign-error" *ngIf="submitError">{{ submitError }}</div>
+
+        <button type="button" class="btn-sign btn-primary full" [disabled]="!canSubmit" (click)="submit()">
+          <span class="material-symbols-outlined" *ngIf="!submitting">draw</span>
+          {{ submitting ? 'Submitting…' : 'Sign &amp; submit' }}
+        </button>
+        <p class="muted small center">Your name, IP address, and timestamp are recorded with your signature.</p>
+      </section>
+    </ng-container>
+  </ng-container>
+</div>
