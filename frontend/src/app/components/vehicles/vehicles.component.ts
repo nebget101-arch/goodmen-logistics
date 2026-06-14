@@ -22,11 +22,27 @@ interface Vehicle {
   next_pm_mileage: number;
   oos_reason?: string;
   registration_expiry?: string;
+  insurance_expiry?: string;
   vehicle_type?: string;
   company_owned?: boolean;
   equipment_owner_id?: string | null;
   equipment_owner_name?: string | null;
   trailer_details?: any;
+  // FN-1784: DOT readiness, when surfaced by the list/equipment endpoints.
+  ready?: boolean;
+  readiness?: {
+    ready: boolean;
+    requiredDocuments?: string[];
+    missing?: string[];
+    expired?: string[];
+  };
+}
+
+interface VehicleReadinessView {
+  ready: boolean;
+  missing: string[];
+  expired: string[];
+  requiredDocuments: string[];
 }
 
 type SortField = 'unit_number' | 'inspection_expiry';
@@ -438,6 +454,101 @@ export class VehiclesComponent implements OnInit, OnDestroy {
 
   getStatusLabel(status: string): string {
     return this.normalizeStatus(status) === 'in-service' ? 'In Service' : 'Out of Service';
+  }
+
+  // ── FN-1784: DOT document readiness badge ──────────────────────────────
+
+  /** Required DOT document set keyed by vehicle type (mirrors the rule engine). */
+  private requiredDocsForType(vehicleType: string | null | undefined): string[] {
+    return this.normalizeVehicleType(vehicleType) === 'trailer'
+      ? ['registration', 'inspection']
+      : ['registration', 'insurance', 'inspection', 'ifta'];
+  }
+
+  /**
+   * Resolve a vehicle's readiness, preferring server-provided data and falling
+   * back to the expiry columns we have locally (registration/insurance/
+   * inspection). The fallback can't see IFTA documents, so it never reports
+   * IFTA as missing — the backend readiness/422 remains authoritative there.
+   */
+  getVehicleReadiness(vehicle: Vehicle): VehicleReadinessView {
+    const r = vehicle.readiness;
+    if (r && typeof r.ready === 'boolean') {
+      return {
+        ready: r.ready,
+        missing: r.missing ?? [],
+        expired: r.expired ?? [],
+        requiredDocuments: r.requiredDocuments ?? []
+      };
+    }
+    if (typeof vehicle.ready === 'boolean') {
+      return { ready: vehicle.ready, missing: [], expired: [], requiredDocuments: [] };
+    }
+    return this.computeReadinessFallback(vehicle);
+  }
+
+  private computeReadinessFallback(vehicle: Vehicle): VehicleReadinessView {
+    const required = this.requiredDocsForType(vehicle.vehicle_type);
+    const columnByDoc: Record<string, string | undefined> = {
+      registration: vehicle.registration_expiry,
+      insurance: vehicle.insurance_expiry,
+      inspection: vehicle.inspection_expiry
+    };
+    const missing: string[] = [];
+    const expired: string[] = [];
+    for (const doc of required) {
+      if (!(doc in columnByDoc)) continue; // e.g. ifta — not derivable from columns
+      const expiry = columnByDoc[doc];
+      if (!expiry) {
+        missing.push(doc);
+      } else if (this.getDaysUntilExpiry(expiry) < 0) {
+        expired.push(doc);
+      }
+    }
+    return {
+      ready: missing.length === 0 && expired.length === 0,
+      missing,
+      expired,
+      requiredDocuments: required
+    };
+  }
+
+  isVehicleReady(vehicle: Vehicle): boolean {
+    return this.getVehicleReadiness(vehicle).ready;
+  }
+
+  /** Active (in-service) unit that is no longer document-ready — the key flag. */
+  isActiveButNotReady(vehicle: Vehicle): boolean {
+    return this.normalizeStatus(vehicle.status) === 'in-service' && !this.isVehicleReady(vehicle);
+  }
+
+  getReadinessBadgeClass(vehicle: Vehicle): string {
+    if (this.isVehicleReady(vehicle)) return 'badge-success';
+    // A lapsed *active* unit is the urgent case → danger; otherwise advisory amber.
+    return this.normalizeStatus(vehicle.status) === 'in-service' ? 'badge-danger' : 'badge-warning';
+  }
+
+  getReadinessLabel(vehicle: Vehicle): string {
+    return this.isVehicleReady(vehicle) ? 'Ready' : 'Not Ready';
+  }
+
+  getReadinessTooltip(vehicle: Vehicle): string {
+    const view = this.getVehicleReadiness(vehicle);
+    if (view.ready) return 'All required DOT documents are valid';
+    const parts: string[] = [];
+    if (view.missing.length) parts.push(`Missing: ${view.missing.map(d => this.readinessDocLabel(d)).join(', ')}`);
+    if (view.expired.length) parts.push(`Expired: ${view.expired.map(d => this.readinessDocLabel(d)).join(', ')}`);
+    return parts.length ? parts.join(' · ') : 'Required DOT documents are incomplete';
+  }
+
+  private readinessDocLabel(doc: string): string {
+    const labels: Record<string, string> = {
+      registration: 'Registration',
+      insurance: 'Insurance',
+      inspection: 'Annual Inspection',
+      ifta: 'IFTA'
+    };
+    return labels[doc] || (doc.charAt(0).toUpperCase() + doc.slice(1));
   }
 
   private normalizeStatus(status: string | null | undefined): string {
