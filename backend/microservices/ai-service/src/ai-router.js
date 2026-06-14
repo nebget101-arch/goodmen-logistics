@@ -17,6 +17,7 @@ const { handleLoadsNlq } = require('./handlers/loads-nlq-handler');
 const { handleLoadsSpreadsheetImport } = require('./handlers/loads-spreadsheet-handler');
 const { handleVehicleFaultDiagnosis } = require('./handlers/vehicle-fault-diagnosis-handler');
 const { handleInvoiceExtract } = require('./handlers/invoice-extractor-handler');
+const { handleAgreementDetectFields } = require('./handlers/agreement-fields-handler');
 const { handleLoadDriverMatch } = require('./handlers/load-driver-match-handler');
 const { handleVehicleRepairHistorySummary } = require('./handlers/vehicle-repair-history-handler');
 const { handleBriefingGenerate } = require('./handlers/briefing-handler');
@@ -2452,6 +2453,116 @@ function buildAiRouter(deps) {
    */
   router.post('/invoice/extract', (req, res) =>
     handleInvoiceExtract(req, res, deps)
+  );
+
+  /**
+   * @openapi
+   * /api/ai/agreements/detect-fields:
+   *   post:
+   *     summary: AI agreement field & signature-block detection (FN-1787 / FN-1791)
+   *     description: >
+   *       Detects every fillable field and signature/initials block in an uploaded agreement
+   *       (image or scanned PDF with no text/AcroForm layer) using Claude Vision/Document.
+   *       Classifies each field's type (text|date|number|checkbox|signature|initials) and
+   *       suggests a fill-role (`internal` = our staff, `signer` = the external customer/driver).
+   *       Default model `claude-sonnet-4-20250514` (override via `AI_AGREEMENT_MODEL` or
+   *       `ANTHROPIC_VISION_MODEL`). Uses prompt caching on the persona + schema. Hallucination-
+   *       guarded: invalid `type`/`suggestedRole` values are coerced to safe defaults with
+   *       `confidence: 0`. Logs field/page counts, file size, and content-type only — never
+   *       document content or field values.
+   *     tags:
+   *       - AI
+   *     security:
+   *       - bearerAuth: []
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             oneOf:
+   *               - type: object
+   *                 required: [fileUrl]
+   *                 properties:
+   *                   fileUrl:
+   *                     type: string
+   *                     description: HTTP(S) URL pointing to an image or PDF
+   *                   contentType:
+   *                     type: string
+   *                     description: Optional MIME hint (image/* or application/pdf)
+   *               - type: object
+   *                 required: [base64, contentType]
+   *                 properties:
+   *                   base64:
+   *                     type: string
+   *                     description: Base64-encoded file content
+   *                   contentType:
+   *                     type: string
+   *                     enum: [image/jpeg, image/png, image/webp, image/gif, image/heic, image/heif, application/pdf]
+   *     responses:
+   *       200:
+   *         description: Detected fields with per-field type, role, bbox, and confidence
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: object
+   *               properties:
+   *                 success:
+   *                   type: boolean
+   *                 data:
+   *                   type: object
+   *                   properties:
+   *                     documentType:
+   *                       type: string
+   *                       enum: [lease_agreement, generic]
+   *                     pageCount:
+   *                       type: integer
+   *                     fields:
+   *                       type: array
+   *                       items:
+   *                         type: object
+   *                         properties:
+   *                           key:
+   *                             type: string
+   *                           label:
+   *                             type: string
+   *                           type:
+   *                             type: string
+   *                             enum: [text, date, number, checkbox, signature, initials]
+   *                           page:
+   *                             type: integer
+   *                           bbox:
+   *                             type: array
+   *                             items:
+   *                               type: number
+   *                             minItems: 4
+   *                             maxItems: 4
+   *                           suggestedRole:
+   *                             type: string
+   *                             enum: [internal, signer]
+   *                           suggestedValue:
+   *                             type: string
+   *                             nullable: true
+   *                           confidence:
+   *                             type: number
+   *                 meta:
+   *                   type: object
+   *                   properties:
+   *                     model:
+   *                       type: string
+   *                     processingTimeMs:
+   *                       type: number
+   *                     usage:
+   *                       type: object
+   *                       nullable: true
+   *       400:
+   *         description: Invalid request body (bad/missing fileUrl or base64+contentType, unsupported type, or file too large)
+   *       422:
+   *         description: AI returned unparseable JSON (after retry)
+   *       502:
+   *         description: AI upstream unavailable
+   */
+  router.post('/agreements/detect-fields', (req, res) =>
+    handleAgreementDetectFields(req, res, deps)
   );
 
   /**
