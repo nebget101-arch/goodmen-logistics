@@ -13,8 +13,13 @@ const {
   validateDetectionResult,
   validateDetectedField,
   sanitizeFieldUpdate,
+  sanitizeNewField,
+  normalizeDeleteIds,
+  fieldUpdateToRow,
   buildFieldRows,
   coerceBbox,
+  validateBbox,
+  validatePage,
   coerceConfidence,
   normalizeRole,
   normalizeDocumentType,
@@ -197,7 +202,7 @@ describe('sanitizeFieldUpdate (PATCH guard)', () => {
   });
   it('ignores immutable / AI-owned fields', () => {
     assert.strictEqual(
-      sanitizeFieldUpdate({ fieldType: 'signature', page: 3, confidence: 1, valueDefault: 'x' }),
+      sanitizeFieldUpdate({ fieldType: 'signature', confidence: 1, suggestedRole: 'signer', valueDefault: 'x' }),
       null
     );
   });
@@ -210,6 +215,158 @@ describe('sanitizeFieldUpdate (PATCH guard)', () => {
   it('returns null for non-objects', () => {
     assert.strictEqual(sanitizeFieldUpdate(null), null);
     assert.strictEqual(sanitizeFieldUpdate('x'), null);
+  });
+
+  // FN-1808: page + bbox are now mutable (visual placement editor).
+  it('accepts a valid page within the page count', () => {
+    assert.deepStrictEqual(sanitizeFieldUpdate({ page: 3 }, { pageCount: 6 }), { page: 3 });
+  });
+  it('drops a page beyond the page count', () => {
+    assert.strictEqual(sanitizeFieldUpdate({ page: 9 }, { pageCount: 6 }), null);
+  });
+  it('drops a non-integer / zero page', () => {
+    assert.strictEqual(sanitizeFieldUpdate({ page: 0 }, { pageCount: 6 }), null);
+    assert.strictEqual(sanitizeFieldUpdate({ page: 1.5 }, { pageCount: 6 }), null);
+  });
+  it('accepts a valid bbox edit', () => {
+    assert.deepStrictEqual(
+      sanitizeFieldUpdate({ bbox: [10, 20, 30, 40] }, { pageCount: 6 }),
+      { bbox: [10, 20, 30, 40] }
+    );
+  });
+  it('drops a malformed / negative bbox', () => {
+    assert.strictEqual(sanitizeFieldUpdate({ bbox: [1, 2, 3] }, { pageCount: 6 }), null);
+    assert.strictEqual(sanitizeFieldUpdate({ bbox: [-1, 0, 10, 10] }, { pageCount: 6 }), null);
+    assert.strictEqual(sanitizeFieldUpdate({ bbox: [0, 0, 0, 10] }, { pageCount: 6 }), null);
+  });
+  it('clears the bbox when explicitly null', () => {
+    assert.deepStrictEqual(sanitizeFieldUpdate({ bbox: null }), { bbox: null });
+  });
+  it('combines a role flip with a geometry move', () => {
+    assert.deepStrictEqual(
+      sanitizeFieldUpdate({ role: 'signer', page: 2, bbox: [5, 5, 100, 20] }, { pageCount: 4 }),
+      { role: 'signer', page: 2, bbox: [5, 5, 100, 20] }
+    );
+  });
+});
+
+describe('validateBbox', () => {
+  it('accepts a well-formed non-negative box', () => {
+    assert.deepStrictEqual(validateBbox([0, 0, 10, 20]), [0, 0, 10, 20]);
+    assert.deepStrictEqual(validateBbox(['1', '2', '3', '4']), [1, 2, 3, 4]);
+  });
+  it('rejects wrong shape, negative origin, or non-positive size', () => {
+    assert.strictEqual(validateBbox([1, 2, 3]), null);
+    assert.strictEqual(validateBbox([-1, 0, 10, 10]), null);
+    assert.strictEqual(validateBbox([0, -1, 10, 10]), null);
+    assert.strictEqual(validateBbox([0, 0, 0, 10]), null);
+    assert.strictEqual(validateBbox([0, 0, 10, 0]), null);
+    assert.strictEqual(validateBbox(null), null);
+  });
+});
+
+describe('validatePage', () => {
+  it('accepts a 1-based page within bounds', () => {
+    assert.strictEqual(validatePage(1, 6), 1);
+    assert.strictEqual(validatePage(6, 6), 6);
+    assert.strictEqual(validatePage('3', 6), 3);
+  });
+  it('rejects out-of-range / non-integer pages', () => {
+    assert.strictEqual(validatePage(0, 6), null);
+    assert.strictEqual(validatePage(7, 6), null);
+    assert.strictEqual(validatePage(2.5, 6), null);
+    assert.strictEqual(validatePage('x', 6), null);
+  });
+  it('only enforces page >= 1 when pageCount is unknown/zero', () => {
+    assert.strictEqual(validatePage(99, 0), 99);
+    assert.strictEqual(validatePage(99, undefined), 99);
+    assert.strictEqual(validatePage(0, 0), null);
+  });
+});
+
+describe('sanitizeNewField (user-drawn box)', () => {
+  it('accepts a fully specified manual field with confidence null', () => {
+    const out = sanitizeNewField(
+      { fieldType: 'signature', page: 2, bbox: [10, 20, 200, 40], label: 'Signature', role: 'signer' },
+      { pageCount: 6 }
+    );
+    assert.strictEqual(out.fieldType, 'signature');
+    assert.strictEqual(out.page, 2);
+    assert.deepStrictEqual(out.bbox, [10, 20, 200, 40]);
+    assert.strictEqual(out.label, 'Signature');
+    assert.strictEqual(out.fieldKey, 'Signature');
+    assert.strictEqual(out.role, 'signer');
+    assert.strictEqual(out.suggestedRole, 'signer');
+    assert.strictEqual(out.confidence, null);
+    assert.strictEqual(out.lowConfidence, false);
+  });
+  it('accepts the legacy `type` alias and defaults role to internal', () => {
+    const out = sanitizeNewField({ type: 'text', page: 1, bbox: [1, 1, 10, 10], label: 'X' });
+    assert.strictEqual(out.fieldType, 'text');
+    assert.strictEqual(out.role, 'internal');
+  });
+  it('requires a usable field type', () => {
+    assert.strictEqual(sanitizeNewField({ fieldType: 'barcode', page: 1, bbox: [1, 1, 10, 10] }), null);
+    assert.strictEqual(sanitizeNewField({ page: 1, bbox: [1, 1, 10, 10] }), null);
+  });
+  it('requires a valid in-bounds page', () => {
+    assert.strictEqual(
+      sanitizeNewField({ fieldType: 'text', page: 9, bbox: [1, 1, 10, 10] }, { pageCount: 6 }),
+      null
+    );
+  });
+  it('requires a valid bbox — a drawn box must have geometry', () => {
+    assert.strictEqual(sanitizeNewField({ fieldType: 'text', page: 1, bbox: [1, 2] }), null);
+    assert.strictEqual(sanitizeNewField({ fieldType: 'text', page: 1 }), null);
+  });
+  it('requires a key or label', () => {
+    assert.strictEqual(sanitizeNewField({ fieldType: 'text', page: 1, bbox: [1, 1, 10, 10] }), null);
+  });
+  it('falls back to the key when no label is given', () => {
+    const out = sanitizeNewField({ fieldType: 'text', page: 1, bbox: [1, 1, 10, 10], fieldKey: 'manual_1' });
+    assert.strictEqual(out.fieldKey, 'manual_1');
+    assert.strictEqual(out.label, 'manual_1');
+  });
+  it('returns null for non-objects', () => {
+    assert.strictEqual(sanitizeNewField(null), null);
+    assert.strictEqual(sanitizeNewField('x'), null);
+  });
+  it('produces a DTO that buildFieldRows persists with confidence null', () => {
+    const out = sanitizeNewField({ fieldType: 'text', page: 1, bbox: [1, 1, 10, 10], label: 'X' });
+    const [row] = buildFieldRows('tpl-9', [{ ...out, sortOrder: 5 }]);
+    assert.strictEqual(row.template_id, 'tpl-9');
+    assert.strictEqual(row.sort_order, 5);
+    assert.strictEqual(row.field_type, 'text');
+    assert.strictEqual(row.bbox, JSON.stringify([1, 1, 10, 10]));
+    assert.strictEqual(row.confidence, null);
+  });
+});
+
+describe('normalizeDeleteIds', () => {
+  it('accepts bare ids and { id } objects, dropping empties', () => {
+    assert.deepStrictEqual(
+      normalizeDeleteIds(['a', { id: 'b' }, null, { id: '' }, '', 'c']),
+      ['a', 'b', 'c']
+    );
+  });
+  it('returns an empty array for non-arrays', () => {
+    assert.deepStrictEqual(normalizeDeleteIds(undefined), []);
+    assert.deepStrictEqual(normalizeDeleteIds('nope'), []);
+  });
+});
+
+describe('fieldUpdateToRow', () => {
+  it('stringifies a bbox array for the jsonb column', () => {
+    assert.deepStrictEqual(fieldUpdateToRow({ role: 'signer', bbox: [1, 2, 3, 4] }), {
+      role: 'signer',
+      bbox: JSON.stringify([1, 2, 3, 4])
+    });
+  });
+  it('passes a null bbox through (clears the box)', () => {
+    assert.deepStrictEqual(fieldUpdateToRow({ bbox: null }), { bbox: null });
+  });
+  it('leaves a geometry-free patch untouched', () => {
+    assert.deepStrictEqual(fieldUpdateToRow({ label: 'X' }), { label: 'X' });
   });
 });
 

@@ -11,6 +11,7 @@ import {
   CreateSignatureRequestPayload,
   SignatureRequest,
 } from './signature-request.model';
+import { FieldMapSavePayload } from './agreement-placement/bbox-editor.logic';
 
 /**
  * FN-1794 — client for the agreement template / field-map endpoints (FN-1793).
@@ -60,6 +61,27 @@ export class AgreementService {
     return this.http.patch<AgreementTemplateDetail>(
       `${this.base}/templates/${id}/fields`,
       { fields, finalize }
+    );
+  }
+
+  /**
+   * FN-1807 — persist visual placement edits (geometry + adds/deletes) from the
+   * bbox editor. Uses the FN-1808 `PATCH .../fields` body `{ fields, adds, deletes }`:
+   *   - `fields`  — existing fields whose `page`/`bbox`/`role`/`label` changed
+   *   - `adds`    — user-drawn boxes (no id; manual → `confidence: null`)
+   *   - `deletes` — server ids of removed fields
+   * Backward compatible with `saveFields` (which sends only `fields`). Returns the
+   * refreshed template so server-assigned ids for additions are picked up. See
+   * docs/design/agreements-bbox-coordinates.md.
+   */
+  savePlacement(
+    id: string,
+    payload: FieldMapSavePayload,
+    finalize = false
+  ): Observable<AgreementTemplateDetail> {
+    return this.http.patch<AgreementTemplateDetail>(
+      `${this.base}/templates/${id}/fields`,
+      { ...payload, finalize }
     );
   }
 

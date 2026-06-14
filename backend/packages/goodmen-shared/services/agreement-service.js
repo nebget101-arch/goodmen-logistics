@@ -38,6 +38,25 @@
  * Note: `agreement_template_fields` has no tenant_id column — fields are
  * tenant-scoped transitively through their template, which we always verify
  * against the caller's tenant before touching fields.
+ *
+ * ---------------------------------------------------------------------------
+ * Canonical bbox / coordinate convention (FN-1808 — shared with FN-1797)
+ * ---------------------------------------------------------------------------
+ * A field's placement is `{ page, bbox }`:
+ *   - `page`  : 1-based page index, valid in [1, template.page_count].
+ *   - `bbox`  : [x, y, width, height] in PDF points (1 pt = 1/72").
+ *               Origin is the TOP-LEFT of the page; +x → right, +y → down.
+ *               x ≥ 0, y ≥ 0, width > 0, height > 0.
+ *
+ * This top-left point space is exactly what the AI detector emits and what the
+ * visual editor (FN-1807) draws in: the FE renders a page at scale `s`
+ * (pixels-per-point) and maps a box to pixels as [x·s, y·s, w·s, h·s] from the
+ * page's top-left. The signed-PDF overlay (FN-1797) consumes the SAME bbox and
+ * converts to PDF native space (origin bottom-left) at fill time using the page
+ * height H: pdfX = x, pdfY = H − y − height. Because both the editor and the
+ * PDF overlay derive from this single convention, a box drawn in the editor
+ * lands in the same place on the generated PDF. Full write-up:
+ * docs/design/agreements-bbox-coordinates.md
  */
 
 const dtLogger = require('../utils/logger');
@@ -94,6 +113,33 @@ function coerceBbox(raw) {
   const nums = raw.map((n) => Number(n));
   if (nums.some((n) => !Number.isFinite(n))) return null;
   return nums;
+}
+
+/**
+ * Validate a user-supplied bbox against the canonical convention (see header):
+ * a 4-number [x, y, w, h] with x ≥ 0, y ≥ 0, w > 0, h > 0. Returns the
+ * normalized array, or null when the shape/bounds are invalid. Unlike
+ * `coerceBbox` (which only checks shape, used for AI output we keep-but-null),
+ * a geometry *edit* or *add* must carry a usable box, so a bad bbox is rejected.
+ */
+function validateBbox(raw) {
+  const bbox = coerceBbox(raw);
+  if (!bbox) return null;
+  const [x, y, w, h] = bbox;
+  if (x < 0 || y < 0 || w <= 0 || h <= 0) return null;
+  return bbox;
+}
+
+/**
+ * Validate a 1-based page index against the document's page count. Returns the
+ * integer page, or null when it isn't a positive integer or exceeds
+ * `pageCount` (when known). A pageCount of 0/unknown only enforces page ≥ 1.
+ */
+function validatePage(raw, pageCount) {
+  const page = Number(raw);
+  if (!Number.isInteger(page) || page < 1) return null;
+  if (Number.isInteger(pageCount) && pageCount > 0 && page > pageCount) return null;
+  return page;
 }
 
 /** Coerce a confidence into [0, 1], or null when absent/invalid. */
@@ -195,12 +241,19 @@ function validateDetectionResult(raw) {
 }
 
 /**
- * Sanitize a single user-supplied field patch (PATCH body). Only role and
- * label are mutable; everything else (type, bbox, page, confidence) is
- * AI/detection-owned and ignored. Returns the subset of columns to update,
- * or null when the patch is a no-op.
+ * Sanitize a single user-supplied field patch (PATCH body). Mutable columns are
+ * `role`, `label`, and — since FN-1808 (visual placement editor) — the geometry
+ * `page` and `bbox`. AI/detection-owned columns (type, confidence,
+ * suggestedRole, suggestedValue) stay immutable and are ignored. Returns the
+ * subset of columns to update (bbox as a logical [x,y,w,h] array, not yet
+ * JSON-stringified), or null when the patch is a no-op.
+ *
+ * Geometry is validated against the canonical convention: `page` must fall in
+ * [1, pageCount] and `bbox` must be a well-formed non-negative box. An invalid
+ * page/bbox is dropped from the patch rather than corrupting the field; passing
+ * `bbox: null` explicitly clears the stored box.
  */
-function sanitizeFieldUpdate(raw) {
+function sanitizeFieldUpdate(raw, { pageCount } = {}) {
   if (!raw || typeof raw !== 'object') return null;
   const update = {};
 
@@ -211,8 +264,65 @@ function sanitizeFieldUpdate(raw) {
     const label = trimToNull(raw.label, 300);
     if (label) update.label = label;
   }
+  if ('page' in raw) {
+    const page = validatePage(raw.page, pageCount);
+    if (page != null) update.page = page;
+  }
+  if ('bbox' in raw) {
+    if (raw.bbox === null) {
+      update.bbox = null;
+    } else {
+      const bbox = validateBbox(raw.bbox);
+      if (bbox) update.bbox = bbox;
+    }
+  }
 
   return Object.keys(update).length ? update : null;
+}
+
+/**
+ * Sanitize a user-drawn (manual) field to add to a template's field map.
+ * Unlike a detected field, a manual field MUST carry a valid `fieldType`,
+ * `page` (in [1, pageCount]) and `bbox` — the user drew a real box. Its
+ * `confidence` is null (no AI involved) and `role` defaults to `internal`
+ * unless a valid role is supplied. Returns a persist-ready DTO (matching the
+ * shape `buildFieldRows` expects) or null when it can't be salvaged.
+ */
+function sanitizeNewField(raw, { pageCount } = {}) {
+  if (!raw || typeof raw !== 'object') return null;
+
+  const fieldType = FIELD_TYPES.includes(raw.fieldType)
+    ? raw.fieldType
+    : FIELD_TYPES.includes(raw.type)
+      ? raw.type
+      : null;
+  if (!fieldType) return null;
+
+  const page = validatePage(raw.page, pageCount);
+  if (page == null) return null;
+
+  const bbox = validateBbox(raw.bbox);
+  if (!bbox) return null;
+
+  const key = trimToNull(raw.fieldKey ?? raw.key, 200);
+  const label = trimToNull(raw.label, 300) || key;
+  if (!key && !label) return null;
+
+  const role = normalizeRole(raw.role, 'internal');
+
+  return {
+    fieldKey: key || label,
+    label: label || key,
+    fieldType,
+    page,
+    bbox,
+    role,
+    // A manually placed field has no AI suggestion; mirror the confirmed role.
+    suggestedRole: role,
+    suggestedValue: null,
+    confidence: null,
+    lowConfidence: false
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -511,12 +621,37 @@ async function listTemplates({ tenantId, db = getKnex() }) {
   return rows.map(mapTemplateRow);
 }
 
+/** Extract field ids from a `deletes` array of ids or `{ id }` objects. */
+function normalizeDeleteIds(deletes) {
+  return (Array.isArray(deletes) ? deletes : [])
+    .map((d) => (d && typeof d === 'object' ? d.id : d))
+    .filter((id) => id != null && id !== '');
+}
+
+/** Convert a sanitized field update into a DB row patch (jsonb bbox stringified). */
+function fieldUpdateToRow(update) {
+  const row = { ...update };
+  if ('bbox' in row) {
+    row.bbox = row.bbox == null ? null : JSON.stringify(row.bbox);
+  }
+  return row;
+}
+
 /**
  * Apply user edits to a template's field map and optionally finalize it.
  *
- * `updates` is an array of `{ id, role?, label? }`. Each patch is sanitized
- * (only mutable columns survive) and applied only to fields belonging to this
- * template. When `finalize` is true the template status advances to `ready`.
+ * Three independent mutation sets, applied in a single transaction:
+ *   - `updates`: `[{ id, role?, label?, page?, bbox? }]` — edit existing fields
+ *     (geometry edits since FN-1808). Sort order is preserved.
+ *   - `deletes`: `[fieldId | { id }]` — remove fields the user erased.
+ *   - `adds`:    `[{ fieldType, page, bbox, label?, role?, fieldKey? }]` —
+ *     user-drawn boxes appended after the current max `sort_order`.
+ *
+ * All three are tenant-scoped: the template is verified against the caller's
+ * tenant up front, and every field write is additionally constrained by
+ * `template_id`, so a tenant can only touch fields of its own template. Page +
+ * bbox are validated against the template's `page_count`. When `finalize` is
+ * true the template status advances to `ready`.
  *
  * Returns the refreshed template + field map, or null if the template doesn't
  * exist for this tenant.
@@ -525,24 +660,56 @@ async function updateTemplateFields({
   templateId,
   tenantId,
   updates = [],
+  adds = [],
+  deletes = [],
   finalize = false,
   db = getKnex()
 }) {
-  const exists = await db(TEMPLATES_TABLE).where({ id: templateId, tenant_id: tenantId }).first();
-  if (!exists) return null;
+  const existing = await db(TEMPLATES_TABLE)
+    .where({ id: templateId, tenant_id: tenantId })
+    .first();
+  if (!existing) return null;
+
+  const pageCount = Number.isInteger(existing.page_count) ? existing.page_count : 0;
 
   await db.transaction(async (trx) => {
+    // 1) Deletes first, so a delete + re-add of the same box can't collide.
+    const deleteIds = normalizeDeleteIds(deletes);
+    if (deleteIds.length) {
+      await trx(FIELDS_TABLE)
+        .where({ template_id: templateId })
+        .whereIn('id', deleteIds)
+        .del();
+    }
+
+    // 2) Edits to existing fields (role / label / page / bbox). sort_order is
+    //    left untouched, so the field map keeps its order.
     for (const patch of Array.isArray(updates) ? updates : []) {
       const fieldId = patch?.id;
       if (!fieldId) continue;
-      const update = sanitizeFieldUpdate(patch);
+      const update = sanitizeFieldUpdate(patch, { pageCount });
       if (!update) continue;
 
       // template_id scope ensures a tenant can only edit fields of its own
       // (already tenant-verified) template.
       await trx(FIELDS_TABLE)
         .where({ id: fieldId, template_id: templateId })
-        .update({ ...update, updated_at: trx.fn.now() });
+        .update({ ...fieldUpdateToRow(update), updated_at: trx.fn.now() });
+    }
+
+    // 3) Adds (user-drawn boxes) appended after the current max sort_order so
+    //    they slot in at the end and existing positions are preserved.
+    const newFields = (Array.isArray(adds) ? adds : [])
+      .map((a) => sanitizeNewField(a, { pageCount }))
+      .filter(Boolean);
+    if (newFields.length) {
+      const maxRow = await trx(FIELDS_TABLE)
+        .where({ template_id: templateId })
+        .max({ max: 'sort_order' })
+        .first();
+      const base = (maxRow && maxRow.max != null ? Number(maxRow.max) : -1) + 1;
+      const ordered = newFields.map((f, i) => ({ ...f, sortOrder: base + i }));
+      await trx(FIELDS_TABLE).insert(buildFieldRows(templateId, ordered));
     }
 
     await trx(TEMPLATES_TABLE)
@@ -569,8 +736,13 @@ module.exports = {
   validateDetectionResult,
   validateDetectedField,
   sanitizeFieldUpdate,
+  sanitizeNewField,
+  normalizeDeleteIds,
+  fieldUpdateToRow,
   buildFieldRows,
   coerceBbox,
+  validateBbox,
+  validatePage,
   coerceConfidence,
   normalizeRole,
   normalizeDocumentType,
