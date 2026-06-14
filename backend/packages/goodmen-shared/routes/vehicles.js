@@ -12,6 +12,12 @@ const {
   clampWindowDays,
   getRepairHistorySummary
 } = require('../services/vehicle-repair-history.service');
+const {
+  evaluateActivationGuard,
+  isActivationStatus,
+  getVehicleReadiness,
+  loadReadinessInputs
+} = require('../services/vehicle-readiness.service');
 
 async function resolveVehicleSource() {
   try {
@@ -888,6 +894,70 @@ router.get('/:id', async (req, res) => {
   }
 });
 
+/**
+ * @openapi
+ * /api/vehicles/{id}/readiness:
+ *   get:
+ *     summary: Get DOT document readiness for a vehicle
+ *     description: >-
+ *       Evaluates whether a truck/trailer has all DOT-required documents
+ *       uploaded and unexpired (FN-1782). Returns the readiness contract used
+ *       to gate activation and render the document-readiness checklist.
+ *     tags:
+ *       - Vehicles
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Vehicle ID
+ *     responses:
+ *       200:
+ *         description: Readiness evaluation
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 vehicleId:
+ *                   type: string
+ *                 vehicleType:
+ *                   type: string
+ *                 ready:
+ *                   type: boolean
+ *                 requiredDocuments:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                 missing:
+ *                   type: array
+ *                   items:
+ *                     type: string
+ *                 expired:
+ *                   type: array
+ *                   items:
+ *                     type: string
+ *       404:
+ *         description: Vehicle not found
+ *       500:
+ *         description: Server error
+ */
+// GET DOT-readiness for a vehicle (FN-1783)
+router.get('/:id/readiness', async (req, res) => {
+  try {
+    const readiness = await getVehicleReadiness(req.params.id);
+    if (!readiness) return res.status(404).json({ message: 'Vehicle not found' });
+    res.json(readiness);
+  } catch (error) {
+    console.error('Error evaluating vehicle readiness:', error);
+    res.status(500).json({ message: 'Failed to evaluate vehicle readiness' });
+  }
+});
+
 // POST create new vehicle
 router.post('/', async (req, res) => {
   const startTime = Date.now();
@@ -909,6 +979,7 @@ router.post('/', async (req, res) => {
       insurance_expiry,
       registration_expiry,
       oos_reason,
+      status,
       vehicle_type,
       trailer_details,
       ownership_type,
@@ -938,18 +1009,38 @@ router.post('/', async (req, res) => {
 
     const finalVehicleType = (vehicle_type && vehicle_type.trim()) ? vehicle_type.trim() : 'truck';
 
+    // FN-1783: DOT-readiness activation guard. A brand-new vehicle has no
+    // documents yet, but the expiry columns provided on create can still
+    // satisfy column-backed requirements (registration/insurance/inspection),
+    // so a trailer can be born ready while a truck (which needs an IFTA
+    // document row) cannot. If the caller does not request activation, the unit
+    // is created 'out-of-service' (pending) and activated later via update.
+    const prospectiveVehicle = {
+      vehicle_type: finalVehicleType,
+      registration_expiry,
+      insurance_expiry,
+      inspection_expiry
+    };
+    const activationError = evaluateActivationGuard(prospectiveVehicle, [], status);
+    if (activationError) {
+      return res.status(422).json(activationError);
+    }
+    const finalStatus = isActivationStatus(status)
+      ? 'in-service'
+      : ((status && String(status).trim()) ? String(status).trim() : 'out-of-service');
+
     const result = await query(
       `INSERT INTO vehicles (
         unit_number, vin, make, model, year, license_plate, state, mileage,
         inspection_expiry, next_pm_due, next_pm_mileage,
         insurance_expiry, registration_expiry, oos_reason, status, vehicle_type, tenant_id, operating_entity_id
       )
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, 'in-service', $15, $16, $17)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
        RETURNING *`,
       [
         finalUnitNumber, finalVin, finalMake, finalModel, year, finalLicensePlate, finalState, mileage || 0,
         inspection_expiry, next_pm_due, next_pm_mileage,
-        insurance_expiry, registration_expiry, oos_reason, finalVehicleType, tenantId, operatingEntityId
+        insurance_expiry, registration_expiry, oos_reason, finalStatus, finalVehicleType, tenantId, operatingEntityId
       ]
     );
 
@@ -1092,6 +1183,25 @@ router.put('/:id', async (req, res) => {
     if (req.body && req.body.shop_client_id === undefined && req.body.customer_id !== undefined) {
       req.body.shop_client_id = req.body.customer_id;
       delete req.body.customer_id;
+    }
+
+    // FN-1783: DOT-readiness activation guard. When the caller is trying to set
+    // status to in-service/active, the unit must have all required documents
+    // present and unexpired. Merge any expiry/type fields supplied in this same
+    // update before evaluating. Non-fleet vehicles (customer_vehicles) are not
+    // loaded here and are therefore not gated.
+    if (isActivationStatus(req.body?.status)) {
+      const inputs = await loadReadinessInputs(req.params.id);
+      if (inputs) {
+        const mergedVehicle = { ...inputs.vehicle };
+        ['vehicle_type', 'registration_expiry', 'insurance_expiry', 'inspection_expiry'].forEach((key) => {
+          if (req.body[key] !== undefined) mergedVehicle[key] = req.body[key];
+        });
+        const activationError = evaluateActivationGuard(mergedVehicle, inputs.documents, req.body.status);
+        if (activationError) {
+          return res.status(422).json(activationError);
+        }
+      }
     }
 
     const vehicleColumns = await getVehiclesColumnSet();
