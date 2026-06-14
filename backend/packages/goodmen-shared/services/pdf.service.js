@@ -765,6 +765,184 @@ async function generateEmploymentApplicationPdf(fullApp, context = {}) {
   return Buffer.from(bytes);
 }
 
+// ─── FN-1797: Signed agreement PDF (overlay onto source document) ─────────────
+
+/**
+ * Clamp a string to a max width at a given font size, appending an ellipsis
+ * when it would overflow. Returns the drawable string.
+ */
+function fitText(text, font, size, maxWidth) {
+  const s = asText(text);
+  if (!s) return '';
+  if (!maxWidth || maxWidth <= 0) return s;
+  if (font.widthOfTextAtSize(s, size) <= maxWidth) return s;
+  let out = s;
+  while (out.length > 1 && font.widthOfTextAtSize(`${out}…`, size) > maxWidth) {
+    out = out.slice(0, -1);
+  }
+  return `${out}…`;
+}
+
+/** Greedy word-wrap into lines that fit `maxWidth` at `size`. */
+function wrapTextLines(text, font, size, maxWidth) {
+  const words = asText(text).split(/\s+/).filter(Boolean);
+  const lines = [];
+  let current = '';
+  for (const word of words) {
+    const candidate = current ? `${current} ${word}` : word;
+    if (font.widthOfTextAtSize(candidate, size) > maxWidth && current) {
+      lines.push(current);
+      current = word;
+    } else {
+      current = candidate;
+    }
+  }
+  if (current) lines.push(current);
+  return lines;
+}
+
+/**
+ * Overlay filled field values + an in-house e-signature onto a source PDF and
+ * append a signature certificate / audit page. Powers the e-sign flow
+ * (FN-1797 / story FN-1788): the public signer route hands us the source
+ * document bytes from R2, the merged field map (template bbox/page + captured
+ * values) and the captured signature, and gets back a flattened signed PDF to
+ * store back in R2.
+ *
+ * `placements` — array of `{ page (1-based), bbox: [x, y, w, h] (PDF points,
+ * top-left origin, as produced by the agreement field detector), value, label,
+ * fieldType }`. Placements with a usable bbox + in-range page are drawn onto
+ * the document; everything is also listed on the certificate page so a missing
+ * or hallucinated bbox never loses a value.
+ *
+ * `signature` — `{ signerName, signatureValue, signedAt, ipAddress, userAgent,
+ * consentText }`.
+ *
+ * Resilient by design: if the source bytes can't be parsed as a PDF we still
+ * return a standalone certificate PDF rather than throwing, so a signature is
+ * never lost to a bad source document.
+ *
+ * @returns {Promise<Buffer>} the signed PDF bytes
+ */
+async function overlaySignedAgreementPdf({ sourceBytes, placements = [], signature = {} } = {}) {
+  let pdfDoc;
+  let sourceLoaded = false;
+  try {
+    if (sourceBytes && sourceBytes.length) {
+      pdfDoc = await PDFDocument.load(sourceBytes, { ignoreEncryption: true });
+      sourceLoaded = true;
+    }
+  } catch (_err) {
+    sourceLoaded = false;
+  }
+  if (!pdfDoc) {
+    pdfDoc = await PDFDocument.create();
+  }
+
+  const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
+  const bold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+
+  const overlayColor = rgb(0.06, 0.2, 0.45);
+  const sigColor = rgb(0.05, 0.05, 0.05);
+
+  const pages = pdfDoc.getPages();
+  const list = Array.isArray(placements) ? placements : [];
+
+  // 1) Draw each placement onto its page when we have a usable bbox.
+  if (sourceLoaded && pages.length) {
+    for (const p of list) {
+      const bbox = Array.isArray(p?.bbox) && p.bbox.length === 4
+        ? p.bbox.map(Number)
+        : null;
+      if (!bbox || bbox.some((n) => !Number.isFinite(n))) continue;
+
+      const pageIndex = Number.isInteger(p.page) && p.page >= 1 ? p.page - 1 : 0;
+      if (pageIndex >= pages.length) continue;
+      const page = pages[pageIndex];
+      const { height: pageHeight } = page.getSize();
+
+      const [x, yTop, w, h] = bbox;
+      const isSignature = p.fieldType === 'signature' || p.fieldType === 'initials';
+      const value = isSignature ? (signature.signatureValue || signature.signerName) : p.value;
+      const text = asText(value);
+      if (!text) continue;
+
+      const size = isSignature ? Math.min(16, Math.max(10, h * 0.7)) : Math.min(11, Math.max(8, h * 0.6));
+      // Detector bbox is top-left origin; pdf-lib is bottom-left. Sit the text
+      // vertically centered within the field box.
+      const y = pageHeight - yTop - h + Math.max(2, (h - size) / 2);
+      const drawFont = isSignature ? bold : font;
+      page.drawText(fitText(text, drawFont, size, w > 4 ? w - 2 : undefined), {
+        x: x + 1,
+        y,
+        size,
+        font: drawFont,
+        color: isSignature ? sigColor : overlayColor
+      });
+    }
+  }
+
+  // 2) Append a signature certificate / audit page.
+  const certPage = pdfDoc.addPage([LAYOUT.pageWidth, LAYOUT.pageHeight]);
+  const { marginLeft, marginRight, pageWidth } = LAYOUT;
+  const contentRight = pageWidth - marginRight;
+  let y = LAYOUT.pageHeight - 60;
+
+  certPage.drawText('SIGNATURE CERTIFICATE', { x: marginLeft, y, size: 16, font: bold, color: COLORS.primary });
+  y -= 8;
+  certPage.drawLine({ start: { x: marginLeft, y }, end: { x: contentRight, y }, thickness: 1, color: COLORS.border });
+  y -= 28;
+
+  const signedAt = signature.signedAt ? asText(signature.signedAt) : new Date().toISOString();
+  const rows = [
+    ['Signed by', asText(signature.signerName)],
+    ['Signature', asText(signature.signatureValue || signature.signerName)],
+    ['Signed at', signedAt],
+    ['IP address', asText(signature.ipAddress)],
+    ['User agent', asText(signature.userAgent).slice(0, 160)]
+  ];
+  for (const [label, val] of rows) {
+    if (!val) continue;
+    certPage.drawText(`${label}:`, { x: marginLeft, y, size: 9, font: bold, color: COLORS.label });
+    certPage.drawText(fitText(val, font, 9, contentRight - (marginLeft + 95)), {
+      x: marginLeft + 95, y, size: 9, font, color: COLORS.text
+    });
+    y -= 16;
+  }
+
+  if (signature.consentText) {
+    y -= 10;
+    certPage.drawText('CONSENT', { x: marginLeft, y, size: 9, font: bold, color: COLORS.label });
+    y -= 14;
+    const consentLines = wrapTextLines(asText(signature.consentText), font, 8, contentRight - marginLeft);
+    for (const line of consentLines.slice(0, 12)) {
+      certPage.drawText(line, { x: marginLeft, y, size: 8, font, color: COLORS.text });
+      y -= 11;
+    }
+  }
+
+  // 3) List every captured field value (audit), so nothing is lost.
+  const valued = list.filter((p) => asText(p?.value) !== '');
+  if (valued.length) {
+    y -= 12;
+    certPage.drawText('SUBMITTED FIELD VALUES', { x: marginLeft, y, size: 9, font: bold, color: COLORS.label });
+    y -= 16;
+    for (const p of valued) {
+      if (y < 70) break;
+      const label = fitText(asText(p.label || p.fieldKey || p.field_key || 'Field'), bold, 8, 170);
+      certPage.drawText(`${label}:`, { x: marginLeft, y, size: 8, font: bold, color: COLORS.text });
+      certPage.drawText(fitText(asText(p.value), font, 8, contentRight - (marginLeft + 180)), {
+        x: marginLeft + 180, y, size: 8, font, color: COLORS.text
+      });
+      y -= 12;
+    }
+  }
+
+  const bytes = await pdfDoc.save();
+  return Buffer.from(bytes);
+}
+
 module.exports = {
-  generateEmploymentApplicationPdf
+  generateEmploymentApplicationPdf,
+  overlaySignedAgreementPdf
 };

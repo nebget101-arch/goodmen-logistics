@@ -556,6 +556,8 @@ app.use('/api/tolls', buildProxy(LOGISTICS_SERVICE_URL, 'logistics'));
 app.use('/api/lease-agreements', buildProxy(LOGISTICS_SERVICE_URL, 'logistics'));
 app.use('/api/lease-financing', buildProxy(LOGISTICS_SERVICE_URL, 'logistics'));
 app.use('/api/agreements', buildProxy(LOGISTICS_SERVICE_URL, 'logistics'));
+// FN-1797: public, token-gated e-signature signer routes → logistics-service.
+app.use('/public/agreements', buildProxy(LOGISTICS_SERVICE_URL, 'logistics'));
 app.use('/api/ifta', buildProxy(LOGISTICS_SERVICE_URL, 'logistics'));
 app.use('/api/loads', buildProxy(LOGISTICS_SERVICE_URL, 'logistics'));
 // FN-1679: public, UNAUTHENTICATED tracking read API. The gateway has no global
