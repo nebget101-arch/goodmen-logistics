@@ -124,9 +124,10 @@ export const NAV_SECTIONS: NavSection[] = [
   {
     sectionLabel: 'Compliance',
     sectionIcon: 'gavel',
-    tabs: ['compliance'],
+    tabs: ['compliance', 'agreements'],
     children: [
       { path: '/compliance/ifta', label: 'IFTA Quarterly', tab: 'compliance' },
+      { path: '/agreements', label: 'Agreements', tab: 'agreements' },
     ],
   },
 ];

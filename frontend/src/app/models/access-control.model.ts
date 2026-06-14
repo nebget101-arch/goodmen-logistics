@@ -247,6 +247,11 @@ export const PERMISSIONS = {
   FMCSA_SAFETY_MANAGE: 'fmcsa_safety.manage',
   FMCSA_SAFETY_SCRAPE: 'fmcsa_safety.scrape',
 
+  // Agreements (e-sign template surface) — FN-1836 nav entry.
+  // Backend grants for this code land in FN-1792; until then only
+  // super_admin/admin/company_admin resolve it (see hasPermission wildcard).
+  AGREEMENTS_VIEW: 'agreements.view',
+
   // Locations admin
   LOCATIONS_VIEW: 'locations.view',
   LOCATIONS_CREATE: 'locations.create',
@@ -287,6 +292,7 @@ export const TAB_PERMISSIONS: Record<string, string[]> = {
   fuel: [PERMISSIONS.FUEL_VIEW, PERMISSIONS.FUEL_IMPORT, PERMISSIONS.FUEL_CARDS_MANAGE, PERMISSIONS.FUEL_REPORTS_VIEW],
   tolls: [PERMISSIONS.TOLLS_VIEW, PERMISSIONS.TOLLS_IMPORT, PERMISSIONS.TOLLS_ACCOUNTS_MANAGE, PERMISSIONS.TOLLS_REPORTS_VIEW],
   compliance: [PERMISSIONS.IFTA_VIEW, PERMISSIONS.IFTA_EDIT, PERMISSIONS.IFTA_IMPORT, PERMISSIONS.IFTA_RUN_AI_REVIEW, PERMISSIONS.IFTA_FINALIZE, PERMISSIONS.IFTA_EXPORT],
+  agreements: [PERMISSIONS.AGREEMENTS_VIEW],
   lease_financing: [
     PERMISSIONS.LEASE_FINANCING_VIEW,
     PERMISSIONS.LEASE_FINANCING_CREATE,
