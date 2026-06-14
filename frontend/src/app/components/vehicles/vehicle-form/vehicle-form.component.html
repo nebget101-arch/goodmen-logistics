@@ -330,6 +330,51 @@
           </div>
         </div>
 
+        <!-- Section 3b: DOT Document Readiness (FN-1784) -->
+        <div class="form-section readiness-section" *ngIf="readinessLoading || readiness">
+          <h3 class="section-title">
+            Document Readiness
+            <span
+              *ngIf="readiness"
+              class="badge readiness-badge"
+              [class.readiness-badge--ready]="readiness.ready"
+              [class.readiness-badge--blocked]="!readiness.ready"
+            >
+              {{ readiness.ready ? 'Ready for Service' : 'Not Ready' }}
+            </span>
+          </h3>
+
+          <p class="readiness-loading" *ngIf="readinessLoading">Checking document readiness…</p>
+
+          <ul class="readiness-checklist" *ngIf="readiness && readinessDocuments.length">
+            <li
+              *ngFor="let doc of readinessDocuments"
+              class="readiness-item"
+              [class.readiness-item--valid]="getRequiredDocState(doc) === 'valid'"
+              [class.readiness-item--missing]="getRequiredDocState(doc) === 'missing'"
+              [class.readiness-item--expired]="getRequiredDocState(doc) === 'expired'"
+            >
+              <span class="material-symbols-outlined readiness-icon" aria-hidden="true">
+                {{ getRequiredDocState(doc) === 'valid' ? 'check_circle' :
+                   getRequiredDocState(doc) === 'expired' ? 'event_busy' : 'error' }}
+              </span>
+              <span class="readiness-doc-label">{{ readinessDocLabel(doc) }}</span>
+              <span class="readiness-doc-state">{{ getRequiredDocState(doc) }}</span>
+              <label
+                *ngIf="getRequiredDocState(doc) !== 'valid'"
+                [for]="'file-' + doc"
+                class="readiness-fix-link"
+              >
+                Upload
+              </label>
+            </li>
+          </ul>
+
+          <p class="readiness-empty" *ngIf="readiness && !readinessDocuments.length">
+            No DOT documents are required for this unit.
+          </p>
+        </div>
+
         <!-- Section 4: Status -->
         <div class="form-section">
           <h3 class="section-title">Status</h3>
@@ -338,9 +383,13 @@
             <div class="form-group">
               <label for="status">Vehicle Status</label>
               <select id="status" class="form-input" [(ngModel)]="formData.status" name="status">
-                <option value="in-service">In Service</option>
+                <option value="in-service" [disabled]="blockInService">In Service</option>
                 <option value="out-of-service">Out of Service</option>
               </select>
+              <small class="error-text" *ngIf="errors.readiness">{{ errors.readiness }}</small>
+              <small class="help-text" *ngIf="!errors.readiness && blockInService">
+                In Service is disabled until all required DOT documents are valid.
+              </small>
             </div>
           </div>
 

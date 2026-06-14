@@ -710,3 +710,92 @@
     padding: 12px;
   }
 }
+
+/* ── FN-1784: DOT document readiness checklist ──────────────────────────── */
+.vehicle-form-modal .readiness-section .section-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.vehicle-form-modal .readiness-badge {
+  text-transform: uppercase;
+}
+
+.vehicle-form-modal .readiness-badge--ready {
+  background: rgba(34, 197, 94, 0.25);
+  border: 1px solid rgba(34, 197, 94, 0.5);
+  color: #86efac;
+}
+
+.vehicle-form-modal .readiness-badge--blocked {
+  background: rgba(239, 68, 68, 0.25);
+  border: 1px solid rgba(239, 68, 68, 0.5);
+  color: #fca5a5;
+}
+
+.vehicle-form-modal .readiness-loading,
+.vehicle-form-modal .readiness-empty {
+  font-size: 13px;
+  color: var(--text-light);
+  margin: 4px 0 0;
+}
+
+.vehicle-form-modal .readiness-checklist {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.vehicle-form-modal .readiness-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: 1px solid rgba(148, 163, 184, 0.25);
+  background: rgba(148, 163, 184, 0.08);
+}
+
+.vehicle-form-modal .readiness-item .readiness-icon {
+  font-size: 20px;
+}
+
+.vehicle-form-modal .readiness-item--valid .readiness-icon { color: #86efac; }
+.vehicle-form-modal .readiness-item--missing .readiness-icon { color: #fca5a5; }
+.vehicle-form-modal .readiness-item--expired .readiness-icon { color: #fcd34d; }
+
+.vehicle-form-modal .readiness-doc-label {
+  font-weight: 600;
+  font-size: 13px;
+}
+
+.vehicle-form-modal .readiness-doc-state {
+  margin-left: auto;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--text-light);
+}
+
+.vehicle-form-modal .readiness-item--missing .readiness-doc-state { color: #fca5a5; }
+.vehicle-form-modal .readiness-item--expired .readiness-doc-state { color: #fcd34d; }
+.vehicle-form-modal .readiness-item--valid .readiness-doc-state { color: #86efac; }
+
+.vehicle-form-modal .readiness-fix-link {
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+  color: #60a5fa;
+  padding: 2px 8px;
+  border-radius: 6px;
+  border: 1px solid rgba(96, 165, 250, 0.4);
+}
+
+.vehicle-form-modal .readiness-fix-link:hover {
+  background: rgba(96, 165, 250, 0.15);
+}

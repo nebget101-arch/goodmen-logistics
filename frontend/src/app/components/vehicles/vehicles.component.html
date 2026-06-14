@@ -242,6 +242,16 @@
                 [attr.aria-label]="'Vehicle status: ' + (isVehicleExpired(vehicle) ? 'Out of Service - Expired Documents' : getStatusLabel(vehicle.status))">
                 {{ isVehicleExpired(vehicle) ? 'Out of Service' : getStatusLabel(vehicle.status) }}
               </span>
+              <span
+                class="badge readiness-pill"
+                [class]="'badge readiness-pill ' + getReadinessBadgeClass(vehicle)"
+                [title]="getReadinessTooltip(vehicle)"
+                [attr.aria-label]="'DOT readiness: ' + getReadinessLabel(vehicle)">
+                <span class="material-symbols-outlined readiness-pill-icon" aria-hidden="true">
+                  {{ isVehicleReady(vehicle) ? 'verified' : 'gpp_maybe' }}
+                </span>
+                {{ getReadinessLabel(vehicle) }}
+              </span>
               <div *ngIf="isVehicleExpired(vehicle) || vehicle.oos_reason" class="oos-reason" role="note">
                 {{ isVehicleExpired(vehicle) ? 'Registration/Inspection Expired' : vehicle.oos_reason }}
               </div>
@@ -404,6 +414,18 @@
             <span [class]="'badge ' + getStatusBadge(selectedVehicleDetails.status)">
               {{ getStatusLabel(selectedVehicleDetails.status) }}
             </span>
+          </div>
+          <div class="detail-row">
+            <span class="detail-label">DOT Readiness:</span>
+            <span
+              [class]="'badge ' + getReadinessBadgeClass(selectedVehicleDetails)"
+              [title]="getReadinessTooltip(selectedVehicleDetails)">
+              {{ getReadinessLabel(selectedVehicleDetails) }}
+            </span>
+          </div>
+          <div class="detail-row" *ngIf="!isVehicleReady(selectedVehicleDetails)">
+            <span class="detail-label">Readiness Detail:</span>
+            <span class="detail-value text-danger">{{ getReadinessTooltip(selectedVehicleDetails) }}</span>
           </div>
           <div class="detail-row" *ngIf="selectedVehicleDetails.oos_reason">
             <span class="detail-label">OOS Reason:</span>

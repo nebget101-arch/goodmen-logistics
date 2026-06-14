@@ -1503,3 +1503,21 @@
     max-width: 140px;
   }
 }
+/* ── FN-1784: DOT readiness badge (list + detail) ──────────────────────── */
+.vehicles-dashboard .badge-warning {
+  background: rgba(245, 158, 11, 0.22);
+  border: 1px solid rgba(245, 158, 11, 0.5);
+  color: #fcd34d;
+}
+
+.vehicles-dashboard .readiness-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 6px;
+}
+
+.vehicles-dashboard .readiness-pill-icon {
+  font-size: 14px;
+  line-height: 1;
+}
