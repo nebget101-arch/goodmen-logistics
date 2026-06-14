@@ -1,6 +1,12 @@
 import { Component, OnInit } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
+import { forkJoin } from 'rxjs';
 import { LeaseFinancingService } from '../../lease-financing.service';
+import { LoadsService } from '../../../services/loads.service';
+import { AiSelectOption } from '../../../shared/ai-select/ai-select.component';
+
+/** Matches the canonical UUID format Postgres `uuid` columns require. */
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 @Component({
   selector: 'app-lease-agreement-form',
@@ -18,12 +24,28 @@ import { LeaseFinancingService } from '../../lease-financing.service';
         <h3>📋 Agreement Profile</h3>
         <div class="grid">
           <label class="field">
-            <span>Driver ID</span>
-            <input [(ngModel)]="model.driver_id" />
+            <span>Driver</span>
+            <app-ai-select
+              [(ngModel)]="model.driver_id"
+              name="driver_id"
+              [options]="driverOptions"
+              inputId="leaseDriverId"
+              ariaLabel="Driver"
+              [placeholder]="loadingOptions ? 'Loading drivers…' : 'Select a driver'"
+            ></app-ai-select>
+            <small *ngIf="submitted && !isValidUuid(model.driver_id)" class="field-error">Select a driver.</small>
           </label>
           <label class="field">
-            <span>Truck ID</span>
-            <input [(ngModel)]="model.truck_id" />
+            <span>Truck</span>
+            <app-ai-select
+              [(ngModel)]="model.truck_id"
+              name="truck_id"
+              [options]="truckOptions"
+              inputId="leaseTruckId"
+              ariaLabel="Truck"
+              [placeholder]="loadingOptions ? 'Loading trucks…' : 'Select a truck'"
+            ></app-ai-select>
+            <small *ngIf="submitted && !isValidUuid(model.truck_id)" class="field-error">Select a truck.</small>
           </label>
           <label class="field">
             <span>Start Date</span>
@@ -223,6 +245,11 @@ import { LeaseFinancingService } from '../../lease-financing.service';
       color: #ff9abc;
       font-weight: 600;
     }
+    .field-error {
+      color: #ff9abc;
+      font-size: .76rem;
+      font-weight: 600;
+    }
 
     @media (max-width: 900px) {
       .agreement-form-page { padding: 1rem; }
@@ -233,6 +260,10 @@ export class LeaseAgreementFormComponent implements OnInit {
   isEdit = false;
   id = '';
   error = '';
+  submitted = false;
+  loadingOptions = false;
+  driverOptions: AiSelectOption[] = [];
+  truckOptions: AiSelectOption[] = [];
   model: any = {
     driver_id: '',
     truck_id: '',
@@ -250,17 +281,59 @@ export class LeaseAgreementFormComponent implements OnInit {
     allow_payment_override: true,
   };
 
-  constructor(private lease: LeaseFinancingService, private route: ActivatedRoute, private router: Router) {}
+  constructor(
+    private lease: LeaseFinancingService,
+    private loads: LoadsService,
+    private route: ActivatedRoute,
+    private router: Router,
+  ) {}
 
   ngOnInit(): void {
     this.id = this.route.snapshot.paramMap.get('id') || '';
     this.isEdit = !!this.id;
+    this.loadOptions();
     if (this.isEdit) {
       this.lease.getAgreement(this.id).subscribe({ next: (res) => this.model = { ...this.model, ...res } });
     }
   }
 
+  /**
+   * Load driver and truck options so the pickers bind real entity UUIDs.
+   * Reuses the loads service endpoints (`/drivers`, `/equipment?type=truck`)
+   * that back the load wizard's driver/equipment step.
+   */
+  private loadOptions(): void {
+    this.loadingOptions = true;
+    forkJoin({
+      drivers: this.loads.getActiveDrivers(),
+      trucks: this.loads.getEquipment('truck'),
+    }).subscribe({
+      next: ({ drivers, trucks }) => {
+        this.driverOptions = (drivers || []).map((d) => ({
+          value: d.id,
+          label: `${d.firstName || ''} ${d.lastName || ''}`.trim() || d.id,
+        }));
+        this.truckOptions = ((trucks?.data) || []).map((t) => ({
+          value: t.id,
+          label: [t.unit_number, `${t.make || ''} ${t.model || ''}`.trim()].filter(Boolean).join(' · ') || t.id,
+        }));
+        this.loadingOptions = false;
+      },
+      error: () => { this.loadingOptions = false; },
+    });
+  }
+
+  isValidUuid(value: unknown): boolean {
+    return typeof value === 'string' && UUID_RE.test(value);
+  }
+
   save(): void {
+    this.submitted = true;
+    if (!this.isValidUuid(this.model.driver_id) || !this.isValidUuid(this.model.truck_id)) {
+      this.error = 'Select a driver and a truck before saving.';
+      return;
+    }
+    this.error = '';
     const req = this.isEdit ? this.lease.updateAgreement(this.id, this.model) : this.lease.createAgreement(this.model);
     req.subscribe({
       next: (res: any) => this.router.navigate(['/finance/lease-to-own', res.id || this.id]),
