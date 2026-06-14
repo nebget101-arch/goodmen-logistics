@@ -10,6 +10,7 @@ const assert = require('node:assert/strict');
 const {
   handleAgreementDetectFields,
   normalizeDetection,
+  normalizeBbox,
   validateBody,
   FIELD_TYPES,
   ROLES,
@@ -17,6 +18,21 @@ const {
   MAX_FILE_BYTES,
   PDF_TYPE
 } = require('../agreement-fields-handler');
+
+// Anthropic mock that records whether it was ever called (used to prove the
+// AcroForm fast-path skips vision).
+function makeSpyAnthropic() {
+  let calls = 0;
+  return {
+    callCount: () => calls,
+    messages: {
+      create: async () => {
+        calls += 1;
+        return { model: 'x', content: [{ type: 'text', text: '{"documentType":"generic","pageCount":1,"fields":[]}' }], usage: null };
+      }
+    }
+  };
+}
 
 function makeRes() {
   return {
@@ -289,7 +305,8 @@ async function main() {
     await handleAgreementDetectFields(
       { body: { fileUrl: 'https://x/y.pdf', contentType: PDF_TYPE } },
       res,
-      { anthropic: makeMockAnthropic(text) }
+      // fetchPdfBytes:null → AcroForm fast-path finds no bytes and falls back to vision.
+      { anthropic: makeMockAnthropic(text), fetchPdfBytes: async () => null }
     );
     assert.equal(res.statusCode, 200);
     assert.equal(res.body.data.documentType, 'generic');
@@ -348,6 +365,120 @@ async function main() {
     assert.equal(res.statusCode, 400);
     assert.equal(res.body.code, 'AI_BAD_REQUEST');
     ok('handler returns 400 on missing fileUrl/base64');
+  }
+
+  // ---- normalizeDetection bbox modes (FN-1838) ----------------------------
+  {
+    // Vision mode clamps bbox to [0,1]; AcroForm (points) mode does not.
+    const clamped = normalizeDetection({
+      fields: [{ key: 'p', type: 'text', page: 1, bbox: [72, 120, 240, 24], suggestedRole: 'internal', confidence: 0.5 }]
+    });
+    assert.deepEqual(clamped.fields[0].bbox, [1, 1, 1, 1]); // default clamps points to 1
+
+    const points = normalizeDetection(
+      { fields: [{ key: 'p', type: 'text', page: 1, bbox: [72, 120, 240, 24], suggestedRole: 'internal', confidence: 0.5 }] },
+      { clampBbox: false }
+    );
+    assert.deepEqual(points.fields[0].bbox, [72, 120, 240, 24]); // points preserved
+    assert.deepEqual(normalizeBbox([-5, 120, 240, 24], false), [0, 120, 240, 24]); // lower bound still 0
+    ok('normalizeDetection clampBbox:false preserves PDF points');
+  }
+
+  // ---- AcroForm fast-path: fileUrl (downloaded bytes) ---------------------
+  {
+    const res = makeRes();
+    const spy = makeSpyAnthropic();
+    const detection = {
+      hasForm: true,
+      documentType: 'lease_agreement',
+      pageCount: 3,
+      fields: [
+        { key: 'lessee_name', label: 'Lessee Name', type: 'text', page: 1, bbox: [72, 120, 240, 24], suggestedRole: 'signer', suggestedValue: null, confidence: 1.0 },
+        { key: 'lessor_signature', label: 'Lessor Signature', type: 'signature', page: 3, bbox: [300, 700, 220, 40], suggestedRole: 'internal', suggestedValue: null, confidence: 1.0 }
+      ]
+    };
+    await handleAgreementDetectFields(
+      { body: { fileUrl: 'https://r2.example/lease.pdf' } }, // service sends no contentType
+      res,
+      {
+        anthropic: spy,
+        fetchPdfBytes: async () => Buffer.from('%PDF-1.7 pretend bytes'),
+        extractAcroForm: async () => detection
+      }
+    );
+    assert.equal(res.statusCode, 200);
+    assert.equal(res.body.success, true);
+    assert.equal(res.body.meta.model, 'acroform-extract');
+    assert.equal(res.body.data.documentType, 'lease_agreement');
+    assert.equal(res.body.data.pageCount, 3);
+    assert.equal(res.body.data.fields.length, 2);
+    // Points bbox must survive (not clamped to [0,1]).
+    assert.deepEqual(res.body.data.fields[0].bbox, [72, 120, 240, 24]);
+    assert.equal(res.body.data.fields[0].confidence, 1);
+    assert.equal(spy.callCount(), 0); // vision was NOT called
+    ok('AcroForm PDF (fileUrl) detects fields directly and skips vision');
+  }
+
+  // ---- AcroForm fast-path: base64 -----------------------------------------
+  {
+    const res = makeRes();
+    const spy = makeSpyAnthropic();
+    const base64 = Buffer.from('%PDF-1.4 minimal').toString('base64');
+    await handleAgreementDetectFields(
+      { body: { base64, contentType: PDF_TYPE } },
+      res,
+      {
+        anthropic: spy,
+        extractAcroForm: async () => ({
+          hasForm: true,
+          documentType: 'generic',
+          pageCount: 1,
+          fields: [{ key: 'party', label: 'Party', type: 'text', page: 1, bbox: [10, 20, 30, 40], suggestedRole: 'internal', suggestedValue: null, confidence: 1.0 }]
+        })
+      }
+    );
+    assert.equal(res.statusCode, 200);
+    assert.equal(res.body.meta.model, 'acroform-extract');
+    assert.equal(res.body.data.fields.length, 1);
+    assert.equal(spy.callCount(), 0);
+    ok('AcroForm PDF (base64) detects fields directly and skips vision');
+  }
+
+  // ---- no form layer → vision fallback (no regression) --------------------
+  {
+    const res = makeRes();
+    const spy = makeSpyAnthropic();
+    const base64 = Buffer.from('%PDF-1.4 scanned, no form').toString('base64');
+    await handleAgreementDetectFields(
+      { body: { base64, contentType: PDF_TYPE } },
+      res,
+      {
+        anthropic: spy,
+        extractAcroForm: async () => ({ hasForm: false }) // no AcroForm layer
+      }
+    );
+    assert.equal(res.statusCode, 200);
+    assert.notEqual(res.body.meta.model, 'acroform-extract'); // went through vision
+    assert.equal(spy.callCount(), 1); // vision WAS called
+    ok('PDF with no form layer falls back to vision detection');
+  }
+
+  // ---- image input never attempts AcroForm --------------------------------
+  {
+    const res = makeRes();
+    const spy = makeSpyAnthropic();
+    let extractorCalled = false;
+    await handleAgreementDetectFields(
+      { body: { base64: 'AAAA', contentType: 'image/png' } },
+      res,
+      {
+        anthropic: spy,
+        extractAcroForm: async () => { extractorCalled = true; return { hasForm: true, fields: [] }; }
+      }
+    );
+    assert.equal(extractorCalled, false); // known image type → AcroForm skipped
+    assert.equal(spy.callCount(), 1); // vision handled it
+    ok('image content-type skips AcroForm extraction entirely');
   }
 
   // ---- enum exports sanity ------------------------------------------------
