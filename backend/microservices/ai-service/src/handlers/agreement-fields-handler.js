@@ -10,9 +10,15 @@
  *     { key, label, type, page, bbox, suggestedRole, suggestedValue, confidence }
  *   ] }
  *
- * The uploaded agreement is typically a SCANNED image/PDF with no text or AcroForm
- * layer, so detection is done entirely with vision — we ask the model to locate every
- * fillable field and signature block, classify its type, and suggest a fill-role.
+ * Two detection paths (FN-1838):
+ * - AcroForm fast-path: if the uploaded PDF carries a real form layer (a genuine
+ *   "fillable" PDF), its embedded field definitions (name, type, page, widget rect)
+ *   are read directly and deterministically via pdf-lib — higher fidelity than vision,
+ *   and the only thing that works for empty fillable widgets (vision sees a blank page
+ *   and returns 0 fields). See ../lib/acroform-extractor.js.
+ * - Vision fallback: for SCANNED images/flat PDFs with no form layer, detection is done
+ *   entirely with vision — we ask the model to locate every fillable field and signature
+ *   block, classify its type, and suggest a fill-role.
  *
  * Notes (mirrors invoice-extractor-handler.js):
  * - Prompt caching: persona + schema are split into two `ephemeral` cached blocks so
@@ -29,8 +35,10 @@
  *   document bytes, field labels, or extracted values.
  */
 
+const axios = require('axios');
 const Anthropic = require('@anthropic-ai/sdk');
 const { logAiInteraction } = require('../analytics/logger');
+const { extractAcroFormFields, isPdfBytes } = require('../lib/acroform-extractor');
 
 const ROUTE = '/agreements/detect-fields';
 const DEFAULT_MODEL = 'claude-sonnet-4-20250514';
@@ -161,15 +169,18 @@ function clampConfidence(value) {
   return num;
 }
 
-// bbox must be [x, y, w, h] of finite numbers; clamp each to [0, 1]. Anything else
-// becomes a zero box so the frontend can still place a (flagged) marker.
-function normalizeBbox(value) {
+// bbox must be [x, y, w, h] of finite numbers. Anything else becomes a zero box
+// so the frontend can still place a (flagged) marker. `clamp01` clamps each value
+// to [0, 1] for the vision path (which emits normalized coords); the AcroForm
+// path emits PDF points (docs/design/agreements-bbox-coordinates.md) and only
+// clamps the lower bound to 0.
+function normalizeBbox(value, clamp01 = true) {
   if (!Array.isArray(value) || value.length !== 4) return [0, 0, 0, 0];
   return value.map((n) => {
     const num = typeof n === 'number' ? n : parseFloat(n);
     if (!Number.isFinite(num)) return 0;
     if (num < 0) return 0;
-    if (num > 1) return 1;
+    if (clamp01 && num > 1) return 1;
     return num;
   });
 }
@@ -189,7 +200,7 @@ function slugifyKey(value, index) {
  * `type` or `suggestedRole` is coerced to a safe default AND the field's confidence is
  * forced to 0. Returns { fields, pageCount, documentType, guardHits }.
  */
-function normalizeDetection(raw) {
+function normalizeDetection(raw, { clampBbox = true } = {}) {
   const safe = raw && typeof raw === 'object' ? raw : {};
 
   const documentType = DOC_TYPES.includes(safe.documentType) ? safe.documentType : DEFAULT_DOC_TYPE;
@@ -236,7 +247,7 @@ function normalizeDetection(raw) {
         label: coerceString(f.label) || key,
         type,
         page,
-        bbox: normalizeBbox(f.bbox),
+        bbox: normalizeBbox(f.bbox, clampBbox),
         suggestedRole,
         suggestedValue: coerceString(f.suggestedValue),
         confidence
@@ -249,6 +260,86 @@ function normalizeDetection(raw) {
   const pageCount = claimedPageCount >= maxPage && claimedPageCount > 0 ? claimedPageCount : maxPage;
 
   return { documentType, pageCount, fields, guardHits };
+}
+
+const PDF_DOWNLOAD_TIMEOUT_MS = 8000;
+
+async function defaultFetchPdfBytes(url) {
+  const res = await axios.get(url, {
+    responseType: 'arraybuffer',
+    timeout: PDF_DOWNLOAD_TIMEOUT_MS,
+    maxContentLength: MAX_FILE_BYTES,
+    maxBodyLength: MAX_FILE_BYTES
+  });
+  return Buffer.from(res.data);
+}
+
+/**
+ * FN-1838: obtain raw PDF bytes for the AcroForm fast-path, or null when the
+ * source cannot be (or need not be) read as a PDF. Never throws.
+ *  - base64 input: decode locally.
+ *  - fileUrl input: download the bytes (the agreement service passes a signed R2
+ *    URL with no contentType, so we attempt unless we KNOW it's an image).
+ * The magic-byte check (`isPdfBytes`) guards against non-PDF payloads.
+ * `deps.fetchPdfBytes(url)` is injectable for tests; defaults to a capped axios GET.
+ */
+async function loadPdfBytes({ base64, contentType, fileUrl }, deps = {}) {
+  // A known image content-type can never be an AcroForm PDF — skip the work.
+  if (contentType && SUPPORTED_IMAGE_TYPES.includes(contentType)) return null;
+
+  try {
+    if (base64) {
+      const buf = Buffer.from(base64, 'base64');
+      return isPdfBytes(buf) ? buf : null;
+    }
+    if (fileUrl) {
+      const fetchBytes = deps.fetchPdfBytes || defaultFetchPdfBytes;
+      const raw = await fetchBytes(fileUrl);
+      if (!raw || !raw.length) return null;
+      const buf = Buffer.isBuffer(raw) ? raw : Buffer.from(raw);
+      return isPdfBytes(buf) ? buf : null;
+    }
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.error('[ai-service] agreement AcroForm byte load failed', err.message || err);
+    return null;
+  }
+  return null;
+}
+
+/**
+ * Attempt deterministic AcroForm detection. Returns a normalized detection
+ * result ({ documentType, pageCount, fields, guardHits }) when the PDF has a
+ * placeable form layer, otherwise null (caller falls back to vision). The
+ * detected fields are run through the shared `normalizeDetection` guard WITHOUT
+ * bbox clamping, since AcroForm bboxes are PDF points, not normalized 0..1.
+ * Never throws.
+ */
+async function tryAcroFormDetection(input, deps = {}) {
+  const bytes = await loadPdfBytes(input, deps);
+  if (!bytes) return null;
+
+  const extractor = deps.extractAcroForm || extractAcroFormFields;
+  let result;
+  try {
+    result = await extractor(bytes);
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.error('[ai-service] AcroForm extraction failed', err.message || err);
+    return null;
+  }
+
+  if (!result || !result.hasForm || !Array.isArray(result.fields) || !result.fields.length) {
+    return null;
+  }
+
+  const normalized = normalizeDetection(result, { clampBbox: false });
+  // Preserve the real page count from the parsed PDF (it can exceed the highest
+  // page that carries a field — e.g. a multi-page lease with fields only up front).
+  if (Number.isInteger(result.pageCount) && result.pageCount > normalized.pageCount) {
+    normalized.pageCount = result.pageCount;
+  }
+  return normalized;
 }
 
 async function callDetection(client, model, systemBlocks, sourceBlock, reinforce) {
@@ -317,6 +408,38 @@ async function handleAgreementDetectFields(req, res, deps = {}) {
   }
 
   const { fileUrl, base64, contentType, approxBytes } = validation;
+
+  // FN-1838: AcroForm fast-path. A genuine fillable PDF carries its field
+  // definitions in a form layer; read them directly (deterministic, confidence
+  // 1.0, and the only thing that works when the widgets are visually empty so
+  // vision returns 0 fields). Falls back to vision for scanned/flat docs.
+  const acroForm = await tryAcroFormDetection({ fileUrl, base64, contentType }, deps);
+  if (acroForm) {
+    const processingTimeMs = Date.now() - startedAt;
+    logAiInteraction({
+      userId: null,
+      route: ROUTE,
+      message: `Agreement detect ok (acroform) fields=${acroForm.fields.length} pages=${acroForm.pageCount} guarded=${acroForm.guardHits} size=${approxBytes || 0} type=${contentType || 'url'}`,
+      conversationId: null,
+      success: true,
+      errorCode: null,
+      processingTimeMs
+    });
+    return res.json({
+      success: true,
+      data: {
+        documentType: acroForm.documentType,
+        pageCount: acroForm.pageCount,
+        fields: acroForm.fields
+      },
+      meta: {
+        model: 'acroform-extract',
+        processingTimeMs,
+        usage: null
+      }
+    });
+  }
+
   const client = deps.anthropic || getAnthropicClient();
   const model = process.env.AI_AGREEMENT_MODEL || process.env.ANTHROPIC_VISION_MODEL || DEFAULT_MODEL;
 
@@ -417,6 +540,9 @@ module.exports = {
   buildSystemBlocks,
   buildSourceBlock,
   normalizeDetection,
+  normalizeBbox,
+  loadPdfBytes,
+  tryAcroFormDetection,
   validateBody,
   parseAiResponse,
   FIELD_TYPES,
