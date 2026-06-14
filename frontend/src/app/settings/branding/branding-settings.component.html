@@ -92,6 +92,7 @@
 
       <p class="logo-hint" *ngIf="!row.logoUrl && !row.error">{{ acceptedHint }}</p>
       <p class="logo-error" *ngIf="row.error" role="alert">{{ row.error }}</p>
+      <p class="logo-notice" *ngIf="row.notice && !row.error" role="status">{{ row.notice }}</p>
 
       <div class="logo-actions">
         <input

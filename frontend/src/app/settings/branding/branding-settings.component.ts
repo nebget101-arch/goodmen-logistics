@@ -1,6 +1,7 @@
 import { Component, OnInit } from '@angular/core';
 import { Observable } from 'rxjs';
 import { ApiService } from '../../services/api.service';
+import { prepareLogoForUpload, MAX_LOGO_DIMENSION } from './logo-resize.util';
 
 type BrandingKind = 'operating-entity' | 'location';
 
@@ -23,6 +24,7 @@ interface BrandingRow {
   uploadedAt: string | null;
   loading: boolean;   // logo fetch / upload / delete in flight
   error: string | null;
+  notice: string | null;  // non-blocking info (e.g. auto-resized on upload)
   dragOver: boolean;
 }
 
@@ -155,6 +157,7 @@ export class BrandingSettingsComponent implements OnInit {
 
     row.loading = true;
     row.error = null;
+    row.notice = null;
     this.logoDelete(row).subscribe({
       next: () => {
         // Refresh from GET to confirm the cleared state.
@@ -170,35 +173,56 @@ export class BrandingSettingsComponent implements OnInit {
   // ----- internals ------------------------------------------------------
 
   private uploadFile(row: BrandingRow, file: File): void {
-    const validationError = this.validateFile(file);
-    if (validationError) {
-      row.error = validationError;
+    // Type is validated up front; canvas downscaling only handles real images,
+    // and the size cap is enforced after any resize (a 4000px PNG can be well
+    // under 2MB before resize but the resized blob is what we ultimately send).
+    if (!ACCEPTED_MIME_TYPES.includes(file.type)) {
+      row.error = `Unsupported file type. Use ${ACCEPTED_HINT}.`;
       return;
     }
 
     row.loading = true;
     row.error = null;
-    this.logoUpload(row, file).subscribe({
-      next: () => {
-        // Per the contract POST returns the new logo, but we refresh from GET
-        // so the preview reflects the canonical signed URL.
-        this.refreshLogo(row);
-      },
-      error: (err) => {
-        row.error = err?.error?.error || 'Upload failed. Please try again.';
-        row.loading = false;
-      }
-    });
-  }
+    row.notice = null;
 
-  private validateFile(file: File): string | null {
-    if (!ACCEPTED_MIME_TYPES.includes(file.type)) {
-      return `Unsupported file type. Use ${ACCEPTED_HINT}.`;
-    }
-    if (file.size > MAX_FILE_BYTES) {
-      return `File is too large. Maximum size is 2MB.`;
-    }
-    return null;
+    // Downscale oversized sources to fit within MAX_LOGO_DIMENSION before upload;
+    // images already within bounds come back byte-identical (resized === false).
+    prepareLogoForUpload(file)
+      .then(({ blob, resized }) => {
+        if (blob.size > MAX_FILE_BYTES) {
+          row.error = resized
+            ? `File is still too large after resizing. Maximum size is 2MB.`
+            : `File is too large. Maximum size is 2MB.`;
+          row.loading = false;
+          return;
+        }
+
+        // Wrap the (possibly resized) blob back into a File so the existing
+        // multipart upload keeps a filename; reuse the original name + type.
+        const upload = resized
+          ? new File([blob], file.name, { type: blob.type })
+          : file;
+
+        this.logoUpload(row, upload).subscribe({
+          next: () => {
+            if (resized) {
+              row.notice = `Logo was resized to fit ${MAX_LOGO_DIMENSION}×${MAX_LOGO_DIMENSION}.`;
+            }
+            // Per the contract POST returns the new logo, but we refresh from GET
+            // so the preview reflects the canonical signed URL. refreshLogo only
+            // touches logo state, so the resize notice survives the refresh.
+            this.refreshLogo(row);
+          },
+          error: (err) => {
+            row.error = err?.error?.error || err?.error?.message || 'Upload failed. Please try again.';
+            row.loading = false;
+          }
+        });
+      })
+      .catch(() => {
+        row.error = 'Could not read the image. The file may be corrupt.';
+        row.loading = false;
+      });
   }
 
   private makeRow(id: string, kind: BrandingKind, title: string, subtitle: string): BrandingRow {
@@ -212,6 +236,7 @@ export class BrandingSettingsComponent implements OnInit {
       uploadedAt: null,
       loading: false,
       error: null,
+      notice: null,
       dragOver: false
     };
   }
