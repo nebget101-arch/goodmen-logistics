@@ -34,6 +34,10 @@ const {
   listTemplates,
   updateTemplateFields
 } = require('../services/agreement-service');
+const {
+  createSignatureRequest,
+  getRequestById
+} = require('../services/signature-service');
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 25 * 1024 * 1024 } });
 
@@ -258,6 +262,89 @@ router.patch('/templates/:id/fields', async (req, res) => {
   } catch (err) {
     dtLogger.error('agreements_update_fields_failed', err);
     return res.status(500).json({ error: 'Failed to update agreement template' });
+  }
+});
+
+/**
+ * @openapi
+ * /api/agreements/{templateId}/requests:
+ *   post:
+ *     summary: Create + send a signature request for a finalized template
+ *     description: >
+ *       Fills the `internal`-assigned fields, mints a secure tokenized signing
+ *       link, sends it to the signer via SMS/email, and moves the request to
+ *       `sent`. Body `{ fieldValues: { fieldKey: value }, signer: { name,
+ *       email, phone, role }, expiresInDays? }`.
+ *     tags: [Agreements]
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: path
+ *         name: templateId
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       201: { description: "{ requestId, signerLink, status, send }" }
+ *       400: { description: Missing signer contact }
+ *       401: { description: Tenant context required }
+ *       404: { description: Template not found }
+ */
+router.post('/:templateId/requests', async (req, res) => {
+  const tid = requireTenant(req, res);
+  if (!tid) return undefined;
+
+  const signer = req.body?.signer || {};
+  if (!signer.email && !signer.phone) {
+    return res.status(400).json({ error: 'A signer email or phone is required to send the link' });
+  }
+
+  try {
+    const result = await createSignatureRequest({
+      templateId: req.params.templateId,
+      tenantId: tid,
+      operatingEntityId: operatingEntityId(req),
+      fieldValues: req.body?.fieldValues || {},
+      signer,
+      expiresInDays: req.body?.expiresInDays,
+      baseUrl: process.env.PUBLIC_APP_URL || undefined,
+      createdBy: req.user?.id || null
+    });
+    return res.status(201).json(result);
+  } catch (err) {
+    if (err.code === 'TEMPLATE_NOT_FOUND') {
+      return res.status(404).json({ error: 'Agreement template not found' });
+    }
+    dtLogger.error('agreements_create_request_failed', err);
+    return res.status(500).json({ error: 'Failed to create signature request' });
+  }
+});
+
+/**
+ * @openapi
+ * /api/agreements/requests/{id}:
+ *   get:
+ *     summary: Get a signature request's status + signed-PDF download URL
+ *     tags: [Agreements]
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       200: { description: Request status, fields, and signedPdfUrl when signed }
+ *       404: { description: Not found }
+ */
+router.get('/requests/:id', async (req, res) => {
+  const tid = requireTenant(req, res);
+  if (!tid) return undefined;
+
+  try {
+    const request = await getRequestById({ id: req.params.id, tenantId: tid });
+    if (!request) return res.status(404).json({ error: 'Signature request not found' });
+    return res.json(request);
+  } catch (err) {
+    dtLogger.error('agreements_get_request_failed', err);
+    return res.status(500).json({ error: 'Failed to load signature request' });
   }
 });
 

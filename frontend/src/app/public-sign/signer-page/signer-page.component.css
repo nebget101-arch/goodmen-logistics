@@ -1,0 +1,189 @@
+/* FN-1798 — public signer page. Light, trustworthy, self-contained theme
+   (unauthenticated; does not inherit the authed dark app shell). */
+:host {
+  display: block;
+  min-height: 100vh;
+  background: #eef2f7;
+  color: #1e293b;
+  padding: 24px 16px 64px;
+}
+
+.sign-shell {
+  max-width: 640px;
+  margin: 0 auto;
+}
+
+.sign-brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 2px 18px;
+}
+.sign-brand .brand-mark { color: #1d4ed8; font-size: 24px; }
+.sign-brand .brand-name { font-size: 18px; font-weight: 800; color: #0f172a; }
+.sign-brand .brand-tag {
+  margin-left: auto;
+  font-size: 12px;
+  color: #64748b;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.sign-card {
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  padding: 20px;
+  margin-bottom: 16px;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+}
+
+/* States */
+.state {
+  text-align: center;
+  color: #475569;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 36px 24px;
+}
+.state .material-symbols-outlined { font-size: 40px; color: #94a3b8; }
+.state h2 { margin: 4px 0 0; font-size: 18px; color: #0f172a; }
+.state p { margin: 0; font-size: 14px; max-width: 420px; }
+.state.error .material-symbols-outlined { color: #dc2626; }
+
+.spin { animation: spin 1.1s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* Confirmation */
+.confirm {
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 40px 24px;
+}
+.confirm .ok { font-size: 52px; color: #16a34a; }
+.confirm h2 { margin: 0; font-size: 22px; color: #0f172a; }
+.confirm p { margin: 0; font-size: 14px; color: #475569; max-width: 440px; }
+
+/* Document head */
+.doc-head h1 { margin: 0 0 4px; font-size: 20px; font-weight: 700; color: #0f172a; }
+.doc-head .doc-type { margin: 0 0 12px; font-size: 13px; color: #64748b; }
+.doc-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #1d4ed8;
+  text-decoration: none;
+}
+.doc-link:hover { text-decoration: underline; }
+.doc-link .material-symbols-outlined { font-size: 18px; }
+
+.sec-title {
+  margin: 0 0 14px;
+  font-size: 15px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+/* Read-only details */
+.detail-list {
+  margin: 0;
+  display: grid;
+  grid-template-columns: minmax(140px, 40%) 1fr;
+  gap: 8px 16px;
+}
+.detail-list dt { font-size: 13px; color: #64748b; }
+.detail-list dd { margin: 0; font-size: 14px; color: #0f172a; font-weight: 600; word-break: break-word; }
+
+/* Fields */
+.field { margin-bottom: 16px; }
+.field:last-child { margin-bottom: 0; }
+.f-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #334155;
+  margin-bottom: 6px;
+}
+.f-label .material-symbols-outlined { font-size: 17px; color: #94a3b8; }
+.f-label .req { color: #dc2626; }
+
+.f-input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 10px 12px;
+  font-size: 14px;
+  color: #0f172a;
+  background: #fff;
+  border: 1px solid #cbd5e1;
+  border-radius: 9px;
+  outline: none;
+}
+.f-input:focus { border-color: #1d4ed8; box-shadow: 0 0 0 3px rgba(29, 78, 216, 0.12); }
+
+.checkbox-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  color: #334155;
+  cursor: pointer;
+}
+.checkbox-row input { width: 17px; height: 17px; accent-color: #1d4ed8; }
+
+/* Consent */
+.consent-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin: 16px 0 4px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: #475569;
+  cursor: pointer;
+}
+.consent-row input { margin-top: 2px; width: 17px; height: 17px; accent-color: #1d4ed8; flex: none; }
+
+/* Buttons */
+.btn-sign {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 11px 18px;
+  font-size: 14px;
+  font-weight: 700;
+  border-radius: 10px;
+  border: none;
+  cursor: pointer;
+  text-decoration: none;
+}
+.btn-sign .material-symbols-outlined { font-size: 19px; }
+.btn-primary { background: #1d4ed8; color: #fff; }
+.btn-primary:hover:not(:disabled) { background: #1e40af; }
+.btn-sign:disabled { opacity: 0.5; cursor: not-allowed; }
+.btn-sign.full { width: 100%; margin-top: 16px; }
+
+.sign-error {
+  margin-top: 14px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  font-size: 13px;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  color: #b91c1c;
+}
+
+.muted { color: #94a3b8; }
+.small { font-size: 12px; }
+.center { text-align: center; }
+.muted.small.center { margin: 10px 0 0; }

@@ -1,0 +1,142 @@
+<div class="agreements-page">
+  <header class="page-head">
+    <div>
+      <h1>Fill &amp; Send for Signature</h1>
+      <p class="sub" *ngIf="template">
+        <strong>{{ template.name }}</strong>
+        <span class="dot">•</span>
+        <span class="status-pill" [class.ready]="isReady">{{ template.status }}</span>
+      </p>
+    </div>
+    <a class="link-back" routerLink="/agreements">
+      <span class="material-symbols-outlined">arrow_back</span> All templates
+    </a>
+  </header>
+
+  <div class="card state" *ngIf="loading">Loading template…</div>
+  <div class="card state error" *ngIf="loadError">{{ loadError }}</div>
+
+  <!-- Template must be finalized before it can be sent. -->
+  <div class="card state warn" *ngIf="!loading && !loadError && template && !isReady">
+    This template is still a draft. Finish reviewing the field map before sending it for signature.
+    <div class="actions">
+      <a class="btn-primary" [routerLink]="['/agreements', templateId, 'review']">Review field map</a>
+    </div>
+  </div>
+
+  <!-- ── Fill + send form ─────────────────────────────────────────────────── -->
+  <ng-container *ngIf="!loading && !loadError && isReady && !result">
+    <section class="card form-card" *ngIf="internalFields.length">
+      <h2 class="section-title">Your details</h2>
+      <p class="section-hint">Fill the fields assigned to your team. The signer completes the rest.</p>
+
+      <div class="field" *ngFor="let f of internalFields; trackBy: trackByField">
+        <label class="field-label" [attr.for]="'fld-' + f.fieldKey">
+          <span class="material-symbols-outlined type-icon">{{ typeIcon(f.fieldType) }}</span>
+          {{ f.label }}
+          <span class="req" *ngIf="isRequired(f)">*</span>
+        </label>
+
+        <label class="checkbox-row" *ngIf="f.fieldType === 'checkbox'">
+          <input type="checkbox" [(ngModel)]="values[f.fieldKey]" [name]="'fld-' + f.fieldKey" />
+          <span>Yes</span>
+        </label>
+
+        <input
+          *ngIf="f.fieldType !== 'checkbox'"
+          [id]="'fld-' + f.fieldKey"
+          class="form-input"
+          [type]="inputType(f.fieldType)"
+          [(ngModel)]="values[f.fieldKey]"
+          [name]="'fld-' + f.fieldKey"
+          [placeholder]="f.label"
+        />
+      </div>
+    </section>
+
+    <section class="card form-card">
+      <h2 class="section-title">Signer</h2>
+      <p class="section-hint">Where should we send the secure signing link?</p>
+
+      <div class="field">
+        <label class="field-label" for="signer-name">Full name <span class="req">*</span></label>
+        <input id="signer-name" class="form-input" type="text" [(ngModel)]="signer.name" name="signer-name" placeholder="e.g. Jordan Rivera" />
+      </div>
+
+      <div class="field-grid">
+        <div class="field">
+          <label class="field-label" for="signer-email">Email</label>
+          <input id="signer-email" class="form-input" type="email" [(ngModel)]="signer.email" name="signer-email" placeholder="name@company.com" />
+        </div>
+        <div class="field">
+          <label class="field-label" for="signer-phone">Phone</label>
+          <input id="signer-phone" class="form-input" type="tel" [(ngModel)]="signer.phone" name="signer-phone" placeholder="(555) 555-5555" />
+        </div>
+      </div>
+
+      <div class="field">
+        <label class="field-label" for="signer-role">Signer role <span class="optional">(optional)</span></label>
+        <input id="signer-role" class="form-input" type="text" [(ngModel)]="signer.role" name="signer-role" placeholder="e.g. Lessee" />
+      </div>
+
+      <p class="hint-line">Provide an email or phone number so we can deliver the signing link.</p>
+    </section>
+
+    <!-- Fields the signer will complete (context only) -->
+    <section class="card form-card readonly-card" *ngIf="signerFields.length">
+      <h2 class="section-title">Signer will complete</h2>
+      <ul class="signer-field-list">
+        <li *ngFor="let f of signerFields; trackBy: trackByField">
+          <span class="material-symbols-outlined type-icon">{{ typeIcon(f.fieldType) }}</span>
+          {{ f.label }}
+        </li>
+      </ul>
+    </section>
+
+    <div class="alert alert-error" *ngIf="sendError">{{ sendError }}</div>
+
+    <div class="page-actions">
+      <button type="button" class="btn-primary" [disabled]="!canSend" (click)="send()">
+        <span class="material-symbols-outlined" *ngIf="!sending">send</span>
+        {{ sending ? 'Sending…' : 'Send for signature' }}
+      </button>
+    </div>
+  </ng-container>
+
+  <!-- ── Sent confirmation ────────────────────────────────────────────────── -->
+  <section class="card result-card" *ngIf="result">
+    <div class="result-head">
+      <span class="material-symbols-outlined ok-icon">mark_email_read</span>
+      <div>
+        <h2 class="section-title">Signing link sent</h2>
+        <p class="section-hint">We sent the secure link to {{ result.signerName || signer.name }}.</p>
+      </div>
+      <span class="status-pill" [class.ready]="isComplete(result.status)">{{ statusLabel(result.status) }}</span>
+    </div>
+
+    <div class="link-box" *ngIf="result.signerLink">
+      <input class="form-input link-input" type="text" [value]="result.signerLink" readonly />
+      <button type="button" class="btn-secondary" (click)="copyLink()">
+        <span class="material-symbols-outlined">{{ linkCopied ? 'check' : 'content_copy' }}</span>
+        {{ linkCopied ? 'Copied' : 'Copy link' }}
+      </button>
+    </div>
+
+    <div class="result-actions">
+      <button type="button" class="btn-secondary" (click)="refreshStatus()" [disabled]="refreshing">
+        <span class="material-symbols-outlined">refresh</span>
+        {{ refreshing ? 'Checking…' : 'Refresh status' }}
+      </button>
+
+      <a
+        *ngIf="result.signedPdfUrl"
+        class="btn-primary"
+        [href]="result.signedPdfUrl"
+        target="_blank"
+        rel="noopener"
+      >
+        <span class="material-symbols-outlined">download</span> Download signed PDF
+      </a>
+    </div>
+  </section>
+</div>

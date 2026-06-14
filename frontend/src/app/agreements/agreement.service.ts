@@ -7,6 +7,10 @@ import {
   AgreementTemplateDetail,
   AgreementFieldPatch,
 } from './agreement.model';
+import {
+  CreateSignatureRequestPayload,
+  SignatureRequest,
+} from './signature-request.model';
 
 /**
  * FN-1794 — client for the agreement template / field-map endpoints (FN-1793).
@@ -15,6 +19,11 @@ import {
  *   GET    /api/agreements/templates            → list templates (no field maps)
  *   GET    /api/agreements/templates/:id        → template + ordered field map
  *   PATCH  /api/agreements/templates/:id/fields → save role/label edits, finalize
+ *
+ * FN-1798 — fill → send signature request endpoints (FN-1797):
+ *
+ *   POST   /api/agreements/:templateId/requests → create request, send signer link
+ *   GET    /api/agreements/requests/:id         → request status + signed-PDF URL
  *
  * Every template-returning endpoint serves the flat template DTO with a nested
  * `fields` array (FN-1793 `getTemplateWithFields`). Upload is a direct multipart
@@ -57,5 +66,27 @@ export class AgreementService {
   /** List existing templates (most-recent first), without field maps. */
   listTemplates(): Observable<AgreementTemplate[]> {
     return this.http.get<AgreementTemplate[]>(`${this.base}/templates`);
+  }
+
+  // ── FN-1798: signature requests (internal fill → send) ──────────────────────
+
+  /**
+   * Create a signature request for a finalized template: persists the carrier's
+   * `internal` field values + signer contact, generates a tokenized link and
+   * sends it to the signer. Returns `{ requestId, signerLink, status }`.
+   */
+  createRequest(
+    templateId: string,
+    payload: CreateSignatureRequestPayload
+  ): Observable<SignatureRequest> {
+    return this.http.post<SignatureRequest>(
+      `${this.base}/${templateId}/requests`,
+      payload
+    );
+  }
+
+  /** Poll a request's status and signed-PDF download URL once signed. */
+  getRequest(id: string): Observable<SignatureRequest> {
+    return this.http.get<SignatureRequest>(`${this.base}/requests/${id}`);
   }
 }
