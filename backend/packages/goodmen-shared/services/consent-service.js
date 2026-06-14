@@ -1,6 +1,7 @@
 const { query, getClient } = require('../internal/db');
 const { upsertRequirementStatus, computeAndUpdateDqfCompleteness } = require('./dqf-service');
 const { generateConsentPdf } = require('./driver-onboarding-pdf');
+const { buildConsentCompany } = require('./consent-company-profile');
 const { createDriverDocument } = require('./driver-storage-service');
 const dtLogger = require('../utils/logger');
 
@@ -179,18 +180,25 @@ async function signConsent(consentId, { signerName, signatureType, signatureValu
       );
       const driver = driverRes.rows[0] || null;
 
-      // Look up operating entity for company info
+      // FN-1832: Resolve the operating-entity profile for the consent header,
+      // mirroring the lookup chain in employment-application.service.js (driver's
+      // operating_entity_id → operating_entities). Compose the postal address from
+      // the discrete address columns and carry phone/email for the header. Logo
+      // fields are preserved for MC-logo branding (FN-1739).
       let company = null;
       try {
         const oeRes = await query(
-          `SELECT oe.name, oe.address, oe.logo_storage_key, oe.logo_mime_type FROM operating_entities oe
-           JOIN drivers d ON d.operating_entity_id = oe.id
-           WHERE d.id = $1`,
+          `SELECT oe.name, oe.legal_name, oe.address_line1, oe.address_line2,
+                  oe.city, oe.state, oe.zip_code, oe.phone, oe.email,
+                  oe.logo_storage_key, oe.logo_mime_type
+             FROM operating_entities oe
+             JOIN drivers d ON d.operating_entity_id = oe.id
+            WHERE d.id = $1`,
           [consent.driver_id]
         );
-        company = oeRes.rows[0] || null;
+        company = buildConsentCompany(oeRes.rows[0]);
       } catch (_oeErr) {
-        // Tolerate missing operating_entities table
+        // Tolerate missing operating_entities table/columns
       }
 
       const pdfBuffer = await generateConsentPdf({
