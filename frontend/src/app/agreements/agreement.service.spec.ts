@@ -70,4 +70,19 @@ describe('AgreementService — equipment-lease adapter (FN-1801)', () => {
     req.flush({});
     expect(rows).toEqual([]);
   });
+
+  // FN-1837 — templates list backing the `/agreements` landing view.
+  it('GETs the tenant templates list (no field maps)', () => {
+    let rows: any;
+    service.listTemplates().subscribe((r) => (rows = r));
+
+    const req = httpMock.expectOne(`${base}/templates`);
+    expect(req.request.method).toBe('GET');
+    req.flush([
+      { id: 't1', name: 'Lease', documentType: 'lease_agreement', pageCount: 3, status: 'draft' },
+    ]);
+
+    expect(rows.length).toBe(1);
+    expect(rows[0].id).toBe('t1');
+  });
 });

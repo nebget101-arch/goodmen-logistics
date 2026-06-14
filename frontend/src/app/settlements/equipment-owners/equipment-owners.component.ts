@@ -231,7 +231,7 @@ export class EquipmentOwnersComponent implements OnInit {
    */
   startLeaseAgreement(owner: EquipmentOwner): void {
     if (!owner?.id) return;
-    this.router.navigate(['/agreements'], {
+    this.router.navigate(['/agreements', 'new'], {
       queryParams: {
         subjectType: 'equipment_owner',
         subjectId: owner.id,
