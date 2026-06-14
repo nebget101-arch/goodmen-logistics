@@ -6,6 +6,7 @@ const router = express.Router();
 
 const knex = require('../config/knex');
 const dtLogger = require('../utils/logger');
+const { isUuid } = require('../utils/uuid');
 const { uploadBuffer, getSignedDownloadUrl } = require('../storage/r2-storage');
 const { loadUserRbac, requireAnyPermission } = require('../middleware/rbac-middleware');
 const {
@@ -44,6 +45,17 @@ const canDashboard = requireAnyPermission(['lease.financing.dashboard.view', 'le
 
 router.use(loadUserRbac);
 router.use(requireAnyPermission(LEASE_ANY_PERMISSION));
+
+// FN-1844: every `:id` route param in this file is a lease-agreement UUID.
+// Reject a malformed id up front with a clean 400 so it never reaches the
+// Postgres `uuid` lookup, which would otherwise throw an uncaught
+// `invalid input syntax for type uuid` and surface as a 500.
+router.param('id', (req, res, next, id) => {
+  if (!isUuid(id)) {
+    return res.status(400).json({ error: 'Invalid lease agreement id' });
+  }
+  return next();
+});
 
 function tenantId(req) {
   return req.context?.tenantId || req.user?.tenantId || req.user?.tenant_id || null;
@@ -618,6 +630,13 @@ router.post('/lease-agreements', canCreate, async (req, res) => {
     if (!driverId || !truckId || !startDate) {
       await trx.rollback();
       return res.status(400).json({ error: 'driver_id, truck_id, agreement_start_date are required' });
+    }
+
+    // FN-1844: reject non-UUID ids before the drivers/vehicles lookups, which
+    // query `uuid` columns and would otherwise throw an uncaught pg type error.
+    if (!isUuid(driverId) || !isUuid(truckId)) {
+      await trx.rollback();
+      return res.status(400).json({ error: 'driver_id and truck_id must be valid identifiers' });
     }
 
     const driver = await trx('drivers')
@@ -1240,6 +1259,18 @@ router.post('/lease-agreements/:id/manual-payment', canPay, async (req, res) => 
     if (amount <= 0) {
       await trx.rollback();
       return res.status(400).json({ error: 'amount_paid must be greater than zero' });
+    }
+
+    // FN-1844: these optional body ids are queried/inserted against `uuid`
+    // columns (payment_schedule lookup; settlement_id on the transaction row),
+    // so reject malformed values with a 400 instead of an uncaught pg error.
+    if (req.body?.payment_schedule_id != null && !isUuid(req.body.payment_schedule_id)) {
+      await trx.rollback();
+      return res.status(400).json({ error: 'payment_schedule_id must be a valid identifier' });
+    }
+    if (req.body?.settlement_id != null && !isUuid(req.body.settlement_id)) {
+      await trx.rollback();
+      return res.status(400).json({ error: 'settlement_id must be a valid identifier' });
     }
 
     const schedule = req.body?.payment_schedule_id
