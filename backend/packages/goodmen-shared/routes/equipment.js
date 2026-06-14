@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const auth = require('./auth-middleware');
 const { query } = require('../internal/db');
+const { deriveReadinessForRows } = require('../services/vehicle-readiness.service');
 
 router.use(auth(['admin', 'dispatch', 'safety', 'fleet']));
 
@@ -75,7 +76,8 @@ router.get('/', async (req, res) => {
     const status = (req.query.status || '').toString().trim().toLowerCase();
     const params = [];
     let sql = `
-      SELECT av.id, av.unit_number, av.vin, av.make, av.model, av.year, av.vehicle_type, av.status, av.operating_entity_id
+      SELECT av.id, av.unit_number, av.vin, av.make, av.model, av.year, av.vehicle_type, av.status,
+             av.registration_expiry, av.insurance_expiry, av.inspection_expiry, av.operating_entity_id
       FROM all_vehicles av
       WHERE 1=1
     `;
@@ -129,8 +131,11 @@ router.get('/', async (req, res) => {
     }
     sql += ' ORDER BY av.unit_number NULLS LAST';
     const result = await query(sql, params);
+    // FN-1783: derive a DOT-readiness `ready` flag (+ missing/expired) per unit
+    // so dispatch can see which units are eligible to work.
+    const data = await deriveReadinessForRows(result.rows || []);
     // Even if there is no equipment, return an empty array (no error)
-    res.json({ success: true, data: result.rows || [] });
+    res.json({ success: true, data });
   } catch (error) {
     const message = (error && error.message) ? String(error.message) : '';
     const code = error && error.code ? String(error.code) : '';
